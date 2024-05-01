@@ -83,18 +83,22 @@ where
  */
 fn type_link_schedule_funclets(context: &StaticContext) -> StableVec<expir::Funclet> {
     let mut result = StableVec::new();
+    let mut new_funclets = Vec::new();
     for (funclet_id, funclet) in context.program().funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                for linked in type_link_schedule_funclet(&funclet_id, context) {
-                    result.add(linked);
-                }
+                let (current, mut to_add) = type_link_schedule_funclet(&funclet_id, context);
+                result.add(current);
+                new_funclets.append(&mut to_add)
             }
             _ => {
                 result.add(funclet.clone());
             }
         }
-    }
+    };
+    for new_funclet in new_funclets.drain(..) {
+        result.add(new_funclet);
+    };
     result
 }
 
@@ -102,11 +106,11 @@ fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
     let type_linked_funclets = type_link_schedule_funclets(context);
     type_linked_funclets
         .iter()
-        .map(|(id, funclet)| match funclet.kind {
+        .map(|(funclet_id, funclet)| match funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                explicate_schedule_funclet(InState::new(id, context), context)
+                explicate_schedule_funclet(InState::new_storage(funclet_id, context), context)
             }
-            _ => lower_spec_funclet(&id, context),
+            _ => lower_spec_funclet(&funclet_id, context),
         })
         .collect()
 }

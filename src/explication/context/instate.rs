@@ -5,8 +5,13 @@ use itertools::Itertools;
 use paste::paste;
 
 impl InState {
-    pub fn new(funclet_id: FuncletId, context: &StaticContext) -> InState {
-        let scopes = vec![ScheduleScopeData::new(funclet_id)];
+    pub fn new_operation(funclet_id: FuncletId, context: &StaticContext) -> InState {
+        let scopes = vec![ScheduleScopeData::new_operation(funclet_id)];
+        InState { scopes }
+    }
+
+    pub fn new_storage(funclet_id: FuncletId, context: &StaticContext) -> InState {
+        let scopes = vec![ScheduleScopeData::new_storage(funclet_id)];
         InState { scopes }
     }
 
@@ -15,7 +20,11 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet_id: FuncletId, context: &StaticContext) {
-        self.scopes.push(ScheduleScopeData::new(funclet_id));
+        let new_scope = match self.get_latest_scope().pass_information {
+            PassInformation::Operation(_) => ScheduleScopeData::new_operation(funclet_id),
+            PassInformation::Storage(_) => ScheduleScopeData::new_storage(funclet_id),
+        };
+        self.scopes.push(new_scope);
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the lexpir element of the scope
@@ -91,6 +100,7 @@ impl InState {
         context: &StaticContext,
     ) -> Vec<NodeId> {
         self.get_latest_scope()
+            .as_storage()
             .storage_node_information
             .iter()
             .filter(|(_, info)| {
@@ -251,6 +261,7 @@ impl InState {
         // Useful for update-related stuff
 
         self.get_latest_scope()
+            .as_storage()
             .instantiations
             .iter()
             .filter(|(loc, _)| **loc == *location)
@@ -319,7 +330,7 @@ impl InState {
                 .iter()
                 .sorted_by(|x, y| x.cmp(y))
             {
-                let node_info = scope.storage_node_information.get(&node).unwrap();
+                let node_info = scope.as_storage().storage_node_information.get(&node).unwrap();
                 if is_of_type(&node_info.typ, target_type) {
                     result.push(Location::new(scope.funclet_id.clone(), node.clone()));
                 }

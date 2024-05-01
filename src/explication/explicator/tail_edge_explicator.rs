@@ -1,4 +1,4 @@
-use crate::explication::context::{FuncletOutState, InState, OpCode, StaticContext};
+use crate::explication::context::{StorageOutState, OperationOutState, InState, StaticContext};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
 use crate::explication::explicator_macros;
@@ -13,14 +13,14 @@ fn explicate_return(
     return_values: &Hole<Box<[Hole<usize>]>>,
     state: &InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in tail_edge of funclet {}",
         context.debug_info.funclet(&state.get_current_funclet_id())
     );
     match return_values {
         Hole::Filled(values) => {
-            let mut result = FuncletOutState::new();
+            let mut result = StorageOutState::new();
             result.set_tail_edge(ir::TailEdge::Return {
                 return_values: values
                     .iter()
@@ -31,7 +31,7 @@ fn explicate_return(
         }
         Hole::Empty => {
             // dbg!(&state);
-            let mut result = FuncletOutState::new();
+            let mut result = StorageOutState::new();
             let funclet_id = state.get_current_funclet_id();
             let funclet = context.get_funclet(&funclet_id);
             let mut nodes = Vec::new();
@@ -68,7 +68,7 @@ fn explicate_return(
     }
 }
 
-pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<FuncletOutState> {
+pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<StorageOutState> {
     match state.get_current_tail_edge(context) {
         Hole::Filled(tail_edge) => {
             let error = format!("Unimplemented hole in tail edge {:?}", tail_edge);
@@ -77,7 +77,7 @@ pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<F
                     explicate_return(return_values, state, context)
                 }
                 expir::TailEdge::Jump { join, arguments } => {
-                    let mut result = FuncletOutState::new();
+                    let mut result = StorageOutState::new();
                     let tail_edge = ir::TailEdge::Jump {
                         join: join.as_ref().opt().expect(&error).clone(),
                         arguments: arguments
@@ -99,7 +99,7 @@ pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<F
                     callee_arguments,
                     continuation_join,
                 } => {
-                    let mut result = FuncletOutState::new();
+                    let mut result = StorageOutState::new();
                     let tail_edge = ir::TailEdge::ScheduleCall {
                         value_operation: value_operation.clone().opt().expect(&error).clone(),
                         timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
@@ -126,7 +126,7 @@ pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<F
                     callee_arguments,
                     continuation_join,
                 } => {
-                    let mut result = FuncletOutState::new();
+                    let mut result = StorageOutState::new();
                     let tail_edge = ir::TailEdge::ScheduleSelect {
                         value_operation: value_operation.clone().opt().expect(&error).clone(),
                         timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
@@ -159,7 +159,7 @@ pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<F
                     yielded_nodes,
                     continuation_join,
                 } => {
-                    let mut result = FuncletOutState::new();
+                    let mut result = StorageOutState::new();
                     let tail_edge = ir::TailEdge::ScheduleCallYield {
                         value_operation: value_operation.clone().opt().expect(&error).clone(),
                         timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
@@ -182,7 +182,7 @@ pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<F
                     Some(result)
                 }
                 expir::TailEdge::DebugHole { inputs } => {
-                    let mut result = FuncletOutState::new();
+                    let mut result = StorageOutState::new();
                     let tail_edge = ir::TailEdge::DebugHole {
                         inputs: inputs.clone(),
                     };

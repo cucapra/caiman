@@ -1,4 +1,4 @@
-use crate::explication::context::{FuncletOutState, InState, OpCode, StaticContext};
+use crate::explication::context::{StorageOutState, OperationOutState, InState, StaticContext};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
 use crate::explication::explicator_macros;
@@ -17,7 +17,7 @@ fn explicate_phi_node(
     index: usize,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -64,7 +64,7 @@ fn explicate_allocate_temporary(
     expir_buffer_flags: &Hole<ir::BufferFlags>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -186,7 +186,7 @@ fn explicate_local_do_builtin(
     expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -256,7 +256,7 @@ fn explicate_local_do_external(
     expir_external_function_id: &Hole<expir::ExternalFunctionId>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -331,7 +331,7 @@ fn explicate_encode_do(
     expir_external_function_id: &Hole<expir::ExternalFunctionId>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -406,7 +406,7 @@ fn explicate_write_ref(
     expir_storage_type: &Hole<ffi::TypeId>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -428,7 +428,7 @@ fn explicate_write_ref(
         storage_type: ffi::TypeId,
         state: InState,
         context: &StaticContext,
-    ) -> Option<FuncletOutState> {
+    ) -> Option<StorageOutState> {
         let mut new_state = state.clone();
         // assume that the typechecker will find a misaligned storage type
         let info = state.get_node_information(&source, context);
@@ -472,7 +472,7 @@ fn explicate_borrow_ref(
     expir_storage_type: &Hole<ffi::TypeId>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -522,7 +522,7 @@ fn explicate_read_ref(
     expir_storage_type: &Hole<ffi::TypeId>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -575,7 +575,7 @@ fn explicate_local_copy(
     expir_output: &Hole<usize>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -618,7 +618,7 @@ fn explicate_encode_copy(
     expir_encoder: &Hole<usize>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -667,7 +667,7 @@ fn explicate_begin_encoding(
     expir_fences: &Hole<Box<[Hole<NodeId>]>>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -729,7 +729,7 @@ fn explicate_submit(
     expir_event: &Hole<expir::Quotient>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -772,7 +772,7 @@ fn explicate_sync_fence(
     expir_event: &Hole<expir::Quotient>,
     state: InState,
     context: &StaticContext,
-) -> Option<FuncletOutState> {
+) -> Option<StorageOutState> {
     let error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
@@ -813,7 +813,7 @@ fn explicate_sync_fence(
 // initially setup a node that hasn't yet been read
 // distinct from explication in that we have no request to fulfill
 // panics if no node can be found during any step of the recursion
-pub fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutState> {
+pub fn explicate_node(state: InState, context: &StaticContext) -> Option<StorageOutState> {
     let debug_funclet = context.debug_info.funclet(&state.get_current_funclet_id());
     if state.is_end_of_funclet(context) {
         tail_edge_explicator::explicate_tail_edge(&state, context)

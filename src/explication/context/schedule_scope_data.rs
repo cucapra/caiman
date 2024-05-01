@@ -6,31 +6,73 @@ use super::*;
 use crate::explication::util::*;
 
 impl ScheduleScopeData {
-    pub fn new(funclet_id: FuncletId) -> ScheduleScopeData {
-        ScheduleScopeData::new_inner(
-            funclet_id,
-            HashMap::new(),
-            HashMap::new(),
-            Vec::new(),
-            HashMap::new(),
-        )
+    pub fn new_operation(funclet_id: FuncletId) -> ScheduleScopeData {
+        ScheduleScopeData::new_inner_operation(funclet_id, HashSet::new())
     }
 
-    fn new_inner(
+    pub fn new_storage(funclet_id: FuncletId) -> ScheduleScopeData {
+        ScheduleScopeData::new_inner_storage(funclet_id, HashMap::new(), HashMap::new())
+    }
+
+    fn new_inner_operation(
         funclet_id: FuncletId,
-        instantiations: HashMap<Location, HashSet<NodeId>>,
-        node_type_information: HashMap<NodeId, StorageNodeInformation>,
-        allocations: Vec<(NodeId, expir::Type)>,
-        available_operations: HashMap<OpCode, Vec<NodeId>>,
+        operations: HashSet<Location>,
     ) -> ScheduleScopeData {
         ScheduleScopeData {
             funclet_id,
             node_id: None,
             node_index: 0,
-            instantiations,
-            storage_node_information: node_type_information,
-            available_operations,
             explication_hole: false,
+            pass_information: PassInformation::Operation(OperationPassInformation { operations }),
+        }
+    }
+
+    fn new_inner_storage(
+        funclet_id: FuncletId,
+        instantiations: HashMap<Location, HashSet<NodeId>>,
+        storage_node_information: HashMap<NodeId, StorageNodeInformation>,
+    ) -> ScheduleScopeData {
+        ScheduleScopeData {
+            funclet_id,
+            node_id: None,
+            node_index: 0,
+            explication_hole: false,
+            pass_information: PassInformation::Storage(StoragePassInformation {
+                instantiations,
+                storage_node_information,
+            }),
+        }
+    }
+
+    // If we're not in the operation pass, panics
+    pub fn as_operation(&self) -> &OperationPassInformation {
+        match &self.pass_information {
+            PassInformation::Operation(o) => o,
+            PassInformation::Storage(_) => unreachable!(),
+        }
+    }
+
+    // If we're not in the allocation pass, panics
+    pub fn as_storage(&self) -> &StoragePassInformation {
+        match &self.pass_information {
+            PassInformation::Operation(_) => unreachable!(),
+            PassInformation::Storage(s) => s,
+        }
+    }
+
+    // If we're not in the operation pass, panics
+    fn as_operation_mut(&mut self) -> &mut OperationPassInformation {
+        match &mut self.pass_information {
+            PassInformation::Operation(o) => o,
+            PassInformation::Storage(_) => unreachable!(),
+        }
+    }
+
+    // If we're not in the allocation pass, panics
+    fn as_storage_mut(&mut self) -> &mut StoragePassInformation {
+        match &mut self.pass_information {
+            PassInformation::Operation(_) => unreachable!(),
+            PassInformation::Storage(s) => s,
         }
     }
 
@@ -47,7 +89,7 @@ impl ScheduleScopeData {
         typ: expir::Type,
         context: &StaticContext,
     ) {
-        let check = self.storage_node_information.insert(
+        let check = self.as_storage_mut().storage_node_information.insert(
             schedule_node,
             StorageNodeInformation {
                 instantiation: None,
@@ -68,20 +110,21 @@ impl ScheduleScopeData {
         instantiation: LocationTriple,
         context: &StaticContext,
     ) {
+        let funclet_id = self.funclet_id;
+
         // note that this may overwrite what a node instantiates
         // this is, of course, completely fine mechanically
         // but is also why backtracking is needed/complicated
-        let current_instantiation = &mut self
+        let mut new_instantiations = self
+            .as_storage_mut()
             .storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
-                context.debug_info.node(&self.funclet_id, schedule_node)
+                context.debug_info.node(&funclet_id, schedule_node)
             ))
-            .instantiation;
-
-        let mut new_instantiation = current_instantiation
-            .clone()
+            .instantiation
+            .take()
             .unwrap_or(LocationTriple::new());
 
         // potentially modified when checking the timeline
@@ -94,20 +137,22 @@ impl ScheduleScopeData {
                 match value {
                     None => {}
                     Some(value) => {
-                        self.instantiations
+                        self.as_storage_mut()
+                            .instantiations
                             .entry(value.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        match &new_instantiation.value {
+                        match &new_instantiations.value {
                             Some(location) => {
-                                self.instantiations
+                                self.as_storage_mut()
+                                    .instantiations
                                     .get_mut(location)
                                     .unwrap()
                                     .remove(&schedule_node);
                             }
                             None => {}
                         }
-                        new_instantiation.value = Some(value);
+                        new_instantiations.value = Some(value);
                     }
                 };
                 match timeline {
@@ -115,45 +160,56 @@ impl ScheduleScopeData {
                     // we can specify another time with the timeline triple
                     None => {}
                     Some(timeline) => {
-                        self.instantiations
+                        self.as_storage_mut()
+                            .instantiations
                             .entry(timeline.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        match &new_instantiation.timeline {
+                        match &new_instantiations.timeline {
                             Some(location) => {
-                                self.instantiations
+                                self.as_storage_mut()
+                                    .instantiations
                                     .get_mut(location)
                                     .unwrap()
                                     .remove(&schedule_node);
                             }
                             None => {}
                         }
-                        new_instantiation.timeline = Some(timeline);
+                        new_instantiations.timeline = Some(timeline);
                     }
                 };
                 match spatial {
                     None => {}
                     Some(spatial) => {
-                        self.instantiations
+                        self.as_storage_mut()
+                            .instantiations
                             .entry(spatial.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        match &new_instantiation.spatial {
+                        match &new_instantiations.spatial {
                             Some(location) => {
-                                self.instantiations
+                                self.as_storage_mut()
+                                    .instantiations
                                     .get_mut(location)
                                     .unwrap()
                                     .remove(&schedule_node);
                             }
                             None => {}
                         }
-                        new_instantiation.spatial = Some(spatial);
+                        new_instantiations.spatial = Some(spatial);
                     }
                 };
             }
         }
 
-        *current_instantiation = Some(new_instantiation);
+        self.as_storage_mut()
+            .storage_node_information
+            .get_mut(&schedule_node)
+            .expect(&format!(
+                "Attempting to update Node {} without already having an instantiation",
+                context.debug_info.node(&funclet_id, schedule_node)
+            ))
+            .instantiation = Some(new_instantiations);
     }
 
     pub fn get_node_information(
@@ -161,10 +217,13 @@ impl ScheduleScopeData {
         node_id: &NodeId,
         context: &StaticContext,
     ) -> &StorageNodeInformation {
-        self.storage_node_information.get(node_id).expect(&format!(
-            "Missing information for node {}",
-            context.debug_info.node(&self.funclet_id, *node_id)
-        ))
+        self.as_storage()
+            .storage_node_information
+            .get(node_id)
+            .expect(&format!(
+                "Missing information for node {}",
+                context.debug_info.node(&self.funclet_id, *node_id)
+            ))
     }
 
     // unsorted
@@ -173,7 +232,8 @@ impl ScheduleScopeData {
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<NodeId> {
-        self.storage_node_information
+        self.as_storage()
+            .storage_node_information
             .iter()
             .filter(|(_, info)| is_of_type(target_type, &info.typ))
             .map(|(n, _)| n.clone())
@@ -187,10 +247,13 @@ impl ScheduleScopeData {
         location: &Option<Location>,
         context: &StaticContext,
     ) -> Option<HashSet<NodeId>> {
-        match location
-            .as_ref()
-            .map(|v| self.instantiations.get(v).cloned().unwrap_or_default())
-        {
+        match location.as_ref().map(|v| {
+            self.as_storage()
+                .instantiations
+                .get(v)
+                .cloned()
+                .unwrap_or_default()
+        }) {
             None => current,
             Some(matches) => match current {
                 None => Some(matches),
@@ -207,21 +270,25 @@ impl ScheduleScopeData {
         timeline_manager: NodeId,
         context: &StaticContext,
     ) {
-        self.storage_node_information
+        let funclet_id = self.funclet_id;
+        self.as_storage_mut()
+            .storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
-                context.debug_info.node(&self.funclet_id, *schedule_node)
+                context.debug_info.node(&funclet_id, *schedule_node)
             ))
             .timeline_manager = Some(timeline_manager);
     }
 
     pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
-        self.storage_node_information
+        let funclet_id = self.funclet_id;
+        self.as_storage_mut()
+            .storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
-                context.debug_info.node(&self.funclet_id, *schedule_node)
+                context.debug_info.node(&funclet_id, *schedule_node)
             ))
             .timeline_manager = None;
     }
@@ -243,36 +310,7 @@ impl ScheduleScopeData {
         result.unwrap_or_default()
     }
 
-    pub fn add_available_operation(
-        &mut self,
-        node: NodeId,
-        operation: OpCode,
-        context: &StaticContext,
-    ) {
-        let vec = self
-            .available_operations
-            .entry(operation)
-            .or_insert_with(|| Vec::new());
-        // safety check that the algorithm isn't reinserting operations
-        assert!(!vec.contains(&node));
-        vec.push(node);
-    }
-
     pub fn add_explication_hole(&mut self) {
         self.explication_hole = true;
     }
 }
-
-macro_rules! op_code_initialization {
-    ($($_lang:ident $name:ident ($($_arg:ident : $_arg_type:tt,)*) -> $_output:ident;)*) => {
-        impl OpCode {
-            pub fn new(node: &expir::Node) -> OpCode {
-                match node {
-                    $(expir::Node::$name { .. } => OpCode::$name,)*
-                }
-            }
-        }
-    };
-}
-
-with_operations!(op_code_initialization);

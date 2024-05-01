@@ -57,21 +57,6 @@ pub struct SpecNodeTypeInformation {
     pub output_types: Vec<expir::TypeId>
 }
 
-// NOTE: we use "available" here to mean "either not filled or not used yet"
-// so basically partially defined holes that the explicator can use
-
-// could restrict by language, but this works for now
-macro_rules! make_op_codes {
-    ($($_lang:ident $name:ident ($($_arg:ident : $_arg_type:tt,)*) -> $_output:ident;)*) => {
-        #[derive(Clone, Debug, Hash, Eq, PartialEq)]
-        pub enum OpCode {
-            $($name,)*
-        }
-    };
-}
-
-with_operations!(make_op_codes);
-
 #[derive(Debug, Clone)]
 pub struct InState {
     // state information needs to be duplicated as we recurse
@@ -101,6 +86,31 @@ pub struct ScheduleScopeData {
     // useful to keep track of naming and boring indexing details
     node_index: usize,
 
+    // if we have a multiline hole (???) at this level of the recursion
+    explication_hole: bool,
+
+    pass_information: PassInformation
+}
+
+// Keeps track of special information that isn't shared across passes
+#[derive(Debug, Clone)]
+enum PassInformation {
+    Operation(OperationPassInformation),
+    Storage(StoragePassInformation),
+}
+
+// Information about types calculated when working out where operations are done
+#[derive(Debug, Clone)]
+struct OperationPassInformation {
+    
+
+    // Which operations we've executed by this level of the recursion
+    operations: HashSet<Location>
+}
+
+// information about storage made while allocating space usage
+#[derive(Debug, Clone)]
+struct StoragePassInformation {
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information
@@ -109,13 +119,6 @@ pub struct ScheduleScopeData {
     // map from node id to which remote(s) it instantiates, and what type it has
     // we really do need both directions here, annoyingly
     storage_node_information: HashMap<NodeId, StorageNodeInformation>,
-
-    // map from operation code to a vector of "available" operations with holes
-    // for now, these consist of exactly allocations where we don't yet know the type
-    available_operations: HashMap<OpCode, Vec<usize>>,
-
-    // most recently found multiline hole, if one exists in this scope
-    explication_hole: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -137,8 +140,19 @@ pub struct StorageNodeInformation {
     pub timeline_manager: Option<NodeId>,
 }
 
+// out state for the operation pass
 #[derive(Debug, Default)]
-pub struct FuncletOutState {
+pub struct OperationOutState {
+    // nodes we've built on this particular funclet of the stack
+    nodes: VecDeque<expir::Node>,
+
+    // found tail edge for this funclet (if we managed to write one)
+    tail_edge: Option<expir::TailEdge>,
+}
+
+// out state for the final (storage) pass
+#[derive(Debug, Default)]
+pub struct StorageOutState {
     // nodes we've built on this particular funclet of the stack
     nodes: VecDeque<ir::Node>,
 
