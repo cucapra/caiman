@@ -83,6 +83,14 @@ impl ScheduleScopeData {
         }
     }
 
+    pub fn add_operation(&mut self, operation: Location, context: &StaticContext) {
+        self.as_operation_mut().operations.insert(operation);
+    }
+
+    pub fn has_operation(&self, operation: &Location, context: &StaticContext) -> bool {
+        self.as_operation().operations.contains(operation)
+    }
+
     pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,

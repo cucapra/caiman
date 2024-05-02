@@ -35,6 +35,22 @@ impl InState {
         self.scopes.len() == 0
     }
 
+    pub fn add_operation(
+        &mut self,
+        operation: Location,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut().add_operation(operation, context);
+    }
+
+    pub fn has_operation(
+        &self,
+        operation: &Location,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope().has_operation(operation, context);
+    }
+
     pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,

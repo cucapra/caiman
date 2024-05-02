@@ -1,0 +1,181 @@
+use ron::value;
+
+use crate::explication::context::{InState, OperationOutState, StaticContext};
+use crate::explication::expir;
+use crate::explication::expir::{FuncletId, NodeId};
+use crate::explication::explicator_macros;
+use crate::explication::util::Location;
+use crate::explication::util::*;
+use crate::explication::Hole;
+use crate::ir::Place;
+use crate::{explication, frontend, ir};
+
+fn explicate_phi_node(
+    index: usize,
+    mut state: InState,
+    context: &StaticContext,
+) -> Option<OperationOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let value_spec = state.get_funclet_spec(
+        state.get_current_funclet_id(),
+        &SpecLanguage::Value,
+        context,
+    );
+    let value_funclet_id = value_spec.funclet_id_opt.unwrap();
+    let value_quot = get_expect_box(&value_spec.input_tags, index)
+        .as_ref()
+        .opt()
+        .expect(&error)
+        .quot;
+
+    let operation = Location {
+        funclet_id: value_funclet_id,
+        quot: value_quot,
+    };
+
+    state.add_operation(operation, context);
+    let node = expir::Node::Phi {
+        index: Hole::Filled(index),
+    };
+    state.next_node();
+    match explicate_node(state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
+fn explicate_local_do_builtin(
+    operation: &Hole<expir::Quotient>,
+    inputs: &Hole<Box<[Hole<NodeId>]>>,
+    outputs: &Hole<Box<[Hole<NodeId>]>>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<OperationOutState> {
+    todo!()
+}
+
+fn explicate_local_do_external(
+    expir_operation: &Hole<expir::Quotient>,
+    expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_external_function_id: &Hole<expir::ExternalFunctionId>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<OperationOutState> {
+    todo!()
+}
+
+fn explicate_encode_do(
+    expir_encoder: &Hole<usize>,
+    expir_operation: &Hole<expir::Quotient>,
+    expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_external_function_id: &Hole<expir::ExternalFunctionId>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<OperationOutState> {
+    todo!()
+}
+
+pub fn explicate_node(state: InState, context: &StaticContext) -> Option<OperationOutState> {
+    let debug_funclet = context.debug_info.funclet(&state.get_current_funclet_id());
+    if state.is_end_of_funclet(context) {
+        explicate_tail_edge(&state, context)
+    } else {
+        let current_node = state.get_current_node(context);
+        match current_node {
+            Hole::Empty => {
+                let mut new_state = state.clone();
+                new_state.add_explication_hole();
+                explicate_node(new_state, context);
+                todo!()
+            }
+            Hole::Filled(expir::Node::Phi { index }) => explicate_phi_node(
+                index
+                    .as_ref()
+                    .opt()
+                    .expect(&format!(
+                        "Cannot have a hole for index in Phi node {}",
+                        context.debug_info.node_expir(
+                            state.get_current_funclet_id(),
+                            current_node.as_ref().opt().unwrap()
+                        )
+                    ))
+                    .clone(),
+                state,
+                context,
+            ),
+            Hole::Filled(expir::Node::LocalDoBuiltin {
+                operation,
+                inputs,
+                outputs,
+            }) => explicate_local_do_builtin(operation, inputs, outputs, state, context),
+            Hole::Filled(expir::Node::LocalDoExternal {
+                operation,
+                inputs,
+                outputs,
+                external_function_id,
+            }) => explicate_local_do_external(
+                operation,
+                inputs,
+                outputs,
+                external_function_id,
+                state,
+                context,
+            ),
+            Hole::Filled(expir::Node::EncodeDoExternal {
+                encoder,
+                operation,
+                inputs,
+                outputs,
+                external_function_id,
+            }) => explicate_encode_do(
+                encoder,
+                operation,
+                inputs,
+                outputs,
+                external_function_id,
+                state,
+                context,
+            ),
+            Hole::Filled(node) => {
+                let mut new_state = state.clone();
+                new_state.next_node();
+                match explicate_node(new_state, context) {
+                    None => None,
+                    Some(mut out) => {
+                        out.add_node(node.clone());
+                        Some(out)
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<OperationOutState> {
+    match state.get_current_tail_edge(context) {
+        Hole::Filled(tail_edge) => {
+            let error = format!("Unimplemented hole in tail edge {:?}", tail_edge);
+            let mut result = OperationOutState::new();
+            result.set_tail_edge(tail_edge.clone());
+            Some(result)
+        }
+        Hole::Empty => {
+            todo!()
+        }
+    }
+}

@@ -10,7 +10,7 @@ use context::{InState, StaticContext};
 use serde_derive::{Deserialize, Serialize};
 
 use self::explicator::{
-    explicate_schedule_funclet, lower_spec_funclet, type_link_schedule_funclet,
+    explicate_schedule_funclet_operation, lower_spec_funclet, explicate_schedule_funclet_storage
 };
 
 // Explication and frontend AST
@@ -81,13 +81,13 @@ where
  * does not actually _store_ any information, and as a result, does not need to backtrack
  * note that this is _not_ done funclet-by-funclet to support adding control flow later
  */
-fn type_link_schedule_funclets(context: &StaticContext) -> StableVec<expir::Funclet> {
+fn schedule_funclet_operations(context: &StaticContext) -> StableVec<expir::Funclet> {
     let mut result = StableVec::new();
     let mut new_funclets = Vec::new();
     for (funclet_id, funclet) in context.program().funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                let (current, mut to_add) = type_link_schedule_funclet(&funclet_id, context);
+                let (current, mut to_add) = explicate_schedule_funclet_operation(&funclet_id, context);
                 result.add(current);
                 new_funclets.append(&mut to_add)
             }
@@ -103,12 +103,11 @@ fn type_link_schedule_funclets(context: &StaticContext) -> StableVec<expir::Func
 }
 
 fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
-    let type_linked_funclets = type_link_schedule_funclets(context);
-    type_linked_funclets
+    schedule_funclet_operations(context)
         .iter()
         .map(|(funclet_id, funclet)| match funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                explicate_schedule_funclet(InState::new_storage(funclet_id, context), context)
+                explicate_schedule_funclet_storage(InState::new_storage(funclet_id, context), context)
             }
             _ => lower_spec_funclet(&funclet_id, context),
         })

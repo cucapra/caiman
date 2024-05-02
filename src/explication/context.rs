@@ -102,8 +102,6 @@ enum PassInformation {
 // Information about types calculated when working out where operations are done
 #[derive(Debug, Clone)]
 struct OperationPassInformation {
-    
-
     // Which operations we've executed by this level of the recursion
     operations: HashSet<Location>
 }
