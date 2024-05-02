@@ -11,11 +11,15 @@ impl OperationOutState {
         }
     }
 
-    pub fn add_node(&mut self, node: expir::Node) {
-        self.nodes.push_front(node);
+    pub fn add_hole(&mut self) {
+        self.nodes.push_front(Hole::Empty);
     }
 
-    pub fn drain_nodes(&mut self) -> Vec<expir::Node> {
+    pub fn add_node(&mut self, node: expir::Node) {
+        self.nodes.push_front(Hole::Filled(node));
+    }
+
+    pub fn drain_nodes(&mut self) -> Vec<Hole<expir::Node>> {
         self.nodes.drain(..).collect()
     }
 
@@ -28,8 +32,8 @@ impl OperationOutState {
         self.tail_edge.is_some()
     }
 
-    pub fn expect_tail_edge(&mut self) -> expir::TailEdge {
-        self.tail_edge.as_ref().expect("No tail edge found").clone()
+    pub fn take_tail_edge(&mut self) -> Option<expir::TailEdge> {
+        self.tail_edge.take()
     }
 }
 

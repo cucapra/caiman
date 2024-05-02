@@ -87,7 +87,7 @@ fn schedule_funclet_operations(context: &StaticContext) -> StableVec<expir::Func
     for (funclet_id, funclet) in context.program().funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                let (current, mut to_add) = explicate_schedule_funclet_operation(&funclet_id, context);
+                let (current, mut to_add) = explicate_schedule_funclet_operation(funclet_id, context);
                 result.add(current);
                 new_funclets.append(&mut to_add)
             }
@@ -107,7 +107,7 @@ fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
         .iter()
         .map(|(funclet_id, funclet)| match funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                explicate_schedule_funclet_storage(InState::new_storage(funclet_id, context), context)
+                explicate_schedule_funclet_storage(funclet_id, context)
             }
             _ => lower_spec_funclet(&funclet_id, context),
         })

@@ -64,30 +64,135 @@ fn explicate_local_do_builtin(
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    todo!()
+    let operations_to_try = match operation {
+        Hole::Filled(op) => vec![op.clone()],
+        Hole::Empty => todo!(),
+    };
+    let value_funclet_id = state
+        .get_funclet_spec(
+            state.get_current_funclet_id(),
+            &SpecLanguage::Value,
+            context,
+        )
+        .funclet_id_opt
+        .unwrap();
+
+    for operation_to_try in operations_to_try {
+        let mut new_state = state.clone();
+        let location = Location {
+            funclet_id: value_funclet_id,
+            quot: operation_to_try.clone(),
+        };
+        new_state.add_operation(location, context);
+        let node = expir::Node::LocalDoBuiltin {
+            operation: Hole::Filled(operation_to_try),
+            inputs: inputs.clone(),
+            outputs: outputs.clone(),
+        };
+        new_state.next_node();
+        match explicate_node(new_state, context) {
+            None => {}
+            Some(mut out) => {
+                out.add_node(node);
+                return Some(out);
+            }
+        }
+    }
+    None
 }
 
 fn explicate_local_do_external(
-    expir_operation: &Hole<expir::Quotient>,
-    expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
-    expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
-    expir_external_function_id: &Hole<expir::ExternalFunctionId>,
+    operation: &Hole<expir::Quotient>,
+    inputs: &Hole<Box<[Hole<NodeId>]>>,
+    outputs: &Hole<Box<[Hole<NodeId>]>>,
+    external_function_id: &Hole<expir::ExternalFunctionId>,
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    todo!()
+    let operations_to_try = match operation {
+        Hole::Filled(op) => vec![op.clone()],
+        Hole::Empty => todo!(),
+    };
+    let value_funclet_id = state
+        .get_funclet_spec(
+            state.get_current_funclet_id(),
+            &SpecLanguage::Value,
+            context,
+        )
+        .funclet_id_opt
+        .unwrap();
+
+    for operation_to_try in operations_to_try {
+        let mut new_state = state.clone();
+        let location = Location {
+            funclet_id: value_funclet_id,
+            quot: operation_to_try.clone(),
+        };
+        new_state.add_operation(location, context);
+        let node = expir::Node::LocalDoExternal {
+            operation: Hole::Filled(operation_to_try),
+            inputs: inputs.clone(),
+            outputs: outputs.clone(),
+            external_function_id: external_function_id.clone(),
+        };
+        new_state.next_node();
+        match explicate_node(new_state, context) {
+            None => {}
+            Some(mut out) => {
+                out.add_node(node);
+                return Some(out);
+            }
+        }
+    }
+    None
 }
 
 fn explicate_encode_do(
-    expir_encoder: &Hole<usize>,
-    expir_operation: &Hole<expir::Quotient>,
-    expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
-    expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
-    expir_external_function_id: &Hole<expir::ExternalFunctionId>,
+    operation: &Hole<expir::Quotient>,
+    inputs: &Hole<Box<[Hole<NodeId>]>>,
+    outputs: &Hole<Box<[Hole<NodeId>]>>,
+    external_function_id: &Hole<expir::ExternalFunctionId>,
+    encoder: &Hole<usize>,
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    todo!()
+    let operations_to_try = match operation {
+        Hole::Filled(op) => vec![op.clone()],
+        Hole::Empty => todo!(),
+    };
+    let value_funclet_id = state
+        .get_funclet_spec(
+            state.get_current_funclet_id(),
+            &SpecLanguage::Value,
+            context,
+        )
+        .funclet_id_opt
+        .unwrap();
+
+    for operation_to_try in operations_to_try {
+        let mut new_state = state.clone();
+        let location = Location {
+            funclet_id: value_funclet_id,
+            quot: operation_to_try.clone(),
+        };
+        new_state.add_operation(location, context);
+        let node = expir::Node::EncodeDoExternal {
+            operation: Hole::Filled(operation_to_try),
+            inputs: inputs.clone(),
+            outputs: outputs.clone(),
+            external_function_id: external_function_id.clone(),
+            encoder: encoder.clone(),
+        };
+        new_state.next_node();
+        match explicate_node(new_state, context) {
+            None => {}
+            Some(mut out) => {
+                out.add_node(node);
+                return Some(out);
+            }
+        }
+    }
+    None
 }
 
 pub fn explicate_node(state: InState, context: &StaticContext) -> Option<OperationOutState> {
@@ -143,11 +248,11 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Operati
                 outputs,
                 external_function_id,
             }) => explicate_encode_do(
-                encoder,
                 operation,
                 inputs,
                 outputs,
                 external_function_id,
+                encoder,
                 state,
                 context,
             ),

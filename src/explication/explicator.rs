@@ -1,10 +1,10 @@
-mod storage_explicator;
 mod operation_explicator;
+mod storage_explicator;
 
 use priority_queue::PriorityQueue;
 use std::collections::HashMap;
 
-use crate::explication::context::{StorageOutState, OperationOutState, InState, StaticContext};
+use crate::explication::context::{InState, OperationOutState, StaticContext, StorageOutState};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
 use crate::explication::explicator_macros;
@@ -89,32 +89,54 @@ fn explicate_spec_binding(
  * Returns the updated funclet first, then any new funclets to add second
  */
 pub fn explicate_schedule_funclet_operation(
-    funclet_id: &FuncletId,
+    funclet_id: FuncletId,
     context: &StaticContext,
 ) -> (expir::Funclet, Vec<expir::Funclet>) {
-    todo!()
+    let mut state = InState::new_operation(funclet_id, context);
+    state.next_node();
+    let funclet = context.get_funclet(&funclet_id);
+    match operation_explicator::explicate_node(state, context) {
+        None => panic!(
+            "No explication solution found for funclet {:?}",
+            context.debug_info.funclet(&funclet_id)
+        ),
+        Some(mut result) => (
+            expir::Funclet {
+                kind: funclet.kind.clone(),
+                spec_binding: funclet.spec_binding.clone(),
+                input_types: funclet.input_types.clone(),
+                output_types: funclet.output_types.clone(),
+                tail_edge: result.take_tail_edge().into(),
+                nodes: result.drain_nodes().into_boxed_slice(),
+            },
+            vec![],
+        ),
+    }
 }
 
 /*
  * The second pass of explication, where we assume we have the operations we need
  *   and now we need to actually put the stuff in the correct storage at the right time
  */
-pub fn explicate_schedule_funclet_storage(mut state: InState, context: &StaticContext) -> ir::Funclet {
-    let funclet = state.get_current_funclet_id();
-    let current = context.get_funclet(&funclet);
+pub fn explicate_schedule_funclet_storage(
+    funclet_id: FuncletId,
+    context: &StaticContext,
+) -> ir::Funclet {
+    let mut state = InState::new_storage(funclet_id, context);
     state.next_node();
+    let funclet = context.get_funclet(&funclet_id);
     match storage_explicator::explicate_node(state, context) {
         None => panic!(
             "No explication solution found for funclet {:?}",
-            context.debug_info.funclet(&funclet)
+            context.debug_info.funclet(&funclet_id)
         ),
         Some(mut result) => {
-            let spec_binding = explicate_spec_binding(&funclet, Some(&result), context);
+            let spec_binding = explicate_spec_binding(&funclet_id, Some(&result), context);
             ir::Funclet {
-                kind: current.kind.clone(),
+                kind: funclet.kind.clone(),
                 spec_binding,
-                input_types: current.input_types.clone(),
-                output_types: current.output_types.clone(),
+                input_types: funclet.input_types.clone(),
+                output_types: funclet.output_types.clone(),
                 tail_edge: result.expect_tail_edge(),
                 nodes: result.drain_nodes().into_boxed_slice(),
             }

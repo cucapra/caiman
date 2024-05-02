@@ -142,7 +142,7 @@ pub struct StorageNodeInformation {
 #[derive(Debug, Default)]
 pub struct OperationOutState {
     // nodes we've built on this particular funclet of the stack
-    nodes: VecDeque<expir::Node>,
+    nodes: VecDeque<Hole<expir::Node>>,
 
     // found tail edge for this funclet (if we managed to write one)
     tail_edge: Option<expir::TailEdge>,
