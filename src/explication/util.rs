@@ -33,6 +33,16 @@ impl Location {
             ir::Quotient::None | ir::Quotient::Output { index: _ } => None,
         }
     }
+
+    pub fn is_subset_of(&self, other: &Location) -> bool {
+        match self {
+            Location {
+                funclet_id,
+                quot: ir::Quotient::None,
+            } => *funclet_id == other.funclet_id,
+            loc => loc.funclet_id == other.funclet_id && loc.quot == other.quot,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -134,6 +144,28 @@ impl LocationTriple {
             timeline,
             spatial,
         }
+    }
+
+    // Returns whether this location triple is a subset of the other
+    // We define a subset where None < Anything
+    // but a non-None location must be equal
+    pub fn is_subset_of(&self, other: &LocationTriple) -> bool {
+        let value = match (&self.value, &other.value) {
+            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2),
+            (Some(loc), None) => loc.quot == expir::Quotient::None,
+            _ => true
+        };
+        let timeline = match (&self.timeline, &other.timeline) {
+            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2),
+            (Some(loc), None) => loc.quot == expir::Quotient::None,
+            _ => true
+        };
+        let spatial = match (&self.spatial, &other.spatial) {
+            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2),
+            (Some(loc), None) => loc.quot == expir::Quotient::None,
+            _ => true
+        };
+        value && timeline && spatial
     }
 }
 

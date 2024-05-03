@@ -1,4 +1,6 @@
-use crate::explication::context::{StorageOutState, OperationOutState, InState, StaticContext};
+use std::any::Any;
+
+use crate::explication::context::{InState, OperationOutState, StaticContext, StorageOutState};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
 use crate::explication::explicator_macros;
@@ -128,17 +130,14 @@ fn enumerate_output_type_attempts(
             let mut expanded_outputs = Vec::new();
             for _ in 0..value_spec_node_types.output_types.len() {
                 expanded_outputs.push(None);
-            };
+            }
             expanded_outputs
         }
     };
 
     let mut output_attempts = Vec::new();
     output_attempts.push(Vec::new());
-    for (offset, output) in unpacked_outputs
-        .iter()
-        .enumerate()
-    {
+    for (offset, output) in unpacked_outputs.iter().enumerate() {
         match output {
             Some(open_output) => {
                 for output_attempt in output_attempts.iter_mut() {
@@ -196,7 +195,11 @@ fn explicate_local_do_builtin(
         .funclet_id_opt
         .unwrap();
 
-    let operation = expir_operation.as_ref().opt().expect(&state.hole_error(context)).clone();
+    let operation = expir_operation
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
     let value_node_id = match operation {
         expir::Quotient::Node { node_id } => node_id,
         _ => panic!(
@@ -210,8 +213,17 @@ fn explicate_local_do_builtin(
 
     let node_location = Location::new(value_funclet_id, value_node_id);
     let mut inputs = Vec::new();
-    for input in expir_inputs.as_ref().opt().expect(&state.hole_error(context)).iter() {
-        let input_open = input.as_ref().opt().expect(&state.hole_error(context)).clone();
+    for input in expir_inputs
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .iter()
+    {
+        let input_open = input
+            .as_ref()
+            .opt()
+            .expect(&state.hole_error(context))
+            .clone();
         inputs.push(input_open);
     }
 
@@ -225,7 +237,11 @@ fn explicate_local_do_builtin(
 
     for outputs in output_attempts.drain(..) {
         let mut new_state = state.clone();
-        assert!(outputs.len() == 1, "Local do builtin only supported on non-tuple output {}", state.get_node_error(context));
+        assert!(
+            outputs.len() == 1,
+            "Local do builtin only supported on non-tuple output {}",
+            state.get_node_error(context)
+        );
         let value_location = Location::new(value_funclet_id, value_node_id);
         new_state.set_instantiation(
             outputs.first().unwrap().clone(),
@@ -266,7 +282,11 @@ fn explicate_local_do_external(
         .funclet_id_opt
         .unwrap();
 
-    let operation = expir_operation.as_ref().opt().expect(&state.hole_error(context)).clone();
+    let operation = expir_operation
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
     let value_node_id = match operation {
         expir::Quotient::Node { node_id } => node_id,
         _ => panic!(
@@ -280,8 +300,17 @@ fn explicate_local_do_external(
 
     let node_location = Location::new(value_funclet_id, value_node_id);
     let mut inputs = Vec::new();
-    for input in expir_inputs.as_ref().opt().expect(&state.hole_error(context)).iter() {
-        let input_open = input.as_ref().opt().expect(&state.hole_error(context)).clone();
+    for input in expir_inputs
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .iter()
+    {
+        let input_open = input
+            .as_ref()
+            .opt()
+            .expect(&state.hole_error(context))
+            .clone();
         inputs.push(input_open);
     }
 
@@ -293,7 +322,11 @@ fn explicate_local_do_external(
         context,
     );
 
-    let external_function_id = expir_external_function_id.as_ref().opt().expect(&state.hole_error(context)).clone();
+    let external_function_id = expir_external_function_id
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
 
     for outputs in output_attempts.drain(..) {
         let mut new_state = state.clone();
@@ -341,7 +374,11 @@ fn explicate_encode_do(
         .funclet_id_opt
         .unwrap();
 
-    let operation = expir_operation.as_ref().opt().expect(&state.hole_error(context)).clone();
+    let operation = expir_operation
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
     let value_node_id = match operation {
         expir::Quotient::Node { node_id } => node_id,
         _ => panic!(
@@ -355,8 +392,17 @@ fn explicate_encode_do(
 
     let node_location = Location::new(value_funclet_id, value_node_id);
     let mut inputs = Vec::new();
-    for input in expir_inputs.as_ref().opt().expect(&state.hole_error(context)).iter() {
-        let input_open = input.as_ref().opt().expect(&state.hole_error(context)).clone();
+    for input in expir_inputs
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .iter()
+    {
+        let input_open = input
+            .as_ref()
+            .opt()
+            .expect(&state.hole_error(context))
+            .clone();
         inputs.push(input_open);
     }
 
@@ -368,8 +414,16 @@ fn explicate_encode_do(
         context,
     );
 
-    let external_function_id = expir_external_function_id.as_ref().opt().expect(&state.hole_error(context)).clone();
-    let encoder = expir_encoder.as_ref().opt().expect(&state.hole_error(context)).clone();
+    let external_function_id = expir_external_function_id
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
+    let encoder = expir_encoder
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
 
     for outputs in output_attempts.drain(..) {
         let mut new_state = state.clone();
@@ -541,6 +595,10 @@ fn explicate_read_ref(
     let info = state.get_node_information(&source, context);
     let schedule_node = state.get_current_node_id().unwrap();
 
+    let instantiation = match info.instantiation.clone() {
+        Some(inst) => inst,
+        None => { return None; } 
+    };
     new_state.add_storage_node(
         schedule_node,
         expir::Type::NativeValue { storage_type },
@@ -548,12 +606,7 @@ fn explicate_read_ref(
     );
     new_state.set_instantiation(
         schedule_node,
-        info.instantiation.clone().expect(&format!(
-            "Missing instantiation for node {}",
-            context
-                .debug_info
-                .node(&state.get_current_funclet_id(), source)
-        )),
+        instantiation,
         context,
     );
     let node = ir::Node::ReadRef {
@@ -928,7 +981,7 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Storage
 }
 
 fn explicate_return(
-    return_values: &Hole<Box<[Hole<usize>]>>,
+    expir_return_values: &Hole<Box<[Hole<usize>]>>,
     state: &InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
@@ -936,53 +989,74 @@ fn explicate_return(
         "TODO Hole in tail_edge of funclet {}",
         context.debug_info.funclet(&state.get_current_funclet_id())
     );
-    match return_values {
-        Hole::Filled(values) => {
-            let mut result = StorageOutState::new();
-            result.set_tail_edge(ir::TailEdge::Return {
-                return_values: values
-                    .iter()
-                    .map(|v| v.clone().opt().expect("Unimplemented"))
-                    .collect(),
-            });
-            Some(result)
-        }
-        Hole::Empty => {
-            // dbg!(&state);
-            let mut result = StorageOutState::new();
-            let funclet_id = state.get_current_funclet_id();
-            let funclet = context.get_funclet(&funclet_id);
-            let mut nodes = Vec::new();
-            for (index, output) in funclet.output_types.iter().enumerate() {
+    let mut result = StorageOutState::new();
+    let funclet_id = state.get_current_funclet_id();
+    let funclet = context.get_funclet(&funclet_id);
+
+    let return_values_todo = match expir_return_values {
+        Hole::Filled(values) => values.clone(),
+        Hole::Empty => funclet.output_types.iter().map(|_| Hole::Empty).collect(),
+    };
+    let mut return_values = Vec::new();
+    let mut no_matching_type = false;
+    for (index, ret) in return_values_todo.iter().enumerate() {
+        match ret {
+            Hole::Filled(node_id) => {
+                let expected_remote = LocationTriple::new_triple_mapped(
+                    spec_output,
+                    funclet_id,
+                    index,
+                    state,
+                    context,
+                );
+                let actual_remote = state
+                    .get_node_information(node_id, context)
+                    .instantiation
+                    .clone()
+                    .unwrap_or(LocationTriple::new());
+                if expected_remote.is_subset_of(&actual_remote) {
+                    return_values.push(node_id.clone());
+                } else {
+                    // note that we will fail if types don't match
+                    no_matching_type = true;
+                }
+            }
+            Hole::Empty => {
                 let target_location_triple = LocationTriple::new_triple_mapped(
                     spec_output,
                     funclet_id,
                     index,
                     state,
                     context,
-                ).triple_ignoring_none();
-                let target_type = context.get_type(output);
-                match state.find_matching_storage_nodes(
-                    &target_location_triple,
-                    target_type,
-                    context,
-                ).first() {
+                )
+                .triple_ignoring_none();
+                let target_type = context.get_type(get_expect_box(&funclet.output_types, index));
+                match state
+                    .find_matching_storage_nodes(&target_location_triple, target_type, context)
+                    .first()
+                {
                     // we couldn't find anything in our funclet
-                    None => todo!("{}", error),
+                    None => {
+                        no_matching_type = true;
+                    },
                     Some(instantiation) => {
                         if instantiation.funclet_id != funclet_id {
                             // TODO try and explicate something
                             todo!()
                         };
-                        nodes.push(instantiation.node_id().unwrap());
+                        return_values.push(instantiation.node_id().unwrap());
                     }
-                }
+                };
             }
-            result.set_tail_edge(ir::TailEdge::Return {
-                return_values: nodes.into_boxed_slice(),
-            });
-            Some(result)
         }
+    }
+    result.set_tail_edge(ir::TailEdge::Return {
+        return_values: return_values.into_boxed_slice(),
+    });
+    if no_matching_type {
+        None
+    } else {
+        Some(result)
     }
 }
 

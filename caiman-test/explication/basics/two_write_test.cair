@@ -28,11 +28,12 @@ schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
     %x_ref = alloc-temporary local [] i64;
     %y_ref = alloc-temporary local [] i64;
 
-    local-do-builtin $val.%x() -> ?;
+    local-do-builtin ?() -> ?;
     %a = read-ref i64 %x_ref;
     
-    local-do-builtin $val.%y() -> ?;
+    local-do-builtin ?() -> ?;
     %b = read-ref i64 %y_ref;
+
     return ?;
 }
 

@@ -267,6 +267,15 @@ impl InState {
             .set_instantiation(schedule_node, instantiation, context);
     }
 
+    pub fn get_node_information(
+        &self,
+        node_id: &NodeId,
+        context: &StaticContext,
+    ) -> &StorageNodeInformation {
+        self.get_latest_scope()
+            .get_node_information(node_id, context)
+    }
+
     pub fn set_timeline_manager(
         &mut self,
         schedule_node: &NodeId,
@@ -316,15 +325,6 @@ impl InState {
             .fold(HashSet::new(), |acc, (_, hs)| {
                 acc.intersection(hs).cloned().collect()
             })
-    }
-
-    pub fn get_node_information(
-        &self,
-        node_id: &NodeId,
-        context: &StaticContext,
-    ) -> &StorageNodeInformation {
-        self.get_latest_scope()
-            .get_node_information(node_id, context)
     }
 
     // Returns an ordered list of storage nodes in any scope (most to least recent)
