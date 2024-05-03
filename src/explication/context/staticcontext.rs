@@ -11,7 +11,7 @@ use crate::ir;
 
 impl<'context> StaticContext<'context> {
     pub fn new(
-        program: &'context expir::Program,
+        program: expir::Program,
         debug_info: &'context DebugInfo,
     ) -> StaticContext<'context> {
         let mut result = StaticContext {
@@ -144,7 +144,8 @@ impl<'context> StaticContext<'context> {
         dependencies
     }
 
-    // helper methods for reading information
+    // reading information
+
     fn identify_tailedge_deps(&self, funclet_id: usize, edge: &TailEdge) -> Vec<NodeId> {
         let error = format!(
             "Invalid hole in {:?}, cannot have an explication hole in a spec funclet {}",
@@ -392,11 +393,6 @@ impl<'context> StaticContext<'context> {
         &deduced_types.get(&node_id).unwrap()
     }
 
-    // for quick and dirty things
-    pub fn program(&self) -> &expir::Program {
-        &self.program
-    }
-
     pub fn get_matching_operation(
         &self,
         funclet: &FuncletId,
@@ -447,16 +443,16 @@ impl<'context> StaticContext<'context> {
     }
 
     pub fn get_funclet(&self, funclet_id: &FuncletId) -> &expir::Funclet {
-        self.program().funclets.get(*funclet_id).expect(&format!(
+        self.program.funclets.get(*funclet_id).expect(&format!(
             "Invalid funclet index {} for funclets {:?} corresponding with funclet {}",
             funclet_id,
-            &self.program().funclets,
+            &self.program.funclets,
             self.debug_info.funclet(funclet_id)
         ))
     }
 
     pub fn get_node(&self, location: Location) -> &expir::Node {
-        self.program()
+        self.program
             .funclets
             .get(location.funclet_id)
             .expect(&format!(
@@ -480,10 +476,10 @@ impl<'context> StaticContext<'context> {
     }
 
     pub fn get_type(&self, type_id: &TypeId) -> &expir::Type {
-        self.program().types.get(*type_id).expect(&format!(
+        self.program.types.get(*type_id).expect(&format!(
             "Invalid funclet index {} for type {:?} corresponding with type {}",
             type_id,
-            &self.program().types,
+            &self.program.types,
             self.debug_info.typ(type_id)
         ))
     }

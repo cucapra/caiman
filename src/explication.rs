@@ -10,7 +10,7 @@ use context::{InState, StaticContext};
 use serde_derive::{Deserialize, Serialize};
 
 use self::explicator::{
-    explicate_schedule_funclet_operation, lower_spec_funclet, explicate_schedule_funclet_storage
+    explicate_schedule_funclet_operation, explicate_schedule_funclet_storage, lower_spec_funclet,
 };
 
 // Explication and frontend AST
@@ -84,10 +84,11 @@ where
 fn schedule_funclet_operations(context: &StaticContext) -> StableVec<expir::Funclet> {
     let mut result = StableVec::new();
     let mut new_funclets = Vec::new();
-    for (funclet_id, funclet) in context.program().funclets.iter() {
+    for (funclet_id, funclet) in context.program.funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                let (current, mut to_add) = explicate_schedule_funclet_operation(funclet_id, context);
+                let (current, mut to_add) =
+                    explicate_schedule_funclet_operation(funclet_id, context);
                 result.add(current);
                 new_funclets.append(&mut to_add)
             }
@@ -95,43 +96,50 @@ fn schedule_funclet_operations(context: &StaticContext) -> StableVec<expir::Func
                 result.add(funclet.clone());
             }
         }
-    };
+    }
     for new_funclet in new_funclets.drain(..) {
         result.add(new_funclet);
-    };
+    }
     result
 }
 
-fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
-    schedule_funclet_operations(context)
+fn explicate_funclets(context: &mut StaticContext) -> StableVec<ir::Funclet> {
+    context.program.funclets = schedule_funclet_operations(&context);
+    context
+        .program
+        .funclets
         .iter()
         .map(|(funclet_id, funclet)| match funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                explicate_schedule_funclet_storage(funclet_id, context)
+                explicate_schedule_funclet_storage(funclet_id, &context)
             }
-            _ => lower_spec_funclet(&funclet_id, context),
+            _ => lower_spec_funclet(&funclet_id, &context),
         })
         .collect()
 }
 
 fn explicate_program(program: expir::Program, debug_info: &DebugInfo) -> ir::Program {
-    let mut context = StaticContext::new(&program, debug_info);
-    let explicated_funclets = explicate_funclets(&context);
+    let mut context = StaticContext::new(program, debug_info);
+    let explicated_funclets = explicate_funclets(&mut context);
 
-    match program {
-        expir::Program {
-            native_interface,
-            types,
-            funclets,
-            function_classes,
-            pipelines,
-        } => ir::Program {
+    match context {
+        StaticContext {
+            program: expir::Program {
+                native_interface,
+                types,
+                funclets,
+                function_classes,
+                pipelines,
+            },
+            debug_info: _,
+            spec_explication_data: _,
+        }  => ir::Program {
             native_interface,
             types,
             funclets: explicated_funclets,
             function_classes,
             pipelines,
-        },
+        }
     }
 }
 

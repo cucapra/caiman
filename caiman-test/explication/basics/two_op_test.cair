@@ -1,0 +1,39 @@
+version 0.0.2
+
+ffi i64;
+event %event0;
+buffer_space %buffspace;
+native_value %i64 : i64;
+
+function @main() -> %i64;
+
+value[impl default @main] %value() -> [%i64, %i64] {
+    %x = constant %i64 4;
+    %y = constant %i64 5;
+    return [%x, %y];
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
+%foo<$time-usable, $time-usable>() ->
+[%out1 : $val.%x-usable $time-usable $space-usable %i64,
+ %out2 : $val.%y-usable $time-usable $space-usable %i64] {
+    %x_ref = alloc-temporary local [] i64;
+    %y_ref = alloc-temporary local [] i64;
+
+    local-do-builtin ?() -> ?;
+    %x = read-ref i64 %x_ref;
+    
+    local-do-builtin ?() -> ?;
+    %y = read-ref i64 %y_ref;
+    return [%x, %y];
+}
+
+pipeline "main" = %foo;

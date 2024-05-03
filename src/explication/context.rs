@@ -24,17 +24,17 @@ pub struct StaticContext<'context> {
     // the entire original program, useful for looking things up
     // note that we are constructing a completely fresh program recursively
     // so the original program is not mutated
-    program: &'context expir::Program,
+    pub program: expir::Program,
 
     pub debug_info: &'context DebugInfo,
 
     // information found about a given spec funclet
-    spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
+    pub spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
 }
 
 // this information is static, and doesn't change as explication progresses
 #[derive(Debug)]
-struct SpecFuncletData {
+pub struct SpecFuncletData {
     // map of direct node dependencies for scheduling
     node_dependencies: HashMap<NodeId, Vec<NodeId>>,
 

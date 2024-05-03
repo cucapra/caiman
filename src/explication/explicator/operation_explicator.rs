@@ -64,10 +64,6 @@ fn explicate_local_do_builtin(
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    let operations_to_try = match operation {
-        Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => todo!(),
-    };
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -76,6 +72,11 @@ fn explicate_local_do_builtin(
         )
         .funclet_id_opt
         .unwrap();
+
+    let operations_to_try = match operation {
+        Hole::Filled(op) => vec![op.clone()],
+        Hole::Empty => state.find_satisfied_operations(&value_funclet_id, context),
+    };
 
     for operation_to_try in operations_to_try {
         let mut new_state = state.clone();
@@ -109,10 +110,6 @@ fn explicate_local_do_external(
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    let operations_to_try = match operation {
-        Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => todo!(),
-    };
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -121,6 +118,11 @@ fn explicate_local_do_external(
         )
         .funclet_id_opt
         .unwrap();
+
+    let operations_to_try = match operation {
+        Hole::Filled(op) => vec![op.clone()],
+        Hole::Empty => state.find_satisfied_operations(&value_funclet_id, context),
+    };
 
     for operation_to_try in operations_to_try {
         let mut new_state = state.clone();
