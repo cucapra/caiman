@@ -1,0 +1,226 @@
+version 0.0.2
+
+// Captures an value across a function call for a funclet that doesn't modify
+// the timeline. This is currently the only way to capture a value across a call
+// involving a timeline. In order to do this, the caller and the callee must
+// also implement the same timeline spec. As such, the
+// call we are capturing over doesn't appear in the timeline spec.
+// This test was a modified version of `gpu_rec_sum`.
+
+// In psuedo-code, the program looks like this:
+// fn main() {
+//     return rec_sum(20);
+// }
+
+// fn rec_sum(x: i32) -> i32 {
+//     let f = encode (x - 1);
+//     let r = foo(f.wait());
+//     return (encode (x + r)).wait();
+// }
+
+// fn foo(x: i32) -> i32 {
+//     return x;
+// }
+
+type i32;
+event %event0;
+buffer_space %buffspace;
+native_value %ni32 : i32;
+
+function @main() -> i32;
+function @rec_sum(i32) -> i32;
+
+function @add(i32, i32) -> i32;
+function @gt(i32, i32) -> i32;
+function @rec_time(%event0) -> %event0;
+function @foo(i32) -> i32;
+
+function @loop() -> [];
+
+external-gpu[impl @add] %add(%x : i32, %y: i32) -> [%out : i32]
+{
+    path : "gpu_merge.comp",
+    entry : "main",
+    dimensionality : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : %x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        input : %y
+    },
+    resource {
+        group : 0,
+        binding : 2,
+        output : %out
+    }
+}
+external-cpu[impl @loop] %loop() -> [];
+effect<%loop> %eff;
+
+
+// main
+
+value[impl default @main] %main() -> [%out: i32] {
+    %x = constant %ni32 20;
+    %y_t = call @rec_sum(%x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+timeline %main_time(%e: %event0) -> [%out: %event0] {
+    %r_t = call @rec_time(%e);
+    %r = extract %r_t 0;
+    return %r;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+} 
+
+schedule[value $val = %main, timeline $time = %main_time, spatial $space = %space]
+%main_head<$time.%e-usable, $time.%out-usable>() ->
+    [%out : $val.%out-usable $space-usable $time-usable %ni32]
+{
+    %x_ref = alloc-temporary local [] i32;
+    local-do-builtin $val.%x() -> %x_ref;
+    %arg = read-ref i32 %x_ref;
+
+    %default = default-join;
+    %join = inline-join %main_ret [] %default;
+
+    schedule-call %rec_sum_head[$val.%y_t, $time.%r_t, $space](%arg) %join;
+}
+
+schedule[value $val = %main, timeline $time = %main_time, spatial $space = %space]
+%main_ret<$time.%r-usable, $time.%out-usable>
+    (%y : $val.%y-usable $space-usable $time.%r-usable %ni32) ->
+    [%out : $val.%y-usable $space-usable $time-usable %ni32] 
+{
+
+    return %y;
+}
+
+value[impl @foo] %foo(%i: i32) -> [%out: i32] {
+    return %i;
+}
+
+// only way to call something without a call in the timeline spec is for the callee
+// to implement the same spec
+schedule[value $val = %foo, timeline $time = %rec_time, spatial $space = %space]
+%foo_head<$time.%snc-usable, $time.%snc-usable>
+    (%arg : $val.%i-usable $space-usable $time.%snc-usable %ni32) ->
+    [%out : $val.%out-usable $space-usable $time.%snc-usable %ni32] 
+{
+    return %arg;
+}
+
+// rec_sum
+
+
+value[impl default @rec_sum] %rec_sum(%i : %ni32) -> [%out: i32] {
+    %neg_1 = constant %ni32 -1;
+    %one = constant %ni32 1;
+
+    %i_minus_1_t = call @add(%one, %one, %one, %i, %neg_1);
+    %i_minus_1 = extract %i_minus_1_t 0;
+
+    %r_t = call @foo(%i_minus_1);
+    %r = extract %r_t 0;
+
+    %sum_t = call @add(%one, %one, %one, %i, %r);
+    %sum = extract %sum_t 0;
+
+    return %sum;
+}
+
+timeline[impl @rec_time] %rec_time(%e: %event0) -> [%out: %event0] {
+    %enc = encoding-event %e [];
+    %loc = extract %enc 0;
+    %rem = extract %enc 1;
+    %sub = submission-event %rem;
+    %snc = synchronization-event %loc %sub;
+
+    %enc2 = encoding-event %snc [];
+    %loc2 = extract %enc2 0;
+    %rem2 = extract %enc2 1;
+    %sub2 = submission-event %rem2;
+    %snc2 = synchronization-event %loc2 %sub2;
+
+    return %snc2;
+}
+
+schedule[value $val = %rec_sum, timeline $time = %rec_time, spatial $space = %space]
+%rec_sum_head<$time.%e-usable, $time.%out-usable>
+    (%arg : $val.%i-usable $space-usable $time.%e-usable %ni32) ->
+    [%out : $val.%out-usable $space-usable $time.%out-usable %ni32] 
+{
+    %neg_1_ref = alloc-temporary local [copy_src] i32;
+    local-do-builtin $val.%neg_1() -> %neg_1_ref;
+    %neg_1 = read-ref i32 %neg_1_ref;
+
+    %arg_ref = alloc-temporary local [copy_src] i32;
+    write-ref i32 %arg -> %arg_ref;
+
+    %one_ref = alloc-temporary local [] i32;
+    local-do-builtin $val.%one() -> %one_ref;
+    %one = read-ref i32 %one_ref;
+
+    %arg_minus_1_ref = alloc-temporary local [map_write] i32;
+    %arg_gpu = alloc-temporary gpu [storage, copy_dst] i32;
+    %neg_1_gpu = alloc-temporary gpu [storage, copy_dst] i32;
+    %arg_minus_1_gpu = alloc-temporary gpu [storage, map_read] i32;
+
+    %enc = begin-encoding gpu $time.%enc [%arg_gpu, %neg_1_gpu, %arg_minus_1_gpu] [];
+    encode-copy %enc %arg_ref -> %arg_gpu;
+    encode-copy %enc %neg_1_ref -> %neg_1_gpu;
+    encode-do %enc %add $val.%i_minus_1_t(%one, %one, %one, %arg_gpu, %neg_1_gpu) -> %arg_minus_1_gpu;
+    %sub = submit %enc $time.%sub;
+    sync-fence %sub $time.%snc;
+    local-copy %arg_minus_1_gpu -> %arg_minus_1_ref;
+    %arg_minus_1 = read-ref i32 %arg_minus_1_ref;
+
+
+    %default = default-join;
+    %join = inline-join %rec_sum_rec_tail [%arg] %default;
+    schedule-call %foo_head[$val.%r_t, $time, $space](%arg_minus_1) %join;
+}
+
+schedule[value $val = %rec_sum, timeline $time = %rec_time, spatial $space = %space]
+%rec_sum_rec_tail<$time.%snc-usable, $time.%out-usable>
+    (%i : phi-$val.%i-usable $time.%snc-usable %ni32,
+    %r : $val.%r-usable $time.%snc-usable %ni32) ->
+    [%out : $val.%out-usable $time.%out-usable %ni32] 
+{
+    %one_ref = alloc-temporary local [] i32;
+    local-do-builtin $val.%one() -> %one_ref;
+    %one = read-ref i32 %one_ref;
+
+    %i_ref = alloc-temporary local [copy_src] i32;
+    write-ref i32 %i -> %i_ref;
+    %r_ref = alloc-temporary local [copy_src] i32;
+    write-ref i32 %r -> %r_ref;
+    %res_ref = alloc-temporary local [map_write] i32;
+
+    %i_gpu = alloc-temporary gpu [storage, copy_dst] i32;
+    %r_gpu = alloc-temporary gpu [storage, copy_dst] i32;
+    %res_gpu = alloc-temporary gpu [storage, map_read] i32;
+
+    %enc = begin-encoding gpu $time.%enc2 [%i_gpu, %r_gpu, %res_gpu] [];
+    encode-copy %enc %i_ref -> %i_gpu;
+    encode-copy %enc %r_ref -> %r_gpu;
+    encode-do %enc %add $val.%sum_t(%one, %one, %one, %i_gpu, %r_gpu) -> %res_gpu;
+    %sub = submit %enc $time.%sub2;
+    sync-fence %sub $time.%snc2;
+    local-copy %res_gpu -> %res_ref;
+
+    %res = read-ref i32 %res_ref;
+    return %res;
+}
+
+
+
+pipeline "main" = %main_head, effect %eff;

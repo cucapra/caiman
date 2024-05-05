@@ -226,6 +226,7 @@ pub struct CodeGenerator<'program> {
     dispatcher_id_generator: IdGenerator,
     active_dispatchers: HashMap<Box<[ffi::TypeId]>, Dispatcher>,
     gpu_fence_type: Option<ffi::TypeId>,
+    gpu_encoder_type: Option<ffi::TypeId>,
 }
 
 impl<'program> CodeGenerator<'program> {
@@ -259,9 +260,12 @@ impl<'program> CodeGenerator<'program> {
             dispatcher_id_generator: IdGenerator::new(),
             active_dispatchers: HashMap::new(),
             gpu_fence_type: None,
+            gpu_encoder_type: None,
         };
 
         code_generator.gpu_fence_type = Some(code_generator.create_ffi_type(ffi::Type::GpuFence));
+        code_generator.gpu_encoder_type =
+            Some(code_generator.create_ffi_type(ffi::Type::GpuEncoder));
 
         let type_ids = code_generator
             .native_interface
@@ -274,6 +278,11 @@ impl<'program> CodeGenerator<'program> {
         }
 
         code_generator
+    }
+
+    /// Gets the type id of the encoder
+    pub fn get_encoder_type(&self) -> ffi::TypeId {
+        self.gpu_encoder_type.unwrap()
     }
 
     pub fn finish(&mut self) -> String {
@@ -981,7 +990,7 @@ impl<'program> CodeGenerator<'program> {
             }
             write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{\n");
             for (input_index, input_type) in input_types.iter().enumerate() {
-                if self.is_ref(*input_type) {
+                if self.is_cpu_ref(*input_type) {
                     write!(
                         self.code_writer,
                         "self.locals.calloc({}, *arg_{});\n",
@@ -995,7 +1004,7 @@ impl<'program> CodeGenerator<'program> {
                 funclet_id
             );
             for (input_index, input_type) in input_types.iter().enumerate() {
-                if self.is_ref(*input_type) {
+                if self.is_cpu_ref(*input_type) {
                     write!(self.code_writer, ", StackRef::local({input_index})");
                 } else {
                     write!(self.code_writer, ", arg_{input_index}");
@@ -1003,7 +1012,7 @@ impl<'program> CodeGenerator<'program> {
             }
             write!(self.code_writer, ");\n",);
             for (input_index, input_type) in input_types.iter().enumerate() {
-                if self.is_mut_ref(*input_type) {
+                if self.is_cpu_mut_ref(*input_type) {
                     write!(
                         self.code_writer,
                         "*arg_{input_index} = *r.instance.locals.get({input_index});\n",
@@ -1165,15 +1174,21 @@ impl<'program> CodeGenerator<'program> {
             dispatcher_id.0
         );
         write!(self.code_writer, "(join_stack");
-        for ((argument_index, var_id), var_type) in argument_var_ids
-            .iter()
-            .enumerate()
-            .zip(argument_types.iter())
-        {
-            if self.is_ref(*var_type) {
-                write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
+        let mut i = 0;
+        for var_type in argument_types.iter() {
+            if *var_type == self.get_encoder_type() {
+                // dummy argument for the encoder, no argument_var_id for this
+                write!(self.code_writer, ", ()");
+                continue;
+            }
+            let var_id = argument_var_ids[i];
+            i += 1;
+            if self.is_cpu_ref(*var_type) {
+                write!(self.code_writer, ", {}", self.make_stack_ref(var_id));
+            } else if self.is_gpu_buf(*var_type) {
+                write!(self.code_writer, ", {}", self.access_gpu_str(var_id));
             } else {
-                write!(self.code_writer, ", {}", self.access_val_str(*var_id));
+                write!(self.code_writer, ", {}", self.access_val_str(var_id));
             }
         }
         write!(self.code_writer, ", instance);\n");
@@ -1202,15 +1217,21 @@ impl<'program> CodeGenerator<'program> {
                 dispatcher_id.0
             );
             write!(self.code_writer, "(join_stack");
-            for ((return_index, var_id), var_type) in output_var_ids
-                .iter()
-                .enumerate()
-                .zip(output_var_types.iter())
-            {
-                if self.is_ref(*var_type) {
-                    write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
+            let mut i = 0;
+            for var_type in output_var_types.iter() {
+                if *var_type == self.get_encoder_type() {
+                    // dummy argument for the encoder, no output_var_id for this
+                    write!(self.code_writer, ", ()");
+                    continue;
+                }
+                let var_id = output_var_ids[i];
+                i += 1;
+                if self.is_cpu_ref(*var_type) {
+                    write!(self.code_writer, ", {}", self.make_stack_ref(var_id));
+                } else if self.is_gpu_buf(*var_type) {
+                    write!(self.code_writer, ", {}", self.access_gpu_str(var_id));
                 } else {
-                    write!(self.code_writer, ", {}", self.access_val_str(*var_id));
+                    write!(self.code_writer, ", {}", self.access_val_str(var_id));
                 }
             }
             write!(self.code_writer, ", instance) }}");
@@ -1221,13 +1242,22 @@ impl<'program> CodeGenerator<'program> {
                     .enumerate()
                     .zip(result_type_ids.iter())
                 {
-                    if self.is_ref(*var_type) {
+                    if self.is_cpu_ref(*var_type) {
                         if self.variable_tracker.is_arg(*var_id) {
                             write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
                         } else {
                             write!(self.code_writer, "StackRef::local({}) ", var_id.0);
                         }
+                    } else if self.is_gpu_buf(*var_type) {
+                        // TODO: may_return might be true and this might be a temp buffer
+                        // this could be OK if the funclet may not actually return
+                        assert!(
+                            self.variable_tracker.is_arg(*var_id),
+                            "Can't return a temp buffer"
+                        );
+                        write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
                     } else {
+                        assert!(*var_type != self.get_encoder_type());
                         write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
                     }
                 }
@@ -1331,6 +1361,7 @@ impl<'program> CodeGenerator<'program> {
             ffi::Type::GpuBufferAllocator => (),
             ffi::Type::CpuBufferAllocator => (),
             ffi::Type::GpuFence => (),
+            ffi::Type::GpuEncoder => (),
             _ => panic!("Unimplemented type #{}: {:?}", type_id.0, typ),
             //_ => panic!("Unimplemented")
         }
@@ -1340,8 +1371,8 @@ impl<'program> CodeGenerator<'program> {
         self.native_interface.calculate_type_binding_info(type_id)
     }
 
-    /// Returns true if the type is a reference type
-    fn is_ref(&self, type_id: ffi::TypeId) -> bool {
+    /// Returns true if the type is a CPU reference type
+    fn is_cpu_ref(&self, type_id: ffi::TypeId) -> bool {
         match &self.native_interface.types[type_id.0] {
             ffi::Type::ConstRef { .. }
             | ffi::Type::MutRef { .. }
@@ -1351,7 +1382,15 @@ impl<'program> CodeGenerator<'program> {
         }
     }
 
-    fn is_mut_ref(&self, type_id: ffi::TypeId) -> bool {
+    /// Returns true if the type is a GPU buffer type
+    fn is_gpu_buf(&self, type_id: ffi::TypeId) -> bool {
+        match &self.native_interface.types[type_id.0] {
+            ffi::Type::GpuBufferRef { .. } | ffi::Type::GpuBufferSlice { .. } => true,
+            _ => false,
+        }
+    }
+
+    fn is_cpu_mut_ref(&self, type_id: ffi::TypeId) -> bool {
         match &self.native_interface.types[type_id.0] {
             ffi::Type::MutRef { .. } | ffi::Type::MutSlice { .. } => true,
             _ => false,
@@ -1433,7 +1472,7 @@ impl<'program> CodeGenerator<'program> {
                 length
             ),
             ffi::Type::GpuBufferRef { element_type } => format!(
-                "caiman_rt::GpuBufferRef<'callee, {}>",
+                "caiman_rt::GpuBufferRef<{}>",
                 self.get_type_name_with_ref(*element_type, lifetime)
             ),
             ffi::Type::GpuBufferSlice { element_type } => format!(
@@ -1442,6 +1481,7 @@ impl<'program> CodeGenerator<'program> {
             ),
             ffi::Type::GpuBufferAllocator => format!("caiman_rt::GpuBufferAllocator<'callee>"),
             ffi::Type::GpuFence => format!("caiman_rt::GpuFence"),
+            ffi::Type::GpuEncoder => format!("caiman_rt::ErasedEncoder"),
             _ => format!("type_{}", type_id.0),
         }
     }
@@ -1784,8 +1824,10 @@ impl<'program> CodeGenerator<'program> {
             capture_types.len()
         );
         for (var_id, var_type) in capture_var_ids.iter().zip(capture_types.iter()) {
-            if self.is_ref(*var_type) {
+            if self.is_cpu_ref(*var_type) {
                 write!(self.code_writer, "{}, ", self.make_stack_ref(*var_id));
+            } else if self.is_gpu_buf(*var_type) {
+                write!(self.code_writer, "{}, ", self.access_gpu_str(*var_id));
             } else {
                 write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
             }
@@ -1925,7 +1967,7 @@ impl<'program> CodeGenerator<'program> {
             self.build_get_gpu_ref(destination_var, Some(type_id))
         ));
         self.code_writer.write(format!(
-            "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, _t);\n",
+            "instance.state.get_queue_mut().write_buffer(unsafe {{ &*{}.buffer }}, {}.base_address, _t);\n",
             buffer_view_var_name, buffer_view_var_name
         ));
         write!(self.code_writer, "}}\n");
@@ -2054,7 +2096,7 @@ impl<'program> CodeGenerator<'program> {
                 var_id.0,
             )
         } else if self.variable_tracker.is_arg(var_id)
-            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+            && self.is_cpu_ref(self.variable_tracker.variable_types[&var_id])
         {
             format!(
                 "{}.get{}(&{} instance)",
@@ -2063,7 +2105,7 @@ impl<'program> CodeGenerator<'program> {
                 if is_mut { "mut" } else { "" }
             )
         } else if self.variable_tracker.variable_types.contains_key(&var_id)
-            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+            && self.is_cpu_ref(self.variable_tracker.variable_types[&var_id])
         {
             self.get_var_name(var_id)
         } else {
@@ -2085,13 +2127,27 @@ impl<'program> CodeGenerator<'program> {
                 var_id.0,
             )
         } else if self.variable_tracker.is_arg(var_id)
-            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+            && self.is_cpu_ref(self.variable_tracker.variable_types[&var_id])
         {
             format!("(*{}.get(&instance))", self.get_var_name(var_id))
         } else if self.variable_tracker.variable_types.contains_key(&var_id)
-            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+            && self.is_cpu_ref(self.variable_tracker.variable_types[&var_id])
         {
             format!("(*{})", self.get_var_name(var_id))
+        } else {
+            self.get_var_name(var_id)
+        }
+    }
+
+    /// Returns a string that is the code which can accesss the value of a variable
+    /// which is a GPU buffer
+    fn access_gpu_str(&self, var_id: VarId) -> String {
+        if self.variable_tracker.is_temp(var_id) {
+            format!(
+                "instance.glocals.get_gpu_ref::<{}>({})",
+                self.get_stripped_var_type_name(var_id),
+                var_id.0,
+            )
         } else {
             self.get_var_name(var_id)
         }

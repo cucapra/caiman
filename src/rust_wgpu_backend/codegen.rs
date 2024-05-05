@@ -77,10 +77,12 @@ impl NodeResult {
             if let Some(var_id) = node_result.get_var_id() {
                 var_ids.push(var_id);
             } else {
-                panic!(
-                    "Node Result {:?} does not have an associated variable",
-                    node_result
-                );
+                if !matches!(node_result, NodeResult::Encoder { .. }) {
+                    panic!(
+                        "Node Result {:?} does not have an associated variable",
+                        node_result
+                    );
+                }
             }
         }
 
@@ -445,6 +447,7 @@ impl<'program> CodeGen<'program> {
             ir::Type::Fence {
                 queue_place: ir::Place::Gpu,
             } => self.code_generator.create_ffi_type(ir::ffi::Type::GpuFence),
+            ir::Type::Encoder { .. } => self.code_generator.get_encoder_type(),
             _ => panic!("Not a valid type for referencing from the CPU: {:?}", typ),
         };
 
@@ -1004,9 +1007,18 @@ impl<'program> CodeGen<'program> {
                             storage_place: *storage_place,
                             storage_type: *storage_type,
                         },
-                        _ => panic!("Incorrect type"),
+                        ir::Type::Fence { queue_place } => {
+                            let fence_id = output_var_ids[output_index]; //self.code_generator.convert_var_to_gpu_fence(output_var_ids[output_index]);
+                            NodeResult::Fence {
+                                place: *queue_place,
+                                fence_id,
+                            }
+                        }
+                        ir::Type::Encoder { queue_place } => NodeResult::Encoder {
+                            place: *queue_place,
+                        },
+                        x => panic!("Incorrect type: {:?}", x),
                     };
-
                     output_node_results.push(node_result);
                 }
                 funclet_stack.push(InlineFuncletState {
@@ -1124,6 +1136,11 @@ impl<'program> CodeGen<'program> {
                             storage_place: *storage_place,
                             static_layout_opt: *static_layout_opt,
                             var_id: argument_variable_ids[index],
+                        });
+                    }
+                    ir::Type::Encoder { queue_place } => {
+                        argument_node_results.push(NodeResult::Encoder {
+                            place: *queue_place,
                         });
                     }
                     _ => panic!("Unimplemented"),
@@ -1494,8 +1511,12 @@ impl<'program> CodeGen<'program> {
                 .unwrap(),
             funclet_id,
         );
-        let mut funclet_checker =
-            type_system::scheduling::FuncletChecker::new(&self.program, funclet_id, funclet, &self.debug_info);
+        let mut funclet_checker = type_system::scheduling::FuncletChecker::new(
+            &self.program,
+            funclet_id,
+            funclet,
+            &self.debug_info,
+        );
 
         if self.print_codegen_debug_info {
             println!(
