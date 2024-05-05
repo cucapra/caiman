@@ -6,6 +6,13 @@ buffer_space %buffspace;
 native_value %i64 : i64;
 
 // A simple recursive sum test
+// fn rec_sum(i: i64) -> i64 {
+//     if i > 0 {
+//         i + rec_sum(i - 1)
+//     } else {
+//         0
+//     }
+// }
 
 function @main() -> %i64;
 function @rec_sum(%i64) -> %i64;

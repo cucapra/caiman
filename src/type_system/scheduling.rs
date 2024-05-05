@@ -211,6 +211,21 @@ fn check_slot_type(
                 );
             }
         }
+        ir::Type::Encoder {
+            queue_place: queue_place_2,
+        } => {
+            // TODO: Is this check correct???
+            if let NodeType::Encoder(Encoder { queue_place }) = node_type {
+                assert_eq!(*queue_place_2, *queue_place, "\n{}", error_context);
+            } else {
+                panic!(
+                    "type id {} is an encoder type, but node type {:?} is not an encoder\n{}",
+                    error_context.debug_info().typ(&type_id),
+                    node_type,
+                    error_context
+                );
+            }
+        }
         _ => panic!("Unimplemented\n{}", error_context),
     }
 }
@@ -235,7 +250,9 @@ fn advance_forward_value_copy<'program>(
     assert!(
         value_spec_checker.can_drop_node(output_impl_node_id),
         "node {}\n{}",
-        error_context.debug_info().node(&value_spec_checker.funclet_id, output_impl_node_id),
+        error_context
+            .debug_info()
+            .node(&value_spec_checker.funclet_id, output_impl_node_id),
         error_context
     );
     value_spec_checker.update_scalar_node(output_impl_node_id, scalar.quot, ir::Flow::Usable);
@@ -262,7 +279,9 @@ fn advance_forward_value_do<'program>(
             assert!(
                 value_spec_checker.can_drop_node(output_impl_node_ids[0]),
                 "node {}\n{}",
-                error_context.debug_info().node(&value_spec_checker.funclet_id, output_impl_node_ids[0]),
+                error_context
+                    .debug_info()
+                    .node(&value_spec_checker.funclet_id, output_impl_node_ids[0]),
                 error_context
             );
             value_spec_checker.update_scalar_node(
@@ -306,7 +325,9 @@ fn advance_forward_value_do<'program>(
             assert!(
                 value_spec_checker.can_drop_node(output_impl_node_ids[0]),
                 "node {}\n{}",
-                error_context.debug_info().node(&value_spec_checker.funclet_id, output_impl_node_ids[0]),
+                error_context
+                    .debug_info()
+                    .node(&value_spec_checker.funclet_id, output_impl_node_ids[0]),
                 error_context
             );
             value_spec_checker.update_scalar_node(
@@ -353,7 +374,9 @@ fn advance_forward_value_do<'program>(
                 assert!(
                     value_spec_checker.can_drop_node(*output_impl_node_id),
                     "node {}\n{}",
-                    error_context.debug_info().node(&value_spec_checker.funclet_id, *output_impl_node_id),
+                    error_context
+                        .debug_info()
+                        .node(&value_spec_checker.funclet_id, *output_impl_node_id),
                     error_context
                 );
                 //value_spec_checker.check_node_tag(*output_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::Need})?;
@@ -560,7 +583,7 @@ impl<'program> FuncletChecker<'program> {
                 value_funclet,
                 value_spec,
                 "Value",
-                debug_info
+                debug_info,
             )),
             timeline_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
@@ -568,7 +591,7 @@ impl<'program> FuncletChecker<'program> {
                 &program.funclets[timeline_index],
                 timeline_spec,
                 "Timeline",
-                debug_info
+                debug_info,
             )),
             spatial_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
@@ -576,7 +599,7 @@ impl<'program> FuncletChecker<'program> {
                 &program.funclets[spatial_index],
                 spatial_spec,
                 "Spatial",
-                debug_info
+                debug_info,
             )),
             node_join_points: HashMap::new(),
             node_types: HashMap::new(),
@@ -625,6 +648,9 @@ impl<'program> FuncletChecker<'program> {
                     storage_place: *storage_place,
                     static_layout_opt: *static_layout_opt,
                     buffer_flags: *flags,
+                }),
+                ir::Type::Encoder { queue_place } => NodeType::Encoder(Encoder {
+                    queue_place: *queue_place,
                 }),
                 _ => panic!(
                     "Not a legal argument type {} for a scheduling funclet",
@@ -827,7 +853,11 @@ impl<'program> FuncletChecker<'program> {
             return Err(Error::Generic {
                 message: format!(
                     "External function {} does not implement function class {}\n{}",
-                    error_context.debug_info().external_function(&external_function_id.0), error_context.debug_info().function_class(&function_id), error_context
+                    error_context
+                        .debug_info()
+                        .external_function(&external_function_id.0),
+                    error_context.debug_info().function_class(&function_id),
+                    error_context
                 ),
             });
         }
@@ -1350,7 +1380,9 @@ impl<'program> FuncletChecker<'program> {
                                 kernel.output_types[index],
                                 "\n\n{} =/= {}\n\n{}",
                                 error_context.debug_info().typ(&node_type.0),
-                                error_context.debug_info().typ(&kernel.output_types[index].0),
+                                error_context
+                                    .debug_info()
+                                    .typ(&kernel.output_types[index].0),
                                 error_context
                             );
 
@@ -2531,7 +2563,9 @@ impl<'program> FuncletChecker<'program> {
                         continuation_join_point.input_types[callee_output_index],
                         "\n\n{} =/= {}\n\n{}",
                         error_context.debug_info().typ(callee_output_type),
-                        error_context.debug_info().typ(&continuation_join_point.input_types[callee_output_index]),
+                        error_context
+                            .debug_info()
+                            .typ(&continuation_join_point.input_types[callee_output_index]),
                         error_context
                     );
                 }
@@ -2717,16 +2751,24 @@ impl<'program> FuncletChecker<'program> {
                         true_funclet.output_types[output_index],
                         continuation_join_point.input_types[output_index],
                         "\n\n{} =/= {}\n\n{}",
-                        error_context.debug_info().typ(&true_funclet.output_types[output_index]),
-                        error_context.debug_info().typ(&continuation_join_point.input_types[output_index]),
+                        error_context
+                            .debug_info()
+                            .typ(&true_funclet.output_types[output_index]),
+                        error_context
+                            .debug_info()
+                            .typ(&continuation_join_point.input_types[output_index]),
                         error_context
                     );
                     assert_eq!(
                         false_funclet.output_types[output_index],
                         continuation_join_point.input_types[output_index],
                         "\n\n{} =/= {}\n\n{}",
-                        error_context.debug_info().typ(&false_funclet.output_types[output_index]),
-                        error_context.debug_info().typ(&continuation_join_point.input_types[output_index]),
+                        error_context
+                            .debug_info()
+                            .typ(&false_funclet.output_types[output_index]),
+                        error_context
+                            .debug_info()
+                            .typ(&continuation_join_point.input_types[output_index]),
                         error_context
                     );
                 }

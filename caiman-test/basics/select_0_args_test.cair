@@ -1,5 +1,7 @@
 version 0.0.2
 
+// Codegen regression test where we have a select which passes
+// 0 arguments to the left and right branches.
 ffi i64;
 ref %i64l : i64-local<flags=[]>;
 event %event0;

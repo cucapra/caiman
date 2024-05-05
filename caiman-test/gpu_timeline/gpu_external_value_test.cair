@@ -1,5 +1,8 @@
 version 0.0.2
 
+// The same as gpu external test but the input argument is a value instead
+// of a reference.
+
 ffi i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
@@ -8,8 +11,8 @@ event %event0;
 buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
 buffer_space %buff_space;
 
-function @simple(%i32n) -> %i32n;
-function @foo(%i32n) -> %i32n;
+function @simple(i32) -> i32;
+function @foo(i32) -> i32;
 
 external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
 {
@@ -28,7 +31,7 @@ external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
     }
 }
 
-value[impl @foo] %foo(%x : %i32n) -> %i32n {
+value[impl @foo] %foo(%x : i32) -> i32 {
     %c = constant %i32n 1;
     %y_t = call @simple(%c, %c, %c, %x);
     %y = extract %y_t 0;

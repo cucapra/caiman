@@ -1,0 +1,93 @@
+version 0.0.2
+
+// This is the same as gpu external test but with an added jump 
+// to a separate funclet which reads the results from the references
+// and returns them.
+
+// This is similar to how the frontend would generate the code.
+
+type i32;
+native_value %i32n : i32;
+ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
+ref %i32g : i32-gpu<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
+ref %i32gs : i32-gpu<flags=[copy_dst, storage]>;
+ref %i32gd : i32-gpu<flags=[map_read, storage]>;
+event %event0;
+buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
+buffer_space %buff_space;
+
+function @simple(i32) -> i32;
+function @foo(i32) -> i32;
+
+external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensionality : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : %x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : %out
+    }
+}
+
+value[impl @foo] %foo(%x : i32) -> i32 {
+    %c = constant %i32n 1;
+    %y_t = call @simple(%c, %c, %c, %x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+timeline %foo_time(%e : %event0) -> [%out: %event0] {
+    %enc = encoding-event %e [];
+    %enc1 = extract %enc 0;
+    %enc2 = extract %enc 1;
+    %sub = submission-event %enc2;
+    %snc = synchronization-event %enc1 %sub;
+    return %snc;
+}
+
+spatial %foo_space(%bs : %buff_space) -> %buff_space {
+    return %bs;
+}
+
+schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
+%foo_main<$time.%e-usable, $time.%out-usable>
+(%x_loc : $val.%x-usable %i32l)
+-> [%out : $val.%y-usable %i32n] {
+    %c_loc = alloc-temporary local [storage] i32;
+    %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
+    %y_gpu = alloc-temporary gpu [storage, map_read] i32;
+
+    local-do-builtin $val.%c() -> %c_loc;
+    %enc = begin-encoding gpu $time.%enc [%x_gpu, %y_gpu] [];
+    encode-copy %enc %x_loc -> %x_gpu;
+    %c = read-ref i32 %c_loc;
+    encode-do %enc %simple $val.%y_t(%c, %c, %c, %x_gpu) -> %y_gpu;
+
+    %fnc = submit %enc $time.%sub;
+    sync-fence %fnc $time.%snc;
+    
+    
+    %djoin = default-join;
+    %join = inline-join %foo_ret [] %djoin;
+    jump %join [%y_gpu, %x_gpu];
+}
+
+schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
+%foo_ret<$time.%snc-usable, $time.%out-usable>
+    (%y_gpu : $val.%y-usable $space-saved $time.%snc-usable %i32gd, 
+    %x_gpu : phi-$val.%x-usable $space-saved $time.%snc-usable %i32gs) 
+    -> [%out : $val.%y-usable %i32n] 
+{
+    %y_loc = alloc-temporary local [map_write] i32;
+    local-copy %y_gpu -> %y_loc;
+    %result = read-ref i32 %y_loc;
+    return %result;
+}
+pipeline "main" = %foo_main;
