@@ -65,10 +65,11 @@ pub fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
 
 /// For types that have FFI equivalents, convert a high-level caiman data type
 /// to the caiman assembly type id for the corresponding FFI type. For types
-/// that do not have FFI equivalents, this is the same as `data_type_to_local_type`.
+/// that do not have FFI equivalents, we cannot convert to an undefined type
+/// and so this code will panic
 #[must_use]
 pub fn data_type_to_ffi_type(dt: &DataType) -> asm::FFIType {
-    data_type_to_ffi(dt).expect(&format!("Undefined type {:?}", dt))
+    data_type_to_ffi(dt).expect(&format!("Undefined type {dt:?}"))
 }
 
 /// For types that have FFI equivalents, convert a high-level caiman data type
