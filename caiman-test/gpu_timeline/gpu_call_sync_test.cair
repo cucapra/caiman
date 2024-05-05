@@ -16,8 +16,8 @@ version 0.0.2
 //     return r;
 // }
 
-type i32;
-native_value %i32n : i32;
+ffi i32;
+native_value %i32 : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 ref %i32g : i32-gpu<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 ref %i32gd : i32-gpu<flags=[map_read, storage]>;
@@ -26,11 +26,11 @@ fence %fence0 : gpu;
 buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
 buffer_space %buff_space;
 
-function @simple(i32) -> i32;
-function @foo(i32) -> i32;
-function @bar(i32) -> i32;
+function @simple(%i32) -> %i32;
+function @foo(%i32) -> %i32;
+function @bar(%i32) -> %i32;
 function @bar_time(%event0, %fence0) -> %event0;
-function @add(i32, i32) -> i32;
+function @add(%i32, %i32) -> %i32;
 
 external-cpu-pure[impl @add] %add(i32, i32) -> i32;
 
@@ -51,8 +51,8 @@ external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
     }
 }
 
-value[impl @foo] %foo(%x : i32) -> [%out: i32] {
-    %c = constant %i32n 1;
+value[impl @foo] %foo(%x : %i32) -> [%out: %i32] {
+    %c = constant %i32 1;
     %y_t = call @simple(%c, %c, %c, %x);
     %y = extract %y_t 0;
 
@@ -61,9 +61,9 @@ value[impl @foo] %foo(%x : i32) -> [%out: i32] {
     return %y2;
 }
 
-value[impl @bar] %bar(%x : i32) -> [%out: i32] {
-    %c = constant %i32n 1;
-    %g = constant %i32n 3;
+value[impl @bar] %bar(%x : %i32) -> [%out: %i32] {
+    %c = constant %i32 1;
+    %g = constant %i32 3;
     %y_t = call @simple(%c, %c, %c, %g);
     %y = extract %y_t 0;
 
@@ -102,7 +102,7 @@ schedule[value $val = %bar, timeline $time = %bar_time, spatial $space = %foo_sp
 %bar_main<$time.%e-usable, $time.%out-usable>
     (%x2 : $val.%x-usable $space-saved $time.%f-usable %i32gd,
     %f : $time.%f-usable %fence0)
--> [%out : $val.%out-usable %i32n] {
+-> [%out : $val.%out-usable %i32] {
     %c_loc = alloc-temporary local [storage] i32;
     %g_loc = alloc-temporary local [storage, copy_src] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
@@ -135,7 +135,7 @@ schedule[value $val = %bar, timeline $time = %bar_time, spatial $space = %foo_sp
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
 (%x_loc : $val.%x-usable $time.%ret-usable $space-saved %i32l)
--> [%out : $val.%out-usable %i32n] {
+-> [%out : $val.%out-usable %i32] {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
     %y_gpu = alloc-temporary gpu [storage, map_read] i32;
@@ -155,8 +155,8 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_ret<$time.%ret-usable, $time.%out-usable>
-(%x : $val.%y2-usable %i32n)
--> [%out : $val.%out-usable %i32n] {
+(%x : $val.%y2-usable %i32)
+-> [%out : $val.%out-usable %i32] {
     return %x;
 }
 
