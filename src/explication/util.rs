@@ -1,3 +1,4 @@
+use crate::explication::context::StaticContext;
 use crate::explication::expir;
 use crate::explication::expir::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
@@ -25,23 +26,25 @@ impl Location {
     }
 
     // utility function to forcibly return a nodeid
-    pub fn node_id(&self) -> Option<NodeId> {
+    // if self is an output, looks up the context dependency
+    pub fn node_id(&self, context: &StaticContext) -> Option<NodeId> {
         match &self.quot {
             ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => {
                 Some(node_id.clone())
             }
-            ir::Quotient::None | ir::Quotient::Output { index: _ } => None,
+            ir::Quotient::Output { index } => context
+                .get_tail_edge_dependencies(&self.funclet_id)
+                .get(index.clone())
+                .clone()
+                .map(|u| u.clone()),
+            ir::Quotient::None => None,
         }
     }
 
-    pub fn is_subset_of(&self, other: &Location) -> bool {
-        match self {
-            Location {
-                funclet_id,
-                quot: ir::Quotient::None,
-            } => *funclet_id == other.funclet_id,
-            loc => loc.funclet_id == other.funclet_id && loc.quot == other.quot,
-        }
+    pub fn is_subset_of(&self, other: &Location, context: &StaticContext) -> bool {
+        let node_id = self.node_id(context);
+        node_id.is_none()
+            || (self.funclet_id == other.funclet_id && node_id == other.node_id(context))
     }
 }
 
@@ -88,16 +91,11 @@ impl LocationTriple {
         f: T,
         funclet_id: FuncletId,
         node_id: NodeId,
-        state: &crate::explication::InState,
-        context: &crate::explication::StaticContext,
+        state: &crate::explication::context::InState,
+        context: &StaticContext,
     ) -> LocationTriple
     where
-        T: Fn(
-            &expir::FuncletSpec,
-            FuncletId,
-            NodeId,
-            &crate::explication::StaticContext,
-        ) -> Option<Location>,
+        T: Fn(&expir::FuncletSpec, FuncletId, NodeId, &StaticContext) -> Option<Location>,
     {
         let specs = state.get_funclet_spec_triple(funclet_id, context);
         LocationTriple {
@@ -149,21 +147,21 @@ impl LocationTriple {
     // Returns whether this location triple is a subset of the other
     // We define a subset where None < Anything
     // but a non-None location must be equal
-    pub fn is_subset_of(&self, other: &LocationTriple) -> bool {
+    pub fn is_subset_of(&self, other: &LocationTriple, context: &StaticContext) -> bool {
         let value = match (&self.value, &other.value) {
-            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2),
+            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2, context),
             (Some(loc), None) => loc.quot == expir::Quotient::None,
-            _ => true
+            _ => true,
         };
         let timeline = match (&self.timeline, &other.timeline) {
-            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2),
+            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2, context),
             (Some(loc), None) => loc.quot == expir::Quotient::None,
-            _ => true
+            _ => true,
         };
         let spatial = match (&self.spatial, &other.spatial) {
-            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2),
+            (Some(loc1), Some(loc2)) => loc1.is_subset_of(loc2, context),
             (Some(loc), None) => loc.quot == expir::Quotient::None,
-            _ => true
+            _ => true,
         };
         value && timeline && spatial
     }
@@ -266,7 +264,7 @@ fn spec_box_read(
     spec: &expir::FuncletSpec,
     funclet_id: FuncletId,
     node_id: NodeId,
-    context: &crate::explication::context::StaticContext,
+    context: &StaticContext,
 ) -> Option<Location> {
     let index_error = format!(
         "funclet {} does not have enough arguments for lookup {}",
@@ -286,7 +284,7 @@ pub fn spec_input(
     spec: &expir::FuncletSpec,
     funclet_id: FuncletId,
     node_id: NodeId,
-    context: &crate::explication::context::StaticContext,
+    context: &StaticContext,
 ) -> Option<Location> {
     spec_box_read(&spec.input_tags, spec, funclet_id, node_id, context)
 }
@@ -295,15 +293,12 @@ pub fn spec_output(
     spec: &expir::FuncletSpec,
     funclet_id: FuncletId,
     node_id: NodeId,
-    context: &crate::explication::context::StaticContext,
+    context: &StaticContext,
 ) -> Option<Location> {
     spec_box_read(&spec.output_tags, spec, funclet_id, node_id, context)
 }
 
-pub fn get_implicit_time(
-    funclet_id: FuncletId,
-    context: &crate::explication::StaticContext,
-) -> Option<Location> {
+pub fn get_implicit_time(funclet_id: FuncletId, context: &StaticContext) -> Option<Location> {
     match &context.get_funclet(&funclet_id).spec_binding {
         expir::FuncletSpecBinding::ScheduleExplicit {
             value,

@@ -167,7 +167,7 @@ fn enumerate_output_type_attempts(
                     if output_to_try.funclet_id == state.get_current_funclet_id() {
                         for current_output in output_attempts.iter() {
                             let mut new_output = current_output.clone();
-                            new_output.push(output_to_try.node_id().unwrap());
+                            new_output.push(output_to_try.node_id(context).unwrap());
                             new_output_attempts.push(new_output)
                         }
                     }
@@ -1014,7 +1014,7 @@ fn explicate_return(
                     .instantiation
                     .clone()
                     .unwrap_or(LocationTriple::new());
-                if expected_remote.is_subset_of(&actual_remote) {
+                if expected_remote.is_subset_of(&actual_remote, context) {
                     return_values.push(node_id.clone());
                 } else {
                     // note that we will fail if types don't match
@@ -1044,7 +1044,7 @@ fn explicate_return(
                             // TODO try and explicate something
                             todo!()
                         };
-                        return_values.push(instantiation.node_id().unwrap());
+                        return_values.push(instantiation.node_id(context).unwrap());
                     }
                 };
             }
