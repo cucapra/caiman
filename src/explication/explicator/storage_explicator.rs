@@ -1,5 +1,7 @@
 use std::any::Any;
 
+use itertools::Itertools;
+
 use crate::explication::context::{InState, OperationOutState, StaticContext, StorageOutState};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
@@ -473,57 +475,58 @@ fn explicate_write_ref(
         )
     );
 
-    let source = expir_source.as_ref().opt().expect(&error).clone();
-    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
+    let storage_types = match expir_storage_type {
+        Hole::Filled(x) => vec![x.clone()],
+        Hole::Empty => todo!("{}", error),
+    };
 
-    fn try_destinations(
-        source: usize,
-        destination: usize,
-        storage_type: ffi::TypeId,
-        state: InState,
-        context: &StaticContext,
-    ) -> Option<StorageOutState> {
-        let mut new_state = state.clone();
-        // assume that the typechecker will find a misaligned storage type
-        let info = state.get_node_information(&source, context);
-        new_state.set_instantiation(
-            destination,
-            info.instantiation.clone().expect(&format!(
-                "Missing instantiation for node {}",
-                context
-                    .debug_info
-                    .node(&state.get_current_funclet_id(), source)
-            )),
-            context,
-        );
-        let node = ir::Node::WriteRef {
-            storage_type,
-            source,
-            destination,
+    for storage_type in storage_types.iter() {
+        let sources = match expir_source {
+            Hole::Filled(x) => vec![x.clone()],
+            Hole::Empty => todo!("{}", error),
         };
-        new_state.next_node();
-        match explicate_node(new_state, context) {
-            None => None,
-            Some(mut out) => {
-                out.add_node(node);
-                Some(out)
+
+        for source in sources.iter() {
+            let destinations = match expir_source {
+                Hole::Filled(x) => vec![x.clone()],
+                Hole::Empty => todo!("{}", error),
+            };
+
+            for destination in destinations.iter() {
+                let mut new_state = state.clone();
+                let info = state.get_node_information(&source, context);
+                new_state.set_instantiation(
+                    destination.clone(),
+                    info.instantiation.clone().expect(&format!(
+                        "Missing instantiation for node {}",
+                        context
+                            .debug_info
+                            .node(&state.get_current_funclet_id(), source.clone())
+                    )),
+                    context,
+                );
+                let node = ir::Node::WriteRef {
+                    storage_type: storage_type.clone(),
+                    source: source.clone(),
+                    destination: destination.clone(),
+                };
+                new_state.next_node();
+                match explicate_node(new_state, context) {
+                    None => {}
+                    Some(mut out) => {
+                        out.add_node(node);
+                        return Some(out);
+                    }
+                }
             }
         }
     }
-
-    match expir_destination.as_ref().opt() {
-        Some(destination) => {
-            try_destinations(source, destination.clone(), storage_type, state, context)
-        }
-        None => {
-            todo!()
-        }
-    }
+    None
 }
 
 fn explicate_borrow_ref(
-    expir_source: &Hole<usize>,
     expir_storage_type: &Hole<ffi::TypeId>,
+    expir_source: &Hole<usize>,
     state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
@@ -538,42 +541,76 @@ fn explicate_borrow_ref(
                 .expect("Unreachable")
         )
     );
-    let mut new_state = state.clone();
-    let source = expir_source.as_ref().opt().expect(&error).clone();
-    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
 
-    let info = state.get_node_information(&source, context);
-    let schedule_node = state.get_current_node_id().unwrap();
-
-    new_state.add_storage_node(schedule_node, info.typ.clone(), context);
-    new_state.set_instantiation(
-        schedule_node,
-        info.instantiation.clone().expect(&format!(
-            "Missing instantiation for node {}",
-            context
-                .debug_info
-                .node(&state.get_current_funclet_id(), source)
-        )),
-        context,
-    );
-
-    let node = ir::Node::BorrowRef {
-        storage_type,
-        source,
+    let storage_types = match expir_storage_type {
+        Hole::Filled(x) => vec![x.clone()],
+        Hole::Empty => (0..context.program.native_interface.types.len())
+            .map(|i| ffi::TypeId(i))
+            .collect_vec(),
     };
-    new_state.next_node();
-    match explicate_node(new_state, context) {
-        None => None,
-        Some(mut out) => {
-            out.add_node(node);
-            Some(out)
+
+    for storage_type in storage_types.iter() {
+        let sources = match expir_source {
+            Hole::Filled(x) => vec![x.clone()],
+            Hole::Empty => state
+                .find_all_storage_nodes(
+                    &expir::Type::Ref {
+                        storage_type: storage_type.clone(),
+                        storage_place: expir::Place::Local,
+                        buffer_flags: expir::BufferFlags::new(),
+                    },
+                    context,
+                )
+                .iter()
+                .map(|loc| loc.node_id(context).unwrap())
+                .collect(),
+        };
+
+        for source in sources.iter() {
+            let info = state.get_node_information(&source, context);
+            let schedule_node = state.get_current_node_id().unwrap();
+
+            let instantiation = match info.instantiation.clone() {
+                Some(inst) => inst,
+                None => {
+                    return None;
+                }
+            };
+
+            let mut new_state = state.clone();
+
+            new_state.add_storage_node(schedule_node, info.typ.clone(), context);
+            new_state.set_instantiation(
+                schedule_node,
+                info.instantiation.clone().expect(&format!(
+                    "Missing instantiation for node {}",
+                    context
+                        .debug_info
+                        .node(&state.get_current_funclet_id(), source.clone())
+                )),
+                context,
+            );
+
+            let node = ir::Node::BorrowRef {
+                storage_type: storage_type.clone(),
+                source: source.clone(),
+            };
+            new_state.next_node();
+            match explicate_node(new_state, context) {
+                None => {}
+                Some(mut out) => {
+                    out.add_node(node);
+                    return Some(out);
+                }
+            }
         }
     }
+    None
 }
 
 fn explicate_read_ref(
-    expir_source: &Hole<usize>,
     expir_storage_type: &Hole<ffi::TypeId>,
+    expir_source: &Hole<usize>,
     state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
@@ -588,39 +625,65 @@ fn explicate_read_ref(
                 .expect("Unreachable")
         )
     );
-    let mut new_state = state.clone();
-    let source = expir_source.as_ref().opt().expect(&error).clone();
-    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
-
-    let info = state.get_node_information(&source, context);
-    let schedule_node = state.get_current_node_id().unwrap();
-
-    let instantiation = match info.instantiation.clone() {
-        Some(inst) => inst,
-        None => { return None; } 
+    let storage_types = match expir_storage_type {
+        Hole::Filled(x) => vec![x.clone()],
+        Hole::Empty => (0..context.program.native_interface.types.len())
+            .map(|i| ffi::TypeId(i))
+            .collect_vec(),
     };
-    new_state.add_storage_node(
-        schedule_node,
-        expir::Type::NativeValue { storage_type },
-        context,
-    );
-    new_state.set_instantiation(
-        schedule_node,
-        instantiation,
-        context,
-    );
-    let node = ir::Node::ReadRef {
-        storage_type,
-        source,
-    };
-    new_state.next_node();
-    match explicate_node(new_state, context) {
-        None => None,
-        Some(mut out) => {
-            out.add_node(node);
-            Some(out)
+
+    for storage_type in storage_types.iter() {
+        let sources = match expir_source {
+            Hole::Filled(x) => vec![x.clone()],
+            Hole::Empty => state
+                .find_all_storage_nodes(
+                    &expir::Type::Ref {
+                        storage_type: storage_type.clone(),
+                        storage_place: expir::Place::Local,
+                        buffer_flags: expir::BufferFlags::new(),
+                    },
+                    context,
+                )
+                .iter()
+                .map(|loc| loc.node_id(context).unwrap())
+                .collect(),
+        };
+
+        for source in sources.iter() {
+            let info = state.get_node_information(&source, context);
+            let schedule_node = state.get_current_node_id().unwrap();
+
+            let instantiation = match info.instantiation.clone() {
+                Some(inst) => inst,
+                None => {
+                    return None;
+                }
+            };
+
+            let mut new_state = state.clone();
+            new_state.add_storage_node(
+                schedule_node,
+                expir::Type::NativeValue {
+                    storage_type: storage_type.clone(),
+                },
+                context,
+            );
+            new_state.set_instantiation(schedule_node, instantiation, context);
+            let node = ir::Node::ReadRef {
+                storage_type: storage_type.clone(),
+                source: source.clone(),
+            };
+            new_state.next_node();
+            match explicate_node(new_state, context) {
+                None => {}
+                Some(mut out) => {
+                    out.add_node(node);
+                    return Some(out);
+                }
+            }
         }
     }
+    None
 }
 
 fn explicate_local_copy(
@@ -923,13 +986,13 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Storage
                 source,
             }) => explicate_write_ref(source, destination, storage_type, state, context),
             Hole::Filled(expir::Node::BorrowRef {
-                source,
                 storage_type,
-            }) => explicate_borrow_ref(source, storage_type, state, context),
+                source,
+            }) => explicate_borrow_ref(storage_type, source, state, context),
             Hole::Filled(expir::Node::ReadRef {
-                source,
                 storage_type,
-            }) => explicate_read_ref(source, storage_type, state, context),
+                source,
+            }) => explicate_read_ref(storage_type, source, state, context),
             Hole::Filled(expir::Node::LocalCopy { input, output }) => {
                 explicate_local_copy(input, output, state, context)
             }
@@ -1038,7 +1101,7 @@ fn explicate_return(
                     // we couldn't find anything in our funclet
                     None => {
                         no_matching_type = true;
-                    },
+                    }
                     Some(instantiation) => {
                         if instantiation.funclet_id != funclet_id {
                             // TODO try and explicate something
