@@ -1,19 +1,23 @@
+// 
 // implements:
-// main() -> (i64, i64) {
+// main() -> (i32, i64) {
 //   return (4, 5)
 // } 
+// 
 
 version 0.0.2
 
 ffi i64;
+ffi i32;
 event %event0;
 buffer_space %buffspace;
 native_value %i64 : i64;
+native_value %i32 : i32;
 
 function @main() -> %i64;
 
-value[impl default @main] %value() -> [%i64, %i64] {
-    %x = constant %i64 4;
+value[impl default @main] %value() -> [%i32, %i64] {
+    %x = constant %i32 4;
     %y = constant %i64 5;
     return [%x, %y];
 }
@@ -28,18 +32,18 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
 %foo<$time-usable, $time-usable>() ->
-[%out1 : $val.%x-usable $time-usable $space-usable %i64,
+[%out1 : $val.%x-usable $time-usable $space-usable %i32,
  %out2 : $val.%y-usable $time-usable $space-usable %i64] {
-    %ref_1 = alloc-temporary local [] i64;
-    %ref_2 = alloc-temporary local [] i64;
+    %_ = alloc-temporary local [] i64;
+    %_ = alloc-temporary local [] i32;
 
-    local-do-builtin ?() -> ?;
-    local-do-builtin ?() -> ?;
+    local-do-builtin $val.%x() -> ?;
+    local-do-builtin $val.%y() -> ?;
 
-    %a = read-ref i64 %ref_1;
-    %b = read-ref i64 %ref_2;
+    %a = read-ref ? ?;
+    %b = read-ref ? ?;
 
-    return [%b, %a];
+    return [%a, %b];
 }
 
 pipeline "main" = %foo;

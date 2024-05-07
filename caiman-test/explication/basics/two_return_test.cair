@@ -1,3 +1,8 @@
+// implements:
+// main() -> (i64, i64) {
+//   return (4, 5)
+// } 
+
 version 0.0.2
 
 ffi i64;

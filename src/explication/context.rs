@@ -1,20 +1,20 @@
-pub mod schedule_scope_data;
 pub mod instate;
 pub mod outstate;
+pub mod schedule_scope_data;
 pub mod staticcontext;
 
 use super::expir::BufferFlags;
 use super::util::*;
 use super::Hole;
 use crate::debug_info::DebugInfo;
-use crate::ir;
-use crate::stable_vec;
 use crate::explication::expir;
-use crate::explication::expir::{NodeId, FuncletId, TypeId, PlaceId, StorageTypeId};
+use crate::explication::expir::{FuncletId, NodeId, PlaceId, StorageTypeId, TypeId};
+use crate::ir;
+use crate::rust_wgpu_backend::ffi;
+use crate::stable_vec;
 use crate::stable_vec::StableVec;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet, VecDeque};
-use crate::rust_wgpu_backend::ffi;
 
 #[derive(Debug)]
 pub struct StaticContext<'context> {
@@ -54,7 +54,7 @@ pub struct SpecNodeTypeInformation {
 
     // Output types are the type(s) of this particular node\
     // Note that non-singular output types are assumed to be extracted before use
-    pub output_types: Vec<expir::TypeId>
+    pub output_types: Vec<expir::TypeId>,
 }
 
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ pub struct ScheduleScopeData {
     // if we have a multiline hole (???) at this level of the recursion
     explication_hole: bool,
 
-    pass_information: PassInformation
+    pass_information: PassInformation,
 }
 
 // Keeps track of special information that isn't shared across passes
@@ -103,7 +103,7 @@ enum PassInformation {
 #[derive(Debug, Clone)]
 struct OperationPassInformation {
     // Which operations we've executed by this level of the recursion
-    operations: HashSet<Location>
+    operations: HashSet<Location>,
 }
 
 // information about storage made while allocating space usage
@@ -162,7 +162,8 @@ pub struct StorageOutState {
 
 // Returns true if two types are "close enough" to equal
 // specifically if the checked_type could be of target_type
-// TODO: refine types with holes
+// even more specifically, everything must be equal, but checked_type
+//   must include the buffer flags used by target_type
 fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
     match (checked_type, target_type) {
         (
@@ -172,7 +173,7 @@ fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
             ir::Type::NativeValue {
                 storage_type: storage_type2,
             },
-        ) => true,
+        ) => *storage_type1 == *storage_type2,
         (
             ir::Type::Ref {
                 storage_type: storage_type1,
@@ -184,7 +185,11 @@ fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
                 storage_place: storage_place2,
                 buffer_flags: buffer_flags2,
             },
-        ) => true,
+        ) => {
+            *storage_type1 == *storage_type2
+                && *storage_place1 == *storage_place2
+                && buffer_flags2.is_subset_of(buffer_flags1)
+        }
         (
             ir::Type::Fence {
                 queue_place: queue_place1,
@@ -192,7 +197,7 @@ fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
             ir::Type::Fence {
                 queue_place: queue_place2,
             },
-        ) => true,
+        ) => *queue_place1 == *queue_place2,
         (
             ir::Type::Buffer {
                 storage_place: storage_place1,
@@ -204,7 +209,7 @@ fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
                 static_layout_opt: static_layout_opt2,
                 flags: flags2,
             },
-        ) => true,
+        ) => *storage_place1 == *storage_place2 && flags2.is_subset_of(flags1),
         (
             ir::Type::Encoder {
                 queue_place: queue_place1,
@@ -212,7 +217,7 @@ fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
             ir::Type::Encoder {
                 queue_place: queue_place2,
             },
-        ) => true,
+        ) => *queue_place1 == *queue_place2,
         (ir::Type::Event, ir::Type::Event) => true,
         (ir::Type::BufferSpace, ir::Type::BufferSpace) => true,
         _ => false,
