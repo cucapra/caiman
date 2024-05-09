@@ -35,7 +35,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
 %foo<$time-usable, $time-usable>() ->
-[%out2 : $val.%y-usable $time-usable $space-usable %i64] {
+[%out : $val.%y-usable $time-usable $space-usable %i64] {
     %ref = alloc-temporary local [] i64;
 
     local-do-builtin $val.%x() -> %ref;

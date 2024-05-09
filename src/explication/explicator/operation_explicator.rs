@@ -75,7 +75,22 @@ fn explicate_local_do_builtin(
 
     let operations_to_try = match operation {
         Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => state.find_satisfied_operations(&value_funclet_id, context),
+        Hole::Empty => state
+            .find_satisfied_operations(&value_funclet_id, context)
+            .drain(..)
+            .filter(|val_op| {
+                match context.get_node(Location {
+                    funclet_id: value_funclet_id,
+                    quot: val_op.clone(),
+                }) {
+                    expir::Node::Constant {
+                        value: _,
+                        type_id: _,
+                    } => true,
+                    _ => false,
+                }
+            })
+            .collect(),
     };
 
     for operation_to_try in operations_to_try {
@@ -121,7 +136,22 @@ fn explicate_local_do_external(
 
     let operations_to_try = match operation {
         Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => state.find_satisfied_operations(&value_funclet_id, context),
+        Hole::Empty => state
+            .find_satisfied_operations(&value_funclet_id, context)
+            .drain(..)
+            .filter(|val_op| {
+                match context.get_node(Location {
+                    funclet_id: value_funclet_id,
+                    quot: val_op.clone(),
+                }) {
+                    expir::Node::CallFunctionClass {
+                        function_id: _,
+                        arguments: _,
+                    } => true,
+                    _ => false,
+                }
+            })
+            .collect(),
     };
 
     for operation_to_try in operations_to_try {
@@ -130,6 +160,13 @@ fn explicate_local_do_external(
             funclet_id: value_funclet_id,
             quot: operation_to_try.clone(),
         };
+        let base_node_id = location.node_id(context).unwrap();
+        let node_info = context
+            .get_node_type_information(&value_funclet_id, &location.node_id(context).unwrap());
+        for offset in 0..node_info.output_types.len() {
+            let offset_location = Location::new(value_funclet_id, base_node_id + offset + 1);
+            new_state.add_operation(offset_location, context);
+        }
         new_state.add_operation(location, context);
         let node = expir::Node::LocalDoExternal {
             operation: Hole::Filled(operation_to_try),
@@ -158,10 +195,35 @@ fn explicate_encode_do(
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
+    let value_funclet_id = state
+        .get_funclet_spec(
+            state.get_current_funclet_id(),
+            &SpecLanguage::Value,
+            context,
+        )
+        .funclet_id_opt
+        .unwrap();
+
     let operations_to_try = match operation {
         Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => todo!(),
+        Hole::Empty => state
+            .find_satisfied_operations(&value_funclet_id, context)
+            .drain(..)
+            .filter(|val_op| {
+                match context.get_node(Location {
+                    funclet_id: value_funclet_id,
+                    quot: val_op.clone(),
+                }) {
+                    expir::Node::CallFunctionClass {
+                        function_id: _,
+                        arguments: _,
+                    } => true,
+                    _ => false,
+                }
+            })
+            .collect(),
     };
+
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -177,6 +239,13 @@ fn explicate_encode_do(
             funclet_id: value_funclet_id,
             quot: operation_to_try.clone(),
         };
+        let base_node_id = location.node_id(context).unwrap();
+        let node_info = context
+            .get_node_type_information(&value_funclet_id, &location.node_id(context).unwrap());
+        for offset in 0..node_info.output_types.len() {
+            let offset_location = Location::new(value_funclet_id, base_node_id + offset + 1);
+            new_state.add_operation(offset_location, context);
+        }
         new_state.add_operation(location, context);
         let node = expir::Node::EncodeDoExternal {
             operation: Hole::Filled(operation_to_try),

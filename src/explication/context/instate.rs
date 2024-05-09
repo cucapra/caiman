@@ -193,6 +193,23 @@ impl InState {
             .tail_edge
     }
 
+    // given a typeid corresponding to a native type
+    // returns the storage_type of that native type
+    pub fn expect_native_storage_type(
+        &self,
+        type_id: &expir::TypeId,
+        context: &StaticContext,
+    ) -> ffi::TypeId {
+        match context.get_type(type_id) {
+            ir::Type::NativeValue { storage_type } => storage_type.clone(),
+            typ => panic!(
+                "Expected a native type, got {:?} while checking {}",
+                typ,
+                context.debug_info.node(&self.get_current_funclet_id(), self.get_current_node_id().unwrap())
+            ),
+        }
+    }
+
     pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {
         let scope = self.get_latest_scope();
         scope.node_id.unwrap() >= context.get_funclet(&scope.funclet_id).nodes.len()
