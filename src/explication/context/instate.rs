@@ -380,7 +380,8 @@ impl InState {
     // Returns an ordered list of storage nodes in any scope (most to least recent)
     // The order is as follows ()
     //   1. fully realized storage nodes without an instantiation
-    //
+    //   2. unrealized storage nodes (those still pending explication)
+    //   3. fully realized storage nodes with an existing instantiation
     pub fn find_matching_storage_nodes(
         &self,
         target_location_triple: &LocationTriple,

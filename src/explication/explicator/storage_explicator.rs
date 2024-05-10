@@ -108,9 +108,15 @@ fn explicate_allocate_temporary(
     }
 }
 
+// Enumerates all the ways we can attempt to fill the "current" arguments
+// This is intended to work for both inputs and outputs
+// Note that the argument "instantiation_bounds" defines inputs vs outputs
+// this is expected to be "none" for outputs
+
 fn enumerate_fill_attempts(
     expir_current: &Hole<Box<[Hole<NodeId>]>>,
     expected_types: &Vec<expir::Type>,
+    instantiation_bounds: Option<Vec<Location>>,
     error_context: &str,
     state: &InState,
     context: &StaticContext,
@@ -142,7 +148,15 @@ fn enumerate_fill_attempts(
                     .get(offset)
                     .expect(&error(&format!("Missing argument index {}", offset)));
                 let mut new_attempts = Vec::new();
-                for attempt_to_try in state.find_all_storage_nodes(&target_type, context).iter() {
+                let attempts_to_try = match &instantiation_bounds {
+                    Some(bounds) => state.find_matching_storage_nodes(
+                        &LocationTriple::new_value(bounds.get(offset).unwrap().clone()),
+                        &target_type,
+                        context,
+                    ),
+                    None => state.find_all_storage_nodes(&target_type, context),
+                };
+                for attempt_to_try in attempts_to_try.iter() {
                     if attempt_to_try.funclet_id == state.get_current_funclet_id() {
                         for current_output in attempts.iter() {
                             let mut new_attempt = current_output.clone();
@@ -207,6 +221,13 @@ fn explicate_local_do_builtin(
             .iter()
             .map(|type_id| context.get_type(type_id).clone())
             .collect(),
+        Some(
+            context
+                .get_node_dependencies(&value_funclet_id, &value_node_id)
+                .iter()
+                .map(|d| Location::new(value_funclet_id, d.clone()))
+                .collect(),
+        ),
         &value_error_text,
         &state,
         context,
@@ -223,6 +244,7 @@ fn explicate_local_do_builtin(
                 buffer_flags: BufferFlags::new(),
             })
             .collect(),
+        None,
         &value_error_text,
         &state,
         context,
@@ -316,6 +338,13 @@ fn explicate_local_do_external(
             .iter()
             .map(|type_id| context.get_type(type_id).clone())
             .collect(),
+        Some(
+            context
+                .get_node_dependencies(&value_funclet_id, &value_node_id)
+                .iter()
+                .map(|d| Location::new(value_funclet_id, d.clone()))
+                .collect(),
+        ),
         &value_error_text,
         &state,
         context,
@@ -332,6 +361,7 @@ fn explicate_local_do_external(
                 buffer_flags: BufferFlags::new(),
             })
             .collect(),
+        None,
         &value_error_text,
         &state,
         context,
@@ -426,6 +456,13 @@ fn explicate_encode_do(
             .iter()
             .map(|type_id| context.get_type(type_id).clone())
             .collect(),
+        Some(
+            context
+                .get_node_dependencies(&value_funclet_id, &value_node_id)
+                .iter()
+                .map(|d| Location::new(value_funclet_id, d.clone()))
+                .collect(),
+        ),
         &value_error_text,
         &state,
         context,
@@ -442,6 +479,7 @@ fn explicate_encode_do(
                 buffer_flags: BufferFlags::new(),
             })
             .collect(),
+        None,
         &value_error_text,
         &state,
         context,
