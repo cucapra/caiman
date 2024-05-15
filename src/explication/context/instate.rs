@@ -205,7 +205,10 @@ impl InState {
             typ => panic!(
                 "Expected a native type, got {:?} while checking {}",
                 typ,
-                context.debug_info.node(&self.get_current_funclet_id(), self.get_current_node_id().unwrap())
+                context.debug_info.node(
+                    &self.get_current_funclet_id(),
+                    self.get_current_node_id().unwrap()
+                )
             ),
         }
     }
@@ -267,11 +270,21 @@ impl InState {
     pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,
-        typ: expir::Type,
+        typ: Hole<expir::Type>,
         context: &StaticContext,
     ) {
         self.get_latest_scope_mut()
             .add_storage_node(schedule_node, typ, context);
+    }
+
+    pub fn set_storage_type(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .set_storage_type(schedule_node, typ, context);
     }
 
     pub fn set_instantiation(
@@ -344,77 +357,87 @@ impl InState {
             })
     }
 
-    // Returns an ordered list of storage nodes in any scope (most to least recent)
+    // Returns an ordered list of all storage nodes in any scope (most to least recent)
     // The order is as follows (tiebreaks are in node index order)
     //   1. fully realized storage nodes without an instantiation
     //   2. unrealized storage nodes (those still pending explication)
     //   3. fully realized storage nodes with an existing instantiation
+    //   4. recurse from 1 up the stack
     pub fn find_all_storage_nodes(
         &self,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
         let mut result = Vec::new();
+
+        // keep track of each "kind" of result
+        let mut empty_nodes = Vec::new();
+        let mut unrealized_nodes = Vec::new();
+        let mut filled_nodes = Vec::new();
+
         for scope in self.scopes.iter().rev() {
-            let mut empty_nodes = Vec::new();
-            let mut filled_nodes = Vec::new();
             // sort the results so we go top to bottom of the funclet
             for node_id in scope
                 .storage_of_type(target_type, context)
                 .iter()
-                .sorted_by(|x, y| x.cmp(y))
+                .sorted()
             {
                 // this is ok because we can just use the phi associated with an input
                 let location = Location::new(scope.funclet_id.clone(), node_id.clone());
-                match scope.get_node_information(node_id, context).instantiation {
-                    Some(_) => filled_nodes.push(location),
+                let info = scope.get_node_information(node_id, context);
+                match info.instantiation {
+                    Some(_) => match info.typ {
+                        Hole::Empty => unrealized_nodes.push(location),
+                        Hole::Filled(_) => filled_nodes.push(location),
+                    },
                     None => empty_nodes.push(location),
                 }
             }
             result.append(&mut empty_nodes);
+            result.append(&mut unrealized_nodes);
             result.append(&mut filled_nodes);
         }
         result
     }
 
     // Returns an ordered list of storage nodes in any scope (most to least recent)
-    // The order is as follows ()
-    //   1. fully realized storage nodes without an instantiation
+    // The order is as follows:
+    //   1. fully realized storage nodes with a matching instantiation
     //   2. unrealized storage nodes (those still pending explication)
-    //   3. fully realized storage nodes with an existing instantiation
-    pub fn find_matching_storage_nodes(
+    //   3. recurse from 1 up the stack
+    pub fn find_matching_instantiations(
         &self,
         target_location_triple: &LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
+        let mut end_result = Vec::new();
         let mut result = Vec::new();
         for scope in self.scopes.iter().rev() {
             // sort the results so we go top to bottom of the funclet
             for node in scope
                 .match_triple(target_location_triple, context)
                 .iter()
-                .sorted_by(|x, y| x.cmp(y))
+                .sorted()
             {
                 let node_info = scope
                     .as_storage()
                     .storage_node_information
                     .get(&node)
                     .unwrap();
-                if is_of_type(&node_info.typ, target_type) {
-                    result.push(Location::new(scope.funclet_id.clone(), node.clone()));
+                let location = Location::new(scope.funclet_id.clone(), node.clone());
+                match &node_info.typ {
+                    Hole::Empty => end_result.push(location),
+                    Hole::Filled(typ) => {
+                        if is_of_type(&typ, target_type) {
+                            result.push(location);
+                        }
+                    }
                 }
             }
+            result.append(&mut end_result);
         }
         result
-        // let nodes = vec![
-        //     expir::Node::AllocTemporary {
-        //         buffer_flags,
-        //         place: Some(target_place.clone()),
-        //         storage_type: None,
-        //     }
-        // ];
-        // self.pop_best_operation(&nodes)
     }
 }
 

@@ -94,7 +94,7 @@ impl ScheduleScopeData {
     pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,
-        typ: expir::Type,
+        typ: Hole<expir::Type>,
         context: &StaticContext,
     ) {
         let check = self.as_storage_mut().storage_node_information.insert(
@@ -110,6 +110,22 @@ impl ScheduleScopeData {
             "Duplicate add of node {}",
             context.debug_info.node(&self.funclet_id, schedule_node)
         );
+    }
+
+    pub fn set_storage_type(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        context: &StaticContext,
+    ) {
+        let funclet_id = self.funclet_id.clone();
+        self.as_storage_mut()
+            .storage_node_information
+            .get_mut(&schedule_node)
+            .expect(&format!(
+                "Missing storage node {}",
+                context.debug_info.node(&funclet_id, schedule_node)
+            )).typ = Hole::Filled(typ);
     }
 
     pub fn set_instantiation(
@@ -234,7 +250,7 @@ impl ScheduleScopeData {
             ))
     }
 
-    // unsorted
+    // unsorted vector of nodes of the given storage type
     pub fn storage_of_type(
         &self,
         target_type: &expir::Type,
@@ -243,7 +259,10 @@ impl ScheduleScopeData {
         self.as_storage()
             .storage_node_information
             .iter()
-            .filter(|(_, info)| is_of_type(target_type, &info.typ))
+            .filter(|(_, info)| match &info.typ {
+                Hole::Empty => true,
+                Hole::Filled(typ) => is_of_type(target_type, typ),
+            })
             .map(|(n, _)| n.clone())
             .collect()
     }

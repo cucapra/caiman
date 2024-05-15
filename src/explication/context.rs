@@ -130,7 +130,8 @@ pub struct StorageNodeInformation {
     pub instantiation: Option<LocationTriple>,
 
     // The type of this storage
-    pub typ: expir::Type,
+    // is empty when we don't know concretely what type this should take
+    pub typ: Hole<expir::Type>,
 
     // Which node is "managing" our timeline
     // this could be a fence or an encoder (we don't really care here)
@@ -151,6 +152,9 @@ pub struct OperationOutState {
 // out state for the final (storage) pass
 #[derive(Debug, Default)]
 pub struct StorageOutState {
+    // nodes to replace unfinished operations with
+    to_fill: HashMap<NodeId, ir::Node>,
+
     // nodes we've built on this particular funclet of the stack
     nodes: VecDeque<ir::Node>,
 

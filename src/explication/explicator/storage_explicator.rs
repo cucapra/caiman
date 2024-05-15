@@ -46,7 +46,7 @@ fn explicate_phi_node(
         )
         .clone();
 
-    new_state.add_storage_node(node_id, node_type.clone(), context);
+    new_state.add_storage_node(node_id, Hole::Filled(node_type.clone()), context);
     let location =
         LocationTriple::new_triple_mapped(spec_input, funclet_id, node_id, &state, context);
 
@@ -66,7 +66,7 @@ fn explicate_allocate_temporary(
     expir_place: &Hole<expir::Place>,
     expir_storage_type: &Hole<ffi::TypeId>,
     expir_buffer_flags: &Hole<ir::BufferFlags>,
-    state: InState,
+    mut state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
     let error = format!(
@@ -80,30 +80,56 @@ fn explicate_allocate_temporary(
                 .expect("Unreachable")
         )
     );
-    let storage_place = expir_place.as_ref().opt().expect(&error).clone();
-    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
     let buffer_flags = expir_buffer_flags.as_ref().opt().expect(&error).clone();
-    let mut new_state = state.clone();
-    new_state.add_storage_node(
-        state.get_current_node_id().unwrap(),
-        expir::Type::Ref {
-            storage_type,
-            storage_place,
-            buffer_flags,
-        },
-        context,
-    );
-    new_state.next_node();
-    let node = ir::Node::AllocTemporary {
-        place: storage_place,
-        storage_type,
-        buffer_flags,
-    };
-    match explicate_node(new_state, context) {
-        None => None,
-        Some(mut out) => {
-            out.add_node(node);
-            Some(out)
+    match (expir_place, expir_storage_type) {
+        (Hole::Filled(storage_place), Hole::Filled(storage_type)) => {
+            state.add_storage_node(
+                state.get_current_node_id().unwrap(),
+                Hole::Filled(expir::Type::Ref {
+                    storage_place: storage_place.clone(),
+                    storage_type: storage_type.clone(),
+                    buffer_flags,
+                }),
+                context,
+            );
+
+            let node = ir::Node::AllocTemporary {
+                place: storage_place.clone(),
+                storage_type: storage_type.clone(),
+                buffer_flags,
+            };
+
+            state.next_node();
+            match explicate_node(state, context) {
+                None => None,
+                Some(mut out) => {
+                    out.add_node(node);
+                    Some(out)
+                }
+            }
+        }
+        _ => {
+            state.add_storage_node(state.get_current_node_id().unwrap(), Hole::Empty, context);
+
+            let node_id = state.get_current_node_id().unwrap();
+            let funclet_id = state.get_current_funclet_id();
+
+            state.next_node();
+            match explicate_node(state, context) {
+                None => None,
+                Some(mut out) => {
+                    match out.take_to_fill(&node_id) {
+                        None => {
+                            // TODO: is this the correct default behavior?
+                            Some(out)
+                        }
+                        Some(node) => {
+                            out.add_node(node);
+                            Some(out)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -149,7 +175,7 @@ fn enumerate_fill_attempts(
                     .expect(&error(&format!("Missing argument index {}", offset)));
                 let mut new_attempts = Vec::new();
                 let attempts_to_try = match &instantiation_bounds {
-                    Some(bounds) => state.find_matching_storage_nodes(
+                    Some(bounds) => state.find_matching_instantiations(
                         &LocationTriple::new_value(bounds.get(offset).unwrap().clone()),
                         &target_type,
                         context,
@@ -172,31 +198,140 @@ fn enumerate_fill_attempts(
     attempts
 }
 
-fn explicate_local_do_builtin(
+/*
+ * Returns the type filled in a given (unexplicated) storage node
+ * If we don't have have a matching place/storage type already, does and returns nothing
+ * Modifies state to add the now-explicated node otherwise
+ */
+fn attempt_empty_allocation_fill(
+    output_id: NodeId,
+    target_place: expir::Place,
+    target_storage_type: ffi::TypeId,
+    state: &mut InState,
+    context: &StaticContext,
+) -> Option<ir::Node> {
+    // Returns exactly when the target matches the unpacked current value
+    fn unpack_if_equal<T>(current: &Hole<T>, target: T) -> Option<T>
+    where
+        T: Eq,
+    {
+        match current {
+            Hole::Empty => Some(target),
+            Hole::Filled(value) => {
+                if target == *value {
+                    Some(target)
+                } else {
+                    None
+                }
+            }
+        }
+    };
+
+    let funclet_id = state.get_current_funclet_id();
+    match context.get_node(Location::new(funclet_id.clone(), output_id)) {
+        expir::Node::AllocTemporary {
+            place,
+            storage_type,
+            buffer_flags,
+        } => {
+            let found_place = unpack_if_equal(place, target_place);
+            let found_storage_type = unpack_if_equal(storage_type, target_storage_type);
+            match (found_place, found_storage_type) {
+                (Some(p), Some(t)) => {
+                    let b = buffer_flags
+                        .as_ref()
+                        .opt()
+                        .expect(&state.hole_error(context))
+                        .clone();
+                    state.set_storage_type(
+                        output_id,
+                        expir::Type::Ref {
+                            storage_place: p.clone(),
+                            storage_type: t.clone(),
+                            buffer_flags: b.clone(),
+                        },
+                        context,
+                    );
+                    Some(ir::Node::AllocTemporary {
+                        place: p,
+                        storage_type: t,
+                        buffer_flags: b,
+                    })
+                }
+                _ => None,
+            }
+        }
+        expir::Node::StaticSubAlloc {
+            node,
+            place,
+            storage_type,
+        } => {
+            let found_place = unpack_if_equal(place, target_place);
+            let found_storage_type = unpack_if_equal(storage_type, target_storage_type);
+            match (found_place, found_storage_type) {
+                (Some(p), Some(t)) => {
+                    let n = node
+                        .as_ref()
+                        .opt()
+                        .expect(&state.hole_error(context))
+                        .clone();
+                    state.set_storage_type(
+                        output_id,
+                        expir::Type::Ref {
+                            storage_place: p.clone(),
+                            storage_type: t.clone(),
+                            buffer_flags: BufferFlags::new(),
+                        },
+                        context,
+                    );
+                    Some(ir::Node::StaticSubAlloc {
+                        place: p,
+                        storage_type: t,
+                        node: n,
+                    })
+                }
+                _ => None,
+            }
+        }
+        _ => {
+            unreachable!(
+                "Node {} should be an allocation",
+                context.debug_info.node(&funclet_id, output_id)
+            )
+        }
+    }
+}
+
+fn build_do_operation<T>(
     expir_operation: &Hole<expir::Quotient>,
     expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
     expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
+    node_builder: T,
     state: InState,
     context: &StaticContext,
-) -> Option<StorageOutState> {
+) -> Option<StorageOutState>
+where
+    T: Fn(ir::Quotient, Box<[ir::NodeId]>, Box<[ir::NodeId]>) -> ir::Node,
+{
     let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
+    .get_funclet_spec(
+        state.get_current_funclet_id(),
+        &SpecLanguage::Value,
+        context,
+    )
+    .funclet_id_opt
+    .unwrap();
 
     let operation = expir_operation
         .as_ref()
         .opt()
         .expect(&state.hole_error(context))
         .clone();
+
     let value_node_id = match operation {
         expir::Quotient::Node { node_id } => node_id,
         _ => panic!(
-            "Expected node operation for local do builtin {}",
+            "Expected node operation for {}",
             context.debug_info.node_expir(
                 state.get_current_funclet_id(),
                 state.get_current_node(context).as_ref().opt().unwrap()
@@ -250,37 +385,93 @@ fn explicate_local_do_builtin(
         context,
     );
 
+    dbg!(&input_attempts);
+    dbg!(&output_attempts);
+
     let type_bounds = context.get_node_dependencies(&value_funclet_id, &value_node_id);
     for inputs in input_attempts.iter() {
         for outputs in output_attempts.iter() {
             let mut new_state = state.clone();
-            assert!(
-                outputs.len() == 1,
-                "Local do builtin only supported on non-tuple output {}",
-                state.get_node_error(context)
-            );
-            let value_location = Location::new(value_funclet_id, value_node_id);
-            new_state.set_instantiation(
-                outputs.first().unwrap().clone(),
-                LocationTriple::new_value(value_location),
-                context,
-            );
-            let node = ir::Node::LocalDoBuiltin {
-                operation,
-                inputs: inputs.clone().into_boxed_slice(),
-                outputs: outputs.clone().into_boxed_slice(),
-            };
-            new_state.next_node();
-            match explicate_node(new_state, context) {
-                None => {}
-                Some(mut out) => {
-                    out.add_node(node);
-                    return Some(out);
+
+            let mut nodes_to_fill = Vec::new();
+            // checks whether or not we have a storage requirement mismatch
+            let mut valid_fills = true;
+            for (offset, output) in outputs.iter().enumerate() {
+                let value_location = Location::new(value_funclet_id, value_node_id + offset + 1);
+                let output_id = outputs.first().unwrap();
+                let output_info = state.get_node_information(output_id, context);
+                let target_storage_type = state
+                    .expect_native_storage_type(&value_info.output_types.get(0).unwrap(), context);
+
+                new_state.set_instantiation(
+                    output_id.clone(),
+                    LocationTriple::new_value(value_location),
+                    context,
+                );
+
+                let valid_fills = match &output_info.typ {
+                    // if we already know the type, we're good
+                    Hole::Filled(output_type) => true,
+                    Hole::Empty => {
+                        match attempt_empty_allocation_fill(
+                            output_id.clone(),
+                            expir::Place::Local,
+                            target_storage_type.clone(),
+                            &mut new_state,
+                            context,
+                        ) {
+                            Some(to_fill) => {
+                                nodes_to_fill.push((output_id.clone(), to_fill));
+                                true
+                            }
+                            // we fail if we have a mismatch while attempting to fill
+                            None => false,
+                        }
+                    }
+                };
+            }
+            if valid_fills {
+                let node = &node_builder(
+                    operation.clone(),
+                    inputs.clone().into_boxed_slice(),
+                    outputs.clone().into_boxed_slice(),
+                );
+                new_state.next_node();
+                match explicate_node(new_state, context) {
+                    None => {}
+                    Some(mut out) => {
+                        out.add_node(node.clone());
+                        for (output_id, node_to_fill) in nodes_to_fill.drain(..) {
+                            out.add_to_fill(output_id.clone(), node_to_fill);
+                        }
+                        return Some(out);
+                    }
                 }
             }
         }
     }
     None
+}
+
+fn explicate_local_do_builtin(
+    expir_operation: &Hole<expir::Quotient>,
+    expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<StorageOutState> {
+    build_do_operation(
+        expir_operation,
+        expir_inputs,
+        expir_outputs,
+        |operation, inputs, outputs| ir::Node::LocalDoBuiltin {
+            operation,
+            inputs,
+            outputs,
+        },
+        state,
+        context,
+    )
 }
 
 fn explicate_local_do_external(
@@ -291,109 +482,25 @@ fn explicate_local_do_external(
     state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
-    let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
-
-    let operation = expir_operation
-        .as_ref()
-        .opt()
-        .expect(&state.hole_error(context))
-        .clone();
-
     let external_function_id = expir_external_function_id
         .as_ref()
         .opt()
         .expect(&state.hole_error(context))
         .clone();
 
-    let value_node_id = match operation {
-        expir::Quotient::Node { node_id } => node_id,
-        _ => panic!(
-            "Expected node operation for local do builtin {}",
-            context.debug_info.node_expir(
-                state.get_current_funclet_id(),
-                state.get_current_node(context).as_ref().opt().unwrap()
-            )
-        ),
-    };
-    let value_info = context.get_node_type_information(&value_funclet_id, &value_node_id);
-    let value_error_text = format!(
-        " with value node {} {}",
-        context
-            .debug_info
-            .node(&value_funclet_id, value_node_id.clone()),
-        state.get_node_error(context)
-    );
-
-    let input_attempts = enumerate_fill_attempts(
+    build_do_operation(
+        expir_operation,
         expir_inputs,
-        &value_info
-            .input_types
-            .iter()
-            .map(|type_id| context.get_type(type_id).clone())
-            .collect(),
-        Some(
-            context
-                .get_node_dependencies(&value_funclet_id, &value_node_id)
-                .iter()
-                .map(|d| Location::new(value_funclet_id, d.clone()))
-                .collect(),
-        ),
-        &value_error_text,
-        &state,
-        context,
-    );
-
-    let output_attempts = enumerate_fill_attempts(
         expir_outputs,
-        &value_info
-            .output_types
-            .iter()
-            .map(|type_id| expir::Type::Ref {
-                storage_type: state.expect_native_storage_type(type_id, context),
-                storage_place: expir::Place::Local,
-                buffer_flags: BufferFlags::new(),
-            })
-            .collect(),
-        None,
-        &value_error_text,
-        &state,
+        |operation, inputs, outputs| ir::Node::LocalDoExternal {
+            operation,
+            inputs,
+            outputs,
+            external_function_id,
+        },
+        state,
         context,
-    );
-    for inputs in input_attempts.iter() {
-        for outputs in output_attempts.iter() {
-            let mut new_state = state.clone();
-            for (offset, output) in outputs.iter().enumerate() {
-                let value_location = Location::new(value_funclet_id, value_node_id + offset + 1);
-                new_state.set_instantiation(
-                    output.clone(),
-                    LocationTriple::new_value(value_location),
-                    context,
-                );
-            }
-            let node = ir::Node::LocalDoExternal {
-                operation,
-                inputs: inputs.clone().into_boxed_slice(),
-                outputs: outputs.clone().into_boxed_slice(),
-                external_function_id,
-            };
-            new_state.next_node();
-            match explicate_node(new_state, context) {
-                None => {}
-                Some(mut out) => {
-                    out.add_node(node);
-                    return Some(out);
-                }
-            }
-        }
-    }
-    None
+    )
 }
 
 fn explicate_encode_do(
@@ -547,7 +654,7 @@ fn explicate_write_ref(
         };
 
         for source in sources.iter() {
-            let destinations = match expir_source {
+            let destinations = match expir_destination {
                 Hole::Filled(x) => vec![x.clone()],
                 Hole::Empty => todo!("{}", error),
             };
@@ -723,9 +830,9 @@ fn explicate_read_ref(
             let mut new_state = state.clone();
             new_state.add_storage_node(
                 schedule_node,
-                expir::Type::NativeValue {
+                Hole::Filled(expir::Type::NativeValue {
                     storage_type: storage_type.clone(),
-                },
+                }),
                 context,
             );
             new_state.set_instantiation(schedule_node, instantiation, context);
@@ -1155,7 +1262,7 @@ fn explicate_return(
                 .triple_ignoring_none();
                 let target_type = context.get_type(get_expect_box(&funclet.output_types, index));
                 match state
-                    .find_matching_storage_nodes(&target_location_triple, target_type, context)
+                    .find_matching_instantiations(&target_location_triple, target_type, context)
                     .first()
                 {
                     // we couldn't find anything in our funclet

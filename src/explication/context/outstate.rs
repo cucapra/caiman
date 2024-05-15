@@ -40,6 +40,7 @@ impl OperationOutState {
 impl StorageOutState {
     pub fn new() -> StorageOutState {
         StorageOutState {
+            to_fill: HashMap::new(),
             nodes: VecDeque::new(),
             tail_edge: None,
         }
@@ -51,6 +52,19 @@ impl StorageOutState {
 
     pub fn drain_nodes(&mut self) -> Vec<ir::Node> {
         self.nodes.drain(..).collect()
+    }
+
+    pub fn take_to_fill(&mut self, node_id: &NodeId) -> Option<ir::Node> {
+        self.to_fill.remove_entry(node_id).map(|(_, n)| n)
+    }
+
+    pub fn add_to_fill(&mut self, node_id: NodeId, node: ir::Node) {
+        let check = self.to_fill.insert(node_id, node);
+        assert!(check.is_none());
+    }
+
+    pub fn is_to_fill_empty(&self) -> bool {
+        self.to_fill.is_empty()
     }
 
     pub fn set_tail_edge(&mut self, tail_edge: ir::TailEdge) {

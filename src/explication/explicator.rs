@@ -131,6 +131,7 @@ pub fn explicate_schedule_funclet_storage(
             context.debug_info.funclet(&funclet_id)
         ),
         Some(mut result) => {
+            assert!(result.is_to_fill_empty());
             let spec_binding = explicate_spec_binding(&funclet_id, Some(&result), context);
             ir::Funclet {
                 kind: funclet.kind.clone(),
