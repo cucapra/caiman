@@ -119,6 +119,9 @@ pub enum Type {
         element_type: TypeId,
     },
     GpuFence,
+    /// A dummy type to represent an encoder for type checking
+    /// Needed so that the types line up with NodeResults
+    GpuEncoder,
 }
 
 impl Type {

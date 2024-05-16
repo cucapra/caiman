@@ -1,16 +1,30 @@
 version 0.0.2
 
+// Performs two computations in parallel on the GPU.
+// Then synchronizes them and combines the results on the CPU.
+
+// In psuedo-hlc:
+// fn main(x: i32, y: i32) {
+//     let f = encode simple(x);
+//     submit f;
+//     let f2 = encode simple(y);
+//     submit f2;
+//     let r1 = wait f;
+//     let r2 = wait f2;
+//     return r1 + r2;
+// }
+
 ffi i32;
-native_value %i32n : i32;
+native_value %i32 : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 ref %i32g : i32-gpu<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 event %event0;
 buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
 buffer_space %buff_space;
 
-function @simple(%i32n) -> %i32n;
-function @foo(%i32n) -> %i32n;
-function @add(%i32n, %i32n) -> %i32n;
+function @simple(%i32) -> %i32;
+function @foo(%i32) -> %i32;
+function @add(%i32, %i32) -> %i32;
 
 
 external-cpu-pure[impl @add] %add(i32, i32) -> i32;
@@ -32,8 +46,8 @@ external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
     }
 }
 
-value[impl @foo] %foo(%x : %i32n, %z: %i32n) -> [%out: %i32n] {
-    %c = constant %i32n 1;
+value[impl @foo] %foo(%x : %i32, %z: %i32) -> [%out: %i32] {
+    %c = constant %i32 1;
     %y_t = call @simple(%c, %c, %c, %x);
     %y = extract %y_t 0;
     %y2_t = call @simple(%c, %c, %c, %z);
@@ -42,7 +56,6 @@ value[impl @foo] %foo(%x : %i32n, %z: %i32n) -> [%out: %i32n] {
     %r_t = call @add(%y, %y2);
     %r = extract %r_t 0;
     return %r;
-    // return %y2;
 }
 
 timeline %foo_time(%e : %event0) -> [%out: %event0] {
@@ -66,7 +79,7 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
 (%x_loc : $val.%x-usable %i32l, %z_loc: $val.%z-usable %i32l)
--> [%out : $val.%out-usable %i32n] {
+-> [%out : $val.%out-usable %i32] {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
     %y_gpu = alloc-temporary gpu [storage, map_read] i32;
@@ -76,9 +89,6 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     %y_gpu2 = alloc-temporary gpu [storage, map_read] i32;
     %y_loc2 = alloc-temporary local [map_write] i32;
     %ret = alloc-temporary local [map_write] i32;
-    // %x_loc = alloc-temporary local [map_write, copy_src] i32;
-
-    // write-ref i32 %x -> %x_loc;
 
     local-do-builtin $val.%c() -> %c_loc;
     %c = read-ref i32 %c_loc;
@@ -100,8 +110,6 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     %a = read-ref i32 %y_loc;
     local-copy %y_gpu2 -> %y_loc2;
     %b = read-ref i32 %y_loc2;
-
-   // return %b;
 
     local-do-external %add $val.%r_t(%a, %b) -> %ret;
     %result = read-ref i32 %ret;

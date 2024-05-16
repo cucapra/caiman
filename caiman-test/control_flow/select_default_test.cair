@@ -1,5 +1,17 @@
 version 0.0.2
 
+// Essentially the same as `select_test` but written with an
+// empty "else" branch.
+
+// In pseudo-code:
+// fn main() {
+//     r := 2;
+//     if (0) {
+//         r := 1;
+//     }
+//     return r;
+// }
+
 ffi i64;
 ref %i64l : i64-local<flags=[]>;
 event %event0;

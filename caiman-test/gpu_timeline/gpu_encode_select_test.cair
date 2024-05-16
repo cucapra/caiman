@@ -1,20 +1,39 @@
 version 0.0.2
 
+// Depending on a given boolean, this program will encode either one of two
+// kernel dispatches. This tests passing encoders to funclets
+
+// In pseudo-hlc:
+// fn foo(b: bool) -> i32 {
+//     let e = encoder();
+//     if b {
+//         e.encode simple(1);
+//     } else {
+//         e.encode simple2(1);
+//     }
+//     e.submit();
+//     return e.wait();
+// }
+
 ffi i32;
-native_value %i32n : i32;
+native_value %i32 : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 ref %i32g : i32-gpu<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
+// gpu src reference
+ref %i32gs : i32-gpu<flags=[storage, copy_dst]>;
+// gpu dest reference
+ref %i32gd : i32-gpu<flags=[storage, map_read]>;
 event %event0;
 fence %fence0 : gpu;
 encoder %encoder0 : gpu;
 buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
 buffer_space %buff_space;
 
-function @simple(%i32n) -> %%i32nn;
-function @simple2(%i32n) -> %i32n;
+function @simple(%i32) -> %i32;
+function @simple2(%i32) -> %i32;
 
-function @foo(%i32n) -> %i32n;
-function @add(%i32n, %i32n) -> %i32n;
+function @foo(%i32) -> %i32;
+function @add(%i32, %i32) -> %i32;
 
 
 external-cpu-pure[impl @add] %add(i32, i32) -> i32;
@@ -36,9 +55,9 @@ external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
     }
 }
 
-external-gpu[impl @simple2] %simple2(%x : %i32n) -> [%out : %i32n]
+external-gpu[impl @simple2] %simple2(%x : i32) -> [%out : i32]
 {
-    path : "gpu_external.comp",
+    path : "gpu_external2.comp",
     entry : "main",
     dimensionality : 3,
     resource {
@@ -53,14 +72,14 @@ external-gpu[impl @simple2] %simple2(%x : %i32n) -> [%out : %i32n]
     }
 }
 
-value[impl @foo] %foo(%x : %i32n) -> [%out: %i32n] {
-    %c = constant %%i32nn 1;
+value[impl @foo] %foo(%x : %i32, %b : %i32) -> [%out: %i32] {
+    %c = constant %i32 1;
     %y_t = call @simple(%c, %c, %c, %x);
     %y = extract %y_t 0;
     %y2_t = call @simple2(%c, %c, %c, %x);
     %y2 = extract %y2_t 0;
 
-    %ret = select %c %y %y2;
+    %ret = select %b %y %y2;
     return %ret;
 }
 
@@ -79,8 +98,9 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
-    (%x_loc : $val.%x-usable $time.%e-usable %i32l)
-    -> [%out : $val.%out-usable %i32n] 
+    (%x_loc : $val.%x-usable $time.%e-usable %i32l,
+    %b: $val.%b-usable %i32)
+    -> [%out : $val.%out-usable %i32] 
 {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
@@ -95,18 +115,18 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     %default = default-join;
     %join = inline-join %foo_ret [] %default;
 
-    schedule-select %c [%foo_left, %foo_right] 
+    schedule-select %b [%foo_left, %foo_right] 
         [$val.%ret, $time, $space] 
         (%enc, %x_gpu, %y_gpu, %c) %join;
 }
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
-%foo_left<$time.%enc-usable, $time.%sub-usable>
-    (%enc : $time.%enc-usable %encoder0, 
-    %x_gpu: phi-$val.%x-usable %i32l, 
-    %y_gpu : $val-dead %i32l, 
-    %c : $val.%c-usable %i32n)
-    -> [%out : $val.%y-dead %i32l, %fence : $time.%sub-usable %fence0] 
+%foo_left<$time.%loc1-usable, $time.%loc1-usable>
+    (%enc : $time.%rem1-usable %encoder0, 
+    %x_gpu: phi-$val.%x-usable $space-saved $time.%rem1-usable %i32gs, 
+    %y_gpu : $val-dead $space-saved $time.%rem1-usable %i32gd, 
+    %c : $val.%c-usable $time.%loc1-usable %i32)
+    -> [%out : $val.%y-usable $space-saved $time.%sub-usable %i32gd, %fence : $time.%sub-usable %fence0] 
 {
     encode-do %enc %simple $val.%y_t(%c, %c, %c, %x_gpu) -> %y_gpu;
     %f = submit %enc $time.%sub;
@@ -114,12 +134,12 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
 }
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
-%foo_right<$time.%enc-usable, $time.%sub-usable>
-    (%enc : $time.%enc-usable %encoder0, 
-    %x_gpu: phi-$val.%x-usable %i32l, 
-    %y_gpu : $val-dead %i32l, 
-    %c : $val.%c-usable %i32n)
-    -> [%out : $val.%y2-dead %i32l, %fence : $time.%sub-usable %fence0] 
+%foo_right<$time.%loc1-usable, $time.%loc1-usable>
+    (%enc : $time.%rem1-usable %encoder0, 
+    %x_gpu: phi-$val.%x-usable $space-saved $time.%rem1-usable %i32gs, 
+    %y_gpu : $val-dead $space-saved $time.%rem1-usable %i32gd, 
+    %c : $val.%c-usable $time.%loc1-usable %i32)
+    -> [%out : $val.%y2-usable $space-saved $time.%sub-usable %i32gd, %fence : $time.%sub-usable %fence0] 
 {
     encode-do %enc %simple2 $val.%y2_t(%c, %c, %c, %x_gpu) -> %y_gpu;
     %f = submit %enc $time.%sub;
@@ -127,9 +147,9 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
 }
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
-%foo_ret<$time.%sub-usable, $time.%out-usable>
-    (%ret_gpu: $val.%ret-dead %i32l, %f : $time.%sub-usable %fence0)
-    -> [%out : $val.%out-usable %i32n] 
+%foo_ret<$time.%loc1-usable, $time.%out-usable>
+    (%ret_gpu : $val.%ret-usable $space-saved $time.%sub-usable %i32gd, %f : $time.%sub-usable %fence0)
+    -> [%out : $val.%out-usable %i32] 
 {
     sync-fence %f $time.%snc;
     %y_loc = alloc-temporary local [map_write] i32;
