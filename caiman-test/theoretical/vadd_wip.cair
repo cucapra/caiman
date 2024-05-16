@@ -3,12 +3,12 @@ version 0.0.1
 types [
     i32, erased_length_array<i32>
     slot $slot_i32 {
-        type : i32,
+        ffi : i32,
         stage : ready,
         place : local,
     },
     slot $slot_arr_i32 {
-        type : erased_length_array<i32>,
+        ffi : erased_length_array<i32>,
         stage : ready,
         place : local,
     }

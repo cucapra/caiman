@@ -115,7 +115,7 @@ macro_rules! recover_element_ir {
         Some(format!("{:?}", $arg.clone())).into()
     };
     ($arg:ident Type $self:ident $funclet:ident) => {
-        $self.type_map.get($arg).map(|s| assembly::ast::TypeId::Local(s.to_string())).into()
+        $self.type_map.get($arg).map(|s| assembly::ast::TypeId(s.to_string())).into()
     };
     ($arg:ident Index $self:ident $funclet:ident) => {
         Some($arg.clone()).into()
@@ -149,7 +149,7 @@ macro_rules! recover_element_ir {
         $self.funclet_map.get(&$arg).map(|f| assembly::ast::FuncletId(f.name.clone())).into()
     };
     ($arg:ident StorageType $self:ident $funclet:ident) => {
-        $self.ffi_type_map.get(&$arg.clone().0).map(|f| assembly::ast::TypeId::FFI(f.clone())).into()
+        $self.ffi_type_map.get(&$arg.clone().0).map(|f| f.clone()).into()
     };
     ($arg:ident BufferFlags $self:ident $context:ident) => {
         Some($arg.clone()).into()
@@ -187,7 +187,7 @@ macro_rules! recover_element_expir {
         $arg.as_ref().opt().map(|o| format!("{:?}", o)).into()
     };
     ($arg:ident Type $self:ident $funclet:ident) => {
-        $arg.as_ref().opt().and_then(|o| $self.type_map.get(o).map(|s| assembly::ast::TypeId::Local(s.to_string()))).into()
+        $arg.as_ref().opt().and_then(|o| $self.type_map.get(o).map(|s| assembly::ast::TypeId(s.to_string()))).into()
     };
     ($arg:ident Index $self:ident $funclet:ident) => {
         $arg.clone()
@@ -226,7 +226,7 @@ macro_rules! recover_element_expir {
     };
     ($arg:ident StorageType $self:ident $funclet:ident) => {
         $arg.as_ref().opt().and_then(|o| $self.ffi_type_map.get(&o.0)
-        .map(|f| assembly::ast::TypeId::FFI(f.clone()))).into()
+        .map(|f| f.clone())).into()
     };
     ($arg:ident BufferFlags $self:ident $context:ident) => {
         $arg.clone()

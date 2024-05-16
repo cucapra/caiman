@@ -49,10 +49,12 @@ ffi_type_sep = ${ ffi_type ~ sep }
 
 //   special names
 
-typ = { ffi_type | name }
+typ = { name }
 typ_sep = ${ typ ~ sep }
 type_hole = { typ | hole }
 type_hole_sep = ${ type_hole ~ sep }
+ffi_type_hole = { ffi_type | hole }
+ffi_type_hole_sep = ${ ffi_type_hole ~ sep }
 // using `?` rather than `hole` for ease of matching
 place = @{ "local" | "cpu" | "gpu" }
 place_sep = ${ place ~ sep }
@@ -81,12 +83,12 @@ effect_args = !{ "<" ~ (name ~ ("," ~ name)*)? ~ ">" }
 effect = ${ "effect" ~ effect_args? ~ sep ~ name ~ ";" }
 
 // Types
-ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
+ffi_type_decl = ${ "ffi" ~ sep ~ ffi_type }
 
 name_type_separator = !{ name ~ ":" ~ "" }
-native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ typ }
+native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ ffi_type }
 ref_buffer = { "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" }
-ref_type = ${  typ ~ "-" ~ place }
+ref_type = ${  ffi_type ~ "-" ~ place }
 ref_decl = { "ref" ~ name_type_separator ~ ref_type ~ ref_buffer }
 fence_decl = ${ "fence" ~ sep ~ name_type_separator ~ place }
 buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
@@ -249,10 +251,10 @@ separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ n_sep ~ na
 //     scheduling
 
 alloc_temporary_sep = ${ "alloc-temporary" ~ sep }
-alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ buffer_flags ~ type_hole }
+alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ buffer_flags ~ ffi_type_hole }
 drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
-static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
+static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ ffi_type_hole_sep ~ name_hole }
 static_split_sep = ${ "static-split" ~ sep }
 static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_merge_sep = ${ "static-merge" ~ sep }
@@ -261,9 +263,9 @@ static_merge_node = { assign ~ static_merge_sep ~ place_hole_sep ~ quotient_hole
 read_sep = ${ "read-ref" ~ sep }
 read_node = { assign ~ read_sep ~ ffi_type_sep ~ name_hole }
 borrow_sep = ${ "borrow-ref" ~ sep }
-borrow_node = { assign ~ borrow_sep ~ type_hole_sep ~ name_hole }
+borrow_node = { assign ~ borrow_sep ~ ffi_type_hole_sep ~ name_hole }
 write_sep = ${ "write-ref" ~ sep }
-write_node = { write_sep ~ type_hole_sep ~ name_hole ~ "->" ~ name_hole }
+write_node = { write_sep ~ ffi_type_hole_sep ~ name_hole ~ "->" ~ name_hole }
 
 local_do_builtin_sep = ${ "local-do-builtin" ~ sep }
 local_do_builtin_node = { local_do_builtin_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }

@@ -187,14 +187,11 @@ fn get_cur_name(name: &str, names: &mut HashMap<String, u16>) -> String {
 /// Converts an asm `TypeId` that's a reference to the corresponding non-reference
 /// ast `DataType`.
 fn unref_type(typ: &asm::TypeId) -> DataType {
-    match typ {
-        asm::TypeId::Local(name) => match &name[1..] {
-            "bool" => DataType::Bool,
-            "i32" => DataType::Int(IntSize::I32),
-            "i64" => DataType::Int(IntSize::I64),
-            x => panic!("Unrecognized type: {x}"),
-        },
-        asm::TypeId::FFI(_) => todo!(),
+    match &typ.0[1..] {
+        "bool" => DataType::Bool,
+        "i32" => DataType::Int(IntSize::I32),
+        "i64" => DataType::Int(IntSize::I64),
+        x => panic!("Unrecognized type: {x}"),
     }
 }
 

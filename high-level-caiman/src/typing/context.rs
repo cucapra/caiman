@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
-use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
+use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_local_type};
 use crate::parse::ast::FullType;
 use crate::typing::LOCAL_TEMP_FLAGS;
 use crate::{
@@ -36,13 +36,13 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("bool"),
             data: asm::LocalTypeInfo::NativeValue {
-                storage_type: asm::TypeId::FFI(BOOL_FFI_TYPE),
+                storage_type: BOOL_FFI_TYPE,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&bool"),
             data: asm::LocalTypeInfo::Ref {
-                storage_type: asm::TypeId::FFI(BOOL_FFI_TYPE),
+                storage_type: BOOL_FFI_TYPE,
                 storage_place: ir::Place::Local,
                 buffer_flags: LOCAL_TEMP_FLAGS,
             },
@@ -50,13 +50,13 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("i64"),
             data: asm::LocalTypeInfo::NativeValue {
-                storage_type: asm::TypeId::FFI(asm::FFIType::I64),
+                storage_type: asm::FFIType::I64,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&i64"),
             data: asm::LocalTypeInfo::Ref {
-                storage_type: asm::TypeId::FFI(asm::FFIType::I64),
+                storage_type: asm::FFIType::I64,
                 storage_place: ir::Place::Local,
                 buffer_flags: LOCAL_TEMP_FLAGS,
             },
@@ -64,13 +64,13 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("i32"),
             data: asm::LocalTypeInfo::NativeValue {
-                storage_type: asm::TypeId::FFI(asm::FFIType::I32),
+                storage_type: asm::FFIType::I32,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&i32"),
             data: asm::LocalTypeInfo::Ref {
-                storage_type: asm::TypeId::FFI(asm::FFIType::I32),
+                storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Local,
                 buffer_flags: LOCAL_TEMP_FLAGS,
             },
@@ -291,8 +291,8 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
             [
                 asm::Declaration::FunctionClass(asm::FunctionClass {
                     name: asm::FunctionClassId(op_name.clone()),
-                    input_types: vec![data_type_to_ffi_type(op_l), data_type_to_ffi_type(op_r)],
-                    output_types: vec![data_type_to_ffi_type(ret)],
+                    input_types: vec![data_type_to_local_type(op_l), data_type_to_local_type(op_r)],
+                    output_types: vec![data_type_to_local_type(ret)],
                 }),
                 asm::Declaration::ExternalFunction(asm::ExternalFunction {
                     name: op_name.clone(),

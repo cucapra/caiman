@@ -21,8 +21,8 @@ version 0.0.2
 //     return result-from-gpu
 // }
 
-type i32;
-native_value %i32n : i32;
+ffi i32;
+native_value %i32 : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 ref %i32gs : i32-gpu<flags=[copy_dst, storage]>;
 ref %i32gd : i32-gpu<flags=[map_read, storage]>;
@@ -30,10 +30,10 @@ event %event0;
 encoder %encoder0 : gpu;
 buffer_space %buff_space;
 
-function @merge(i32, i32) -> i32;
-function @foo(i32) -> i32;
-function @baz() -> i32;
-function @bar() -> i32;
+function @merge(%i32, %i32) -> %i32;
+function @foo(%i32) -> %i32;
+function @baz() -> %i32;
+function @bar() -> %i32;
 
 
 external-cpu-pure[impl @baz] %baz() -> i32;
@@ -61,8 +61,8 @@ external-gpu[impl @merge] %gpu_merge(%x : i32, %y: i32) -> [%out : i32]
     }
 }
 
-value[impl @foo] %foo(%c: i32) -> [%out: i32] {
-    %s = constant %i32n 1;
+value[impl @foo] %foo(%c: %i32) -> [%out: %i32] {
+    %s = constant %i32 1;
     %a_t = call @baz();
     %a = extract %a_t 0;
     %b_t = call @bar();
@@ -90,7 +90,7 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
-(%c: $val.%c-usable %i32n) -> [%out : $val.%out-usable %i32n] {
+(%c: $val.%c-usable %i32) -> [%out : $val.%out-usable %i32] {
     %a_ref = alloc-temporary local [map_read, map_write, copy_src, copy_dst, storage] i32;
     %b_ref = alloc-temporary local [map_read, map_write, copy_src, copy_dst, storage] i32;
 
@@ -152,7 +152,7 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     %x_gpu: $val.%a-usable $space-saved $time.%rem1-usable %i32gs,
     %snd_gpu: $val.%snd-usable $space-saved $time.%rem1-usable %i32gs,
     %z_gpu : $val-dead $space-saved $time.%rem1-usable %i32gd) -> 
-    [%out : $val.%r-usable %i32n] 
+    [%out : $val.%r-usable %i32] 
 {
     %c_loc = alloc-temporary local [map_read, map_write, copy_src, copy_dst, storage] i32;
     local-do-builtin $val.%s() -> %c_loc;
