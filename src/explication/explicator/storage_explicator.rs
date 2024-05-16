@@ -173,7 +173,6 @@ fn enumerate_fill_attempts(
                 let target_type = expected_types
                     .get(offset)
                     .expect(&error(&format!("Missing argument index {}", offset)));
-                let mut new_attempts = Vec::new();
                 let attempts_to_try = match &instantiation_bounds {
                     Some(bounds) => state.find_matching_instantiations(
                         &LocationTriple::new_value(bounds.get(offset).unwrap().clone()),
@@ -182,6 +181,11 @@ fn enumerate_fill_attempts(
                     ),
                     None => state.find_all_storage_nodes(&target_type, context),
                 };
+
+                // adds each new attempt to _each_ vector we've built so far
+                // equivalent to building the matrix of attempts to make
+                // will combinatorically explode, in other words
+                let mut new_attempts = Vec::new();
                 for attempt_to_try in attempts_to_try.iter() {
                     if attempt_to_try.funclet_id == state.get_current_funclet_id() {
                         for current_output in attempts.iter() {
@@ -191,6 +195,8 @@ fn enumerate_fill_attempts(
                         }
                     }
                 }
+                // note that if we didn't add anything to new_attempts
+                // then this must be an invalid "path"
                 attempts = new_attempts;
             }
         }
@@ -306,6 +312,9 @@ fn build_do_operation<T>(
     expir_operation: &Hole<expir::Quotient>,
     expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
     expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
+    // _super_ dumb parameter, but we need a way to handle constants
+    // specifically this is zero exactly for local_do_builtin
+    base_offset: usize,
     node_builder: T,
     state: InState,
     context: &StaticContext,
@@ -314,13 +323,13 @@ where
     T: Fn(ir::Quotient, Box<[ir::NodeId]>, Box<[ir::NodeId]>) -> ir::Node,
 {
     let value_funclet_id = state
-    .get_funclet_spec(
-        state.get_current_funclet_id(),
-        &SpecLanguage::Value,
-        context,
-    )
-    .funclet_id_opt
-    .unwrap();
+        .get_funclet_spec(
+            state.get_current_funclet_id(),
+            &SpecLanguage::Value,
+            context,
+        )
+        .funclet_id_opt
+        .unwrap();
 
     let operation = expir_operation
         .as_ref()
@@ -385,9 +394,6 @@ where
         context,
     );
 
-    dbg!(&input_attempts);
-    dbg!(&output_attempts);
-
     let type_bounds = context.get_node_dependencies(&value_funclet_id, &value_node_id);
     for inputs in input_attempts.iter() {
         for outputs in output_attempts.iter() {
@@ -396,9 +402,11 @@ where
             let mut nodes_to_fill = Vec::new();
             // checks whether or not we have a storage requirement mismatch
             let mut valid_fills = true;
-            for (offset, output) in outputs.iter().enumerate() {
-                let value_location = Location::new(value_funclet_id, value_node_id + offset + 1);
-                let output_id = outputs.first().unwrap();
+            for (offset, output_id) in outputs.iter().enumerate() {
+                // here is where we actually use the base_offset
+                // note that the off-by-one is for the extract operation
+                let value_location =
+                    Location::new(value_funclet_id, value_node_id + offset + base_offset);
                 let output_info = state.get_node_information(output_id, context);
                 let target_storage_type = state
                     .expect_native_storage_type(&value_info.output_types.get(0).unwrap(), context);
@@ -450,6 +458,7 @@ where
             }
         }
     }
+
     None
 }
 
@@ -464,6 +473,7 @@ fn explicate_local_do_builtin(
         expir_operation,
         expir_inputs,
         expir_outputs,
+        0,
         |operation, inputs, outputs| ir::Node::LocalDoBuiltin {
             operation,
             inputs,
@@ -492,6 +502,7 @@ fn explicate_local_do_external(
         expir_operation,
         expir_inputs,
         expir_outputs,
+        1,
         |operation, inputs, outputs| ir::Node::LocalDoExternal {
             operation,
             inputs,
@@ -512,20 +523,6 @@ fn explicate_encode_do(
     state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
-    let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
-
-    let operation = expir_operation
-        .as_ref()
-        .opt()
-        .expect(&state.hole_error(context))
-        .clone();
     let external_function_id = expir_external_function_id
         .as_ref()
         .opt()
@@ -537,90 +534,27 @@ fn explicate_encode_do(
         .expect(&state.hole_error(context))
         .clone();
 
-    let value_node_id = match operation {
-        expir::Quotient::Node { node_id } => node_id,
-        _ => panic!(
-            "Expected node operation for local do builtin {}",
-            context.debug_info.node_expir(
-                state.get_current_funclet_id(),
-                state.get_current_node(context).as_ref().opt().unwrap()
-            )
-        ),
-    };
-    let value_info = context.get_node_type_information(&value_funclet_id, &value_node_id);
-    let value_error_text = format!(
-        " with value node {} {}",
-        context
-            .debug_info
-            .node(&value_funclet_id, value_node_id.clone()),
-        state.get_node_error(context)
-    );
+    let external_function_id = expir_external_function_id
+        .as_ref()
+        .opt()
+        .expect(&state.hole_error(context))
+        .clone();
 
-    let input_attempts = enumerate_fill_attempts(
+    build_do_operation(
+        expir_operation,
         expir_inputs,
-        &value_info
-            .input_types
-            .iter()
-            .map(|type_id| context.get_type(type_id).clone())
-            .collect(),
-        Some(
-            context
-                .get_node_dependencies(&value_funclet_id, &value_node_id)
-                .iter()
-                .map(|d| Location::new(value_funclet_id, d.clone()))
-                .collect(),
-        ),
-        &value_error_text,
-        &state,
-        context,
-    );
-
-    let output_attempts = enumerate_fill_attempts(
         expir_outputs,
-        &value_info
-            .output_types
-            .iter()
-            .map(|type_id| expir::Type::Ref {
-                storage_type: state.expect_native_storage_type(type_id, context),
-                storage_place: expir::Place::Local,
-                buffer_flags: BufferFlags::new(),
-            })
-            .collect(),
-        None,
-        &value_error_text,
-        &state,
+        1,
+        |operation, inputs, outputs| ir::Node::EncodeDoExternal {
+            encoder,
+            operation,
+            inputs,
+            outputs,
+            external_function_id,
+        },
+        state,
         context,
-    );
-
-    for inputs in input_attempts.iter() {
-        for outputs in output_attempts.iter() {
-            let mut new_state = state.clone();
-            for (offset, output) in outputs.iter().enumerate() {
-                let value_location = Location::new(value_funclet_id, value_node_id + offset + 1);
-                new_state.set_instantiation(
-                    output.clone(),
-                    LocationTriple::new_value(value_location),
-                    context,
-                );
-            }
-            let node = ir::Node::EncodeDoExternal {
-                encoder,
-                operation,
-                inputs: inputs.clone().into_boxed_slice(),
-                outputs: outputs.clone().into_boxed_slice(),
-                external_function_id,
-            };
-            new_state.next_node();
-            match explicate_node(new_state, context) {
-                None => {}
-                Some(mut out) => {
-                    out.add_node(node);
-                    return Some(out);
-                }
-            }
-        }
-    }
-    None
+    )
 }
 
 fn explicate_write_ref(
@@ -688,6 +622,7 @@ fn explicate_write_ref(
             }
         }
     }
+
     None
 }
 
@@ -772,6 +707,7 @@ fn explicate_borrow_ref(
             }
         }
     }
+
     None
 }
 
@@ -819,7 +755,6 @@ fn explicate_read_ref(
         for source in sources.iter() {
             let info = state.get_node_information(&source, context);
             let schedule_node = state.get_current_node_id().unwrap();
-
             let instantiation = match info.instantiation.clone() {
                 Some(inst) => inst,
                 None => {
