@@ -22,7 +22,7 @@ use caiman::ir;
 use self::{
     analysis::{
         analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
-        transform_to_ssa, InOutFacts, LiveVars, TagAnalysis,
+        transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
@@ -535,6 +535,8 @@ impl Funclets {
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
         );
+        // TODO: populate active fences from function inputs
+        let _ = analyze(&mut cfg, &ActiveFences::top(&[]));
         let finfo = FuncInfo {
             name: f.name,
             input: hir_inputs,

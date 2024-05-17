@@ -264,6 +264,7 @@ fn lower_begin_encode(
     encoder: &str,
     tags: &TripleTag,
     temp_id: usize,
+    active_fences: &[String],
     f: &Funclet,
 ) -> (CommandVec, usize) {
     let place = match device {
@@ -295,7 +296,12 @@ fn lower_begin_encode(
                     .map(|(k, _)| Hole::Filled(asm::NodeId(k.clone())))
                     .collect(),
             ),
-            fences: Hole::Filled(vec![]),
+            fences: Hole::Filled(
+                active_fences
+                    .iter()
+                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .collect(),
+            ),
         },
     })));
     (cmds, temp_id)
@@ -466,8 +472,17 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             device_vars,
             tags,
             encoder,
+            active_fences,
             ..
-        } => lower_begin_encode(device, device_vars, encoder, tags, temp_id, f),
+        } => lower_begin_encode(
+            device,
+            device_vars,
+            encoder,
+            tags,
+            temp_id,
+            active_fences,
+            f,
+        ),
         HirBody::DeviceCopy {
             dest,
             src,

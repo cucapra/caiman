@@ -481,16 +481,16 @@ fn build_sched_decl_factory(
     }
 }
 
-/// Flattens a schedule term to be a statement without nested expressions
+/// Flattens a recursive schedule term to be a statement without nested expressions
+/// A flattened recursive level schedule term can be a variable only.
+#[allow(clippy::too_many_lines)]
 fn flatten_sched_term(
     t: SchedTerm,
     temp_num: usize,
 ) -> (Vec<SchedStmt>, usize, NestedExpr<SchedTerm>) {
     match t {
         SchedTerm::Call(info, call) => flatten_sched_call(call, temp_num, info),
-        SchedTerm::Var { .. } | SchedTerm::EncodeBegin { .. } => {
-            (vec![], temp_num, NestedExpr::Term(t))
-        }
+        SchedTerm::Var { .. } => (vec![], temp_num, NestedExpr::Term(t)),
         SchedTerm::Lit {
             info,
             lit: SchedLiteral::Tuple(exprs),
@@ -542,21 +542,59 @@ fn flatten_sched_term(
                 }),
             )
         }
+        SchedTerm::EncodeBegin {
+            info,
+            device,
+            tag,
+            defs,
+        } => {
+            let temp_name = format!("_f{temp_num}");
+            (
+                vec![SchedStmt::Decl {
+                    lhs: vec![(temp_name.clone(), None)],
+                    expr: Some(NestedExpr::Term(SchedTerm::EncodeBegin {
+                        info,
+                        device,
+                        tag: tag.clone(),
+                        defs,
+                    })),
+                    info,
+                    is_const: true,
+                }],
+                temp_num + 1,
+                NestedExpr::Term(SchedTerm::Var {
+                    info,
+                    name: temp_name,
+                    tag,
+                }),
+            )
+        }
         SchedTerm::TimelineOperation { info, op, arg, tag } => {
-            let (instrs, temp_num, new_arg) = flatten_rec(
+            let (mut instrs, temp_num, new_arg) = flatten_rec(
                 *arg,
                 &build_sched_var_factory(info),
                 &build_sched_decl_factory(info, true),
                 temp_num,
                 &flatten_sched_term,
             );
-            (
-                instrs,
-                temp_num,
-                NestedExpr::Term(SchedTerm::TimelineOperation {
+            let temp_name = format!("_f{temp_num}");
+            instrs.push(SchedStmt::Decl {
+                lhs: vec![(temp_name.clone(), None)],
+                expr: Some(NestedExpr::Term(SchedTerm::TimelineOperation {
                     info,
                     op,
                     arg: Box::new(new_arg),
+                    tag: tag.clone(),
+                })),
+                info,
+                is_const: true,
+            });
+            (
+                instrs,
+                temp_num + 1,
+                NestedExpr::Term(SchedTerm::Var {
+                    info,
+                    name: temp_name,
                     tag,
                 }),
             )

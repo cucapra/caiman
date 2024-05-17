@@ -187,6 +187,9 @@ pub enum HirBody {
         device_vars: Vec<(Name, TripleTag)>,
         tags: TripleTag,
         encoder: String,
+        /// The active fences that haven't been consumed yet at the time of the encoding
+        /// Filled via analysis
+        active_fences: Vec<String>,
     },
     /// Invoke a function on the device, storing the results into the dest
     /// pointers
@@ -635,6 +638,7 @@ impl HirBody {
                             device_vars: defs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                             tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
                             encoder: lhs[0].0.clone(),
+                            active_fences: vec![],
                         }
                     },
                     _ => Self::ConstDecl {

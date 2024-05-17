@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 mod continuations;
 mod dominators;
@@ -8,9 +8,12 @@ mod refs;
 mod ssa;
 mod tags;
 
+use crate::{enum_cast, parse::ast::SchedTerm};
+
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
     hir::HirInstr,
+    FenceOp, HirBody,
 };
 
 pub use continuations::{compute_continuations, Succs};
@@ -337,4 +340,56 @@ impl Fact for LiveVars {
     }
 
     type Dir = Backwards;
+}
+
+/// For each `begin-encode` determines the fences that are active at that point
+/// and mutates the `begin-encode` to include the active fences.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ActiveFences {
+    active_fences: HashSet<String>,
+}
+
+impl ActiveFences {
+    pub fn top(fences: &[String]) -> Self {
+        Self {
+            active_fences: fences.iter().cloned().collect(),
+        }
+    }
+}
+
+impl Fact for ActiveFences {
+    fn meet(mut self, other: &Self) -> Self {
+        self.active_fences = self
+            .active_fences
+            .intersection(&other.active_fences)
+            .cloned()
+            .collect();
+        self
+    }
+
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+        match stmt {
+            HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
+                *active_fences = self.active_fences.iter().cloned().collect();
+            }
+            HirInstr::Stmt(HirBody::FenceOp {
+                dest: Some(dest),
+                op: FenceOp::Submit,
+                ..
+            }) => {
+                self.active_fences.insert((*dest).to_string());
+            }
+            HirInstr::Stmt(HirBody::FenceOp {
+                op: FenceOp::Sync,
+                src,
+                ..
+            }) => {
+                self.active_fences
+                    .remove(enum_cast!(SchedTerm::Var { name, .. }, name, src));
+            }
+            _ => {}
+        }
+    }
+
+    type Dir = Forwards;
 }
