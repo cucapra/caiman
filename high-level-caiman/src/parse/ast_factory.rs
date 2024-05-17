@@ -393,7 +393,8 @@ impl ASTFactory {
                 let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
                 Ok(SpecTerm::Call { info, function: Box::new(target), args, templates })
             },
-            SchedTerm::TimelineOperation { info, .. } => Err(custom_parse_error!(info, "Cannot occur in this context")),
+            SchedTerm::TimelineOperation { info, .. } | SchedTerm::EncodeBegin { info, .. } => 
+                Err(custom_parse_error!(info, "Timeline operation cannot occur in this context")),
             SchedTerm::Call(info, ..) => Err(custom_parse_error!(info, 
                 "Cannot parameterize a function call with non-type template arguments nor specify a tag in this context")),
             SchedTerm::Hole(info) => Err(custom_parse_error!(info, 
@@ -510,15 +511,13 @@ impl ASTFactory {
     struct_variant_factory!(sched_var(name: Name, tag: Option<Tags>) -> SchedTerm:SchedTerm::Var);
     tuple_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole);
     struct_variant_factory!(sched_submit(tag: Option<Tags>, e: SchedExpr) -> 
-        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag, extra_args: vec![] });
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
-        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag, extra_args: vec![] });
-    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, captures: Option<Vec<String>>, device: Name) ->
-        SchedTerm:SchedTerm::TimelineOperation { 
-            op: TimelineOperation::EncodeBegin, 
-            arg: Box::new(SchedExpr::Term(
-                SchedTerm::Var{name: device, info: Info::default(), tag: None})),
-            extra_args: captures.unwrap_or_default(),
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag });
+    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, defs: Option<Vec<MaybeArg<FullType>>>, device: Name) ->
+        SchedTerm:SchedTerm::EncodeBegin { 
+            device: device,
+            defs: defs.unwrap_or_default(),
             tag: tag 
         });
 
@@ -599,7 +598,7 @@ impl ASTFactory {
         });
 
     #[must_use]
-    pub fn encoded_stmt(&self, l: usize, lhs: Vec<(String, Option<FlaggedType>)>, rhs: SchedExpr, r: usize) -> EncodedStmt {
+    pub fn encoded_stmt(&self, l: usize, lhs: Vec<String>, rhs: SchedExpr, r: usize) -> EncodedStmt {
         EncodedStmt {
             info: self.info(l, r),
             lhs,

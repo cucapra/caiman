@@ -576,7 +576,7 @@ impl Funclets {
         let mut variables = HashSet::new();
         for (var, typ) in &f.types {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
-                types.insert(var.to_string(), make_ref(data_type_to_local_type(typ)));
+                types.insert(var.to_string(), make_ref(&data_type_to_local_type(typ)));
                 variables.insert(var.to_string());
             } else {
                 types.insert(var.to_string(), data_type_to_local_type(typ));

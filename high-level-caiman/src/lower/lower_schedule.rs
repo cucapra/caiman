@@ -260,7 +260,7 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
 /// * `f` - the funclet that contains the operation
 fn lower_begin_encode(
     device: &str,
-    device_vars: &[String],
+    device_vars: &[(String, TripleTag)],
     encoder: &str,
     tags: &TripleTag,
     temp_id: usize,
@@ -274,7 +274,7 @@ fn lower_begin_encode(
     // TODO: proper device vars to support multiple encodings in a single function
     // TODO: check if device variables should have reference semantics (as implemented here)
     let mut cmds = vec![];
-    for var in device_vars {
+    for (var, _) in device_vars {
         cmds.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(var.clone())),
             node: asm::Node::AllocTemporary {
@@ -292,7 +292,7 @@ fn lower_begin_encode(
             encoded: Hole::Filled(
                 device_vars
                     .iter()
-                    .map(|k| Hole::Filled(asm::NodeId(k.clone())))
+                    .map(|(k, _)| Hole::Filled(asm::NodeId(k.clone())))
                     .collect(),
             ),
             fences: Hole::Filled(vec![]),

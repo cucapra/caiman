@@ -74,7 +74,7 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 assert!(names.contains_key(lhs));
             }
             SchedStmt::Encode { stmt, .. } => {
-                for (s, _) in &stmt.lhs {
+                for s in &stmt.lhs {
                     names.insert(s.clone(), Mutability::Const);
                 }
             }
@@ -533,7 +533,10 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
             // TODO: implement timeline operations
             SchedStmt::Decl {
-                expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { .. })),
+                expr:
+                    Some(SchedExpr::Term(
+                        SchedTerm::TimelineOperation { .. } | SchedTerm::EncodeBegin { .. },
+                    )),
                 ..
             }
             | SchedStmt::InEdgeAnnotation { .. }
@@ -589,7 +592,7 @@ fn collect_encode(
                 name,
                 enum_cast!(SchedExpr::Term, &stmt.rhs)
             );
-            let dest = stmt.lhs[0].0.clone();
+            let dest = stmt.lhs[0].clone();
             env.add_var_equiv(src, &dest, info)?;
             env.add_usage(&dest, WGPUFlags::CopyDst);
             Ok(())

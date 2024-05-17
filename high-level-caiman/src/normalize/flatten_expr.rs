@@ -488,7 +488,9 @@ fn flatten_sched_term(
 ) -> (Vec<SchedStmt>, usize, NestedExpr<SchedTerm>) {
     match t {
         SchedTerm::Call(info, call) => flatten_sched_call(call, temp_num, info),
-        SchedTerm::Var { .. } => (vec![], temp_num, NestedExpr::Term(t)),
+        SchedTerm::Var { .. } | SchedTerm::EncodeBegin { .. } => {
+            (vec![], temp_num, NestedExpr::Term(t))
+        }
         SchedTerm::Lit {
             info,
             lit: SchedLiteral::Tuple(exprs),
@@ -540,13 +542,7 @@ fn flatten_sched_term(
                 }),
             )
         }
-        SchedTerm::TimelineOperation {
-            info,
-            op,
-            arg,
-            tag,
-            extra_args,
-        } => {
+        SchedTerm::TimelineOperation { info, op, arg, tag } => {
             let (instrs, temp_num, new_arg) = flatten_rec(
                 *arg,
                 &build_sched_var_factory(info),
@@ -562,7 +558,6 @@ fn flatten_sched_term(
                     op,
                     arg: Box::new(new_arg),
                     tag,
-                    extra_args,
                 }),
             )
         }

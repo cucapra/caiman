@@ -456,7 +456,6 @@ pub struct SchedFuncCall {
 /// A timeline operation that is also an expression
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Copy)]
 pub enum TimelineOperation {
-    EncodeBegin,
     Submit,
     Await,
 }
@@ -481,7 +480,12 @@ pub enum SchedTerm {
         op: TimelineOperation,
         arg: Box<SchedExpr>,
         tag: Option<Tags>,
-        extra_args: Vec<String>,
+    },
+    EncodeBegin {
+        info: Info,
+        device: Name,
+        tag: Option<Tags>,
+        defs: Vec<MaybeArg<FullType>>,
     },
 }
 
@@ -489,9 +493,10 @@ impl SchedTerm {
     #[must_use]
     pub const fn get_tags(&self) -> Option<&Tags> {
         match self {
-            Self::Lit { tag, .. } | Self::Var { tag, .. } | Self::TimelineOperation { tag, .. } => {
-                tag.as_ref()
-            }
+            Self::Lit { tag, .. }
+            | Self::Var { tag, .. }
+            | Self::TimelineOperation { tag, .. }
+            | Self::EncodeBegin { tag, .. } => tag.as_ref(),
             Self::Call(_, call) => call.tag.as_ref(),
             Self::Hole(_) => None,
         }
@@ -506,7 +511,7 @@ pub type SchedExpr = NestedExpr<SchedTerm>;
 #[derive(Clone, Debug)]
 pub struct EncodedStmt {
     pub info: Info,
-    pub lhs: Vec<(Name, Option<FlaggedType>)>,
+    pub lhs: Vec<Name>,
     pub rhs: SchedExpr,
 }
 

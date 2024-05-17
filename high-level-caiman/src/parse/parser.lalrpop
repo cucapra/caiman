@@ -347,11 +347,10 @@ MatchedIf: SchedStmt = {
 // Scheduling specific expressions
 
 #[inline]
-SchedTerm: SchedTerm = {
-    <@L> <SchedCall> <@R> => astf.sched_call_expr(<>),
-    <@L> "submit" <TagOp?> <Atom<Literal>> <@R> => astf.sched_submit(<>),
-    <@L> "await" <TagOp?> <Atom<Literal>> <@R> => astf.sched_await(<>),
-    <@L> "encode-begin" <TagOp?> <("{" <CommaList<Id>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
+TimelineTerm: SchedTerm = {
+    <@L> "submit" <TagOp?> <UpperTerm> <@R> => astf.sched_submit(<>),
+    <@L> "await" <TagOp?> <UpperTerm> <@R> => astf.sched_await(<>),
+    <@L> "encode-begin" <TagOp?> <("{" <CommaList<MaybeArgFullType>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
 }
 
 #[inline]
@@ -390,7 +389,7 @@ TemplateArgs: TemplateArgs = {
 
 // Encoded scheduling statements which are sent to a device
 EncodedStmt: EncodedStmt = {
-    <@L> <CommaList<MaybeArg<FlaggedType>>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
+    <@L> <CommaList<Id>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
 } 
 
 
@@ -529,11 +528,16 @@ Factor: SchedExpr = {
 
 Unary: SchedExpr = {
     <@L> <UnOp> <Unary> <@R> => astf.uop(<>),
+    UpperTerm,
+}
+
+UpperTerm: SchedExpr = {
+    <TimelineTerm> => NestedExpr::Term(<>),
     Term,
 }
 
 Term: SchedExpr = {
-    <SchedTerm> => NestedExpr::Term(<>),
+    <@L> <SchedCall> <@R> => NestedExpr::Term(astf.sched_call_expr(<>)),
     <l: @L> <lhs: Term> "[" <rhs: Range> "]" <r: @R> => astf.binop(l, lhs, Binop::Index, rhs, r),
     <@L> <Term> <DotOp> <Atom<LiteralNoNumber>> <@R> => astf.binop(<>),
     Atom<Literal>,

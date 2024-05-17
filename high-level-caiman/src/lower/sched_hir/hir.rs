@@ -184,7 +184,7 @@ pub enum HirBody {
     BeginEncoding {
         info: Info,
         device: String,
-        device_vars: Vec<Name>,
+        device_vars: Vec<(Name, TripleTag)>,
         tags: TripleTag,
         encoder: String,
     },
@@ -570,12 +570,12 @@ impl HirBody {
                 match cmd {
                     EncodedCommand::Copy => {
                         assert_eq!(stmt.lhs.len(), 1);  
-                        Self::DeviceCopy { info, dest: stmt.lhs[0].0.clone(), 
+                        Self::DeviceCopy { info, dest: stmt.lhs[0].clone(), 
                             src: enum_cast!(SchedTerm::Var {name, ..}, name, enum_cast!(SchedExpr::Term, stmt.rhs)), 
                             dir: DataMovement::HostToDevice, encoder }
                     },
                     EncodedCommand::Invoke => {
-                        let dests = stmt.lhs.into_iter().map(|(name, _)| name).collect();
+                        let dests = stmt.lhs.into_iter().collect();
                         if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, stmt.rhs) {
                             let func = HirFuncCall::new(call);
                             Self::EncodeDo { info, dests, func, encoder}
@@ -622,26 +622,21 @@ impl HirBody {
                             args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
                         }
                     },
-                    SchedTerm::TimelineOperation { info, op, arg, tag, extra_args } => {
-                        match op {
-                            TimelineOperation::EncodeBegin => {
-                                let device = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *arg));
-                                Self::BeginEncoding {
-                                    info,
-                                    device,
-                                    device_vars: extra_args,
-                                    tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
-                                    encoder: lhs[0].0.clone(),
-                                }
-                            },
-                            x @ (TimelineOperation::Submit | TimelineOperation::Await) => {
-                                Self::FenceOp { info, dest: Some(lhs[0].0.clone()), 
-                                    op: if x == TimelineOperation::Submit { FenceOp::Submit } else { FenceOp::Sync }, 
-                                    src: enum_cast!(SchedExpr::Term, *arg), 
-                                    tags: TripleTag::from_opt(&tag) }
-                            },
-                            }
+                    SchedTerm::TimelineOperation { info, op, arg, tag } => {
+                        Self::FenceOp { info, dest: Some(lhs[0].0.clone()), 
+                            op: if op == TimelineOperation::Submit { FenceOp::Submit } else { FenceOp::Sync }, 
+                            src: enum_cast!(SchedExpr::Term, *arg), 
+                            tags: TripleTag::from_opt(&tag) }
+                        },
+                    SchedTerm::EncodeBegin { info, device, tag, defs } => {
+                        Self::BeginEncoding {
+                            info,
+                            device,
+                            device_vars: defs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
+                            tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
+                            encoder: lhs[0].0.clone(),
                         }
+                    },
                     _ => Self::ConstDecl {
                         info,
                         lhs: lhs[0].0.clone(),
@@ -753,7 +748,7 @@ impl Hir for HirBody {
                 Some(dests.iter().map(|(name, _)| name.clone()).collect())
             }
             Self::BeginEncoding { device_vars, encoder, .. } => {
-                let mut res = device_vars.clone();
+                let mut res = device_vars.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>();
                 res.push(encoder.clone());
                 Some(res)
                 
@@ -784,7 +779,7 @@ impl Hir for HirBody {
                 }
             }
             Self::BeginEncoding { device_vars, encoder, ..  } => {
-                for name in device_vars {
+                for (name, _) in device_vars {
                     *name = f(name);
                 }
                 *encoder = f(encoder);
@@ -862,7 +857,8 @@ fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
             res.insert(name.clone());
         }
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
-        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } => todo!(),
+        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } 
+        | SchedTerm::EncodeBegin { .. } => todo!(),
     }
 }
 
@@ -871,13 +867,14 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
     match t {
         SchedTerm::Var { name, .. } => *name = f(name),
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
-        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } => todo!(),
+        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } |
+        SchedTerm::EncodeBegin{ ..} => todo!(),
     }
 }
 
 /// Makes the base type of this type into a reference to the existing type
 /// Does not check against references to references
-pub(super) fn make_ref(typ: asm::TypeId) -> asm::TypeId {
+pub(super) fn make_ref(typ: &asm::TypeId) -> asm::TypeId {
     asm::TypeId(format!("&{typ}"))
 }
 
