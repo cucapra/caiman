@@ -32,9 +32,6 @@ fn compare() -> Result<(), String> {{
 }}
     """
 
-def help():
-    print("Help function has not been implemented yet.")
-
 def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
 
@@ -238,7 +235,6 @@ def process_inputs(
 def build(test_dir: Path, inputs, quiet: bool):
     eprint(f"{COLOR_INFO} building caimanc")
     c = Compiler(test_dir)
-    print("ALKSDJFADKS")
 
     eprint(f"{COLOR_INFO} building high-level-caiman")
     hlc = HighLevelCaiman(test_dir)
@@ -378,6 +374,9 @@ def main():
     #makes the test directory, in order to get access to the cargo.toml
     test_dir = Path(__file__).resolve().parent
 
+    #change working directory to caiman-test
+    os.chdir(test_dir)
+
     #some options that apply to the entire parser 
     parser = argparse.ArgumentParser(
         prog="Timing script",
@@ -435,9 +434,11 @@ def main():
     if args.command == "compile":
         #change working directory to caiman
         os.chdir("../")
+        
         #store the compile time in a compile-time variable. 
         compile_info = compile(test_dir, filename)
         #change working directory back to caiman-test
+        
         os.chdir("./caiman-test")
 
         #if success, print to console and store compile time.
