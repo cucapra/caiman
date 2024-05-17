@@ -61,8 +61,6 @@
 
 use std::collections::HashMap;
 
-use regex::Regex;
-
 use crate::parse::ast::{
     FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecLiteral,
     SpecTerm, TemplateArgs,
@@ -71,20 +69,6 @@ use crate::parse::ast::{
 /// Returns the internal name of a variable, given its original name and id.
 fn internal_name(name: &str, id: u64) -> String {
     format!("{name}_{id}")
-}
-
-/// Returns the original name of a variable, given its internal name.
-/// For example, `original_name("x_0")` returns `"x"`. If the
-/// name is not an internal name, it is returned unchanged.
-/// # Panics
-/// Regex compilation errors
-#[must_use]
-pub fn original_name(name: &str) -> String {
-    if name.contains(Regex::new(r"_[0-9]+$").unwrap().as_str()) {
-        name.rfind('_').map(|i| name[..i].to_string()).unwrap()
-    } else {
-        name.to_string()
-    }
 }
 
 /// Recursive helper to `rename_vars`.

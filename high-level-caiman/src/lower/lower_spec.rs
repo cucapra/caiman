@@ -13,7 +13,7 @@ use caiman::{
     ir,
 };
 
-use super::{binop_to_str, data_type_to_local_type, tuple_id};
+use super::{binop_to_str, tuple_id};
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -385,7 +385,7 @@ fn lower_spec_funclet(
                     let (name, dt) = x;
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(format!("{IN_STEM}{name}"))),
-                        typ: data_type_to_local_type(&dt),
+                        typ: dt.asm_type(),
                         tags: Vec::new(),
                     }
                 })
@@ -395,7 +395,7 @@ fn lower_spec_funclet(
                 .enumerate()
                 .map(|(id, (name, dt))| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.unwrap_or_else(|| format!("_out{id}")))),
-                    typ: data_type_to_local_type(&dt),
+                    typ: dt.asm_type(),
                     tags: Vec::new(),
                 })
                 .collect(),

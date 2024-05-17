@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
-use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_local_type};
+use crate::lower::binop_to_str;
 use crate::parse::ast::FullType;
 use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, LOCAL_TEMP_FLAGS};
 use crate::{
@@ -74,7 +74,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i64gs"),
+            name: String::from("&i64::gs"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I64,
                 storage_place: ir::Place::Gpu,
@@ -82,7 +82,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i64gd"),
+            name: String::from("&i64::gd"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I64,
                 storage_place: ir::Place::Gpu,
@@ -104,7 +104,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i32gs"),
+            name: String::from("&i32::gs"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Gpu,
@@ -112,7 +112,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i32gd"),
+            name: String::from("&i32::gd"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Gpu,
@@ -335,8 +335,8 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
             [
                 asm::Declaration::FunctionClass(asm::FunctionClass {
                     name: asm::FunctionClassId(op_name.clone()),
-                    input_types: vec![data_type_to_local_type(op_l), data_type_to_local_type(op_r)],
-                    output_types: vec![data_type_to_local_type(ret)],
+                    input_types: vec![op_l.asm_type(), op_r.asm_type()],
+                    output_types: vec![ret.asm_type()],
                 }),
                 asm::Declaration::ExternalFunction(asm::ExternalFunction {
                     name: op_name.clone(),
@@ -348,16 +348,16 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
                     input_args: vec![
                         asm::ExternalArgument {
                             name: None,
-                            ffi_type: data_type_to_ffi(op_l).unwrap(),
+                            ffi_type: op_l.ffi().unwrap(),
                         },
                         asm::ExternalArgument {
                             name: None,
-                            ffi_type: data_type_to_ffi(op_r).unwrap(),
+                            ffi_type: op_r.ffi().unwrap(),
                         },
                     ],
                     output_types: vec![asm::ExternalArgument {
                         name: None,
-                        ffi_type: data_type_to_ffi(ret).unwrap(),
+                        ffi_type: ret.ffi().unwrap(),
                     }],
                 }),
             ]

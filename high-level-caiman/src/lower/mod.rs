@@ -45,69 +45,61 @@ pub const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
 /// (as opposed to the phi node which is the same name without the prefix).
 const IN_STEM: &str = "_in_";
 
-/// Converts a high-level caiman data type to a caiman assembly type id.
-/// # Panics
-/// Panics if the data type is not yet implemented.
-#[must_use] 
-pub fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
-    use asm::TypeId;
-    match dt {
-        DataType::Bool => TypeId(String::from("bool")),
-        DataType::Int(IntSize::I32) => TypeId(String::from("i32")),
-        DataType::Int(IntSize::I64) => TypeId(String::from("i64")),
-        DataType::BufferSpace => TypeId(String::from("BufferSpace")),
-        DataType::Event => TypeId(String::from("Event")),
-        DataType::UserDefined(name) => TypeId(name.clone()),
-        DataType::Ref(t) => TypeId(format!(
-            "&{}",
-            data_type_to_local_type(t)
-        )),
-        _ => todo!("TODO"),
+impl DataType {
+    /// For types that have FFI equivalents, convert a high-level caiman data type
+    /// to the caiman assembly type for the corresponding FFI type. For types
+    /// that do not have FFI equivalents, return `None`.
+    ///
+    /// The types with equivalents are value types, not reference types.
+    #[must_use]
+    pub const fn ffi(&self) -> Option<asm::FFIType> {
+        use asm::FFIType;
+        match self {
+            Self::Bool => Some(BOOL_FFI_TYPE),
+            Self::Int(IntSize::I32) => Some(FFIType::I32),
+            Self::Int(IntSize::I64) => Some(FFIType::I64),
+            Self::Float(FloatSize::F64) => Some(FFIType::F64),
+            _ => None,
+        }
     }
-}
 
-/// For types that have FFI equivalents, convert a high-level caiman data type
-/// to the caiman assembly type id for the corresponding FFI type. For types
-/// that do not have FFI equivalents, we cannot convert to an undefined type
-/// and so this code will panic
-/// # Panics
-/// Panics if the data type is undefined
-#[must_use]
-pub fn data_type_to_ffi_type(dt: &DataType) -> asm::FFIType {
-    data_type_to_ffi(dt).unwrap_or_else(|| panic!("Undefined type {dt:?}"))
-}
-
-/// For types that have FFI equivalents, convert a high-level caiman data type
-/// to the caiman assembly type for the corresponding FFI type. For types
-/// that do not have FFI equivalents, return `None`.
-#[must_use]
-pub const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
-    use asm::FFIType;
-    match dt {
-        DataType::Bool => Some(BOOL_FFI_TYPE),
-        DataType::Int(IntSize::I32) => Some(FFIType::I32),
-        DataType::Int(IntSize::I64) => Some(FFIType::I64),
-        DataType::Float(FloatSize::F64) => Some(FFIType::F64),
-        _ => None,
+    /// For types that can be stored in memory, converts a high-level caiman data type
+    /// to the caiman assembly type that an allocation would have to store a value
+    /// of this type. References are unwrapped to get the underlying type.
+    #[must_use]
+    pub fn storage_type(&self) -> asm::FFIType {
+        match self {
+            Self::Ref(d) => d.storage_type(),
+            _ => self.ffi().unwrap_or_else(|| unimplemented!("Undefined type {self:?}")),
+        }
     }
-}
 
-/// For types that have FFI equivalents, convert a high-level caiman data type
-/// to the caiman assembly type for the corresponding FFI type. For types
-/// that do not have FFI equivalents, return `None`.
-///
-/// References are unwrapped to get the underlying type.
-#[must_use]
-pub fn data_type_to_storage_type(dt: &DataType) -> asm::FFIType {
-    match dt {
-        DataType::Ref(d) => data_type_to_storage_type(d),
-        x => data_type_to_ffi_type(x),
+
+    /// Converts a high-level caiman data type to a caiman assembly type id.
+    #[must_use] 
+    pub fn asm_type(&self) -> asm::TypeId {
+        use asm::TypeId;
+        match self {
+            Self::Bool => TypeId(String::from("bool")),
+            Self::Int(IntSize::I32) => TypeId(String::from("i32")),
+            Self::Int(IntSize::I64) => TypeId(String::from("i64")),
+            Self::Float(FloatSize::F64) => TypeId(String::from("f64")),
+            Self::BufferSpace => TypeId(String::from("BufferSpace")),
+            Self::Event => TypeId(String::from("Event")),
+            Self::UserDefined(name) => TypeId(name.clone()),
+            Self::Ref(t) => TypeId(format!(
+                "&{}",
+                t.asm_type()
+            )),
+            Self::Array(..) | Self::Slice(..) => unimplemented!("TODO"),
+        }
     }
+    
 }
 
 /// Convert a high-level caiman data type to a caiman assembly type.
 fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
-    dts.iter().map(data_type_to_local_type).collect()
+    dts.iter().map(DataType::asm_type).collect()
 }
 
 /// Lower a high-level caiman program to caiman assembly.
@@ -360,12 +352,12 @@ fn extern_to_asm(
             .into_iter()
             .map(|(n, t)| asm::ExternalArgument{
                 name: n.map(asm::NodeId),
-                ffi_type: data_type_to_ffi(&t).unwrap(),
+                ffi_type: t.ffi().unwrap(),
             })
             .collect(),
         output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
             name: n.map(asm::NodeId),
-            ffi_type: data_type_to_ffi(&t).unwrap(),
+            ffi_type: t.ffi().unwrap(),
         }).collect(),
         value_function_binding: asm::FunctionClassBinding {
             default: false,

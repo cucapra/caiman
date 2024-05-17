@@ -31,16 +31,13 @@
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
-use caiman::assembly::ast as asm;
-use caiman::assembly::ast::TypeId;
-
 use crate::{
     enum_cast,
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
-        make_deref, Hir, HirBody, HirInstr, HirOp, UseType,
+        Hir, HirBody, HirInstr, HirOp, UseType,
     },
-    parse::ast::{DataType, IntSize, SchedTerm, Uop},
+    parse::ast::{DataType, SchedTerm, Uop},
 };
 
 use super::{analyze, Fact, Forwards};
@@ -53,12 +50,11 @@ use super::{analyze, Fact, Forwards};
 /// This should be the first pass run (before live vars, etc.)
 pub fn deref_transform_pass(
     cfg: &mut Cfg,
-    types: &mut HashMap<String, TypeId>,
     data_types: &mut HashMap<String, DataType>,
     variables: &HashSet<String>,
 ) {
     for bb in cfg.blocks.values_mut() {
-        deref_transform_block(bb, types, data_types, variables);
+        deref_transform_block(bb, data_types, variables);
     }
     // we do a, maybe not the best thing, here and let analyze also
     // replaces uses of references with the use of the original variable
@@ -142,7 +138,6 @@ fn remove_refs_ops(bb: &mut BasicBlock) {
 /// (loads) for a single block.
 fn deref_transform_block(
     bb: &mut BasicBlock,
-    types: &mut HashMap<String, TypeId>,
     data_types: &mut HashMap<String, DataType>,
     variables: &HashSet<String>,
 ) {
@@ -160,7 +155,6 @@ fn deref_transform_block(
             id,
             instr,
             &mut names,
-            types,
             &mut insertions,
             &mut last_deref,
             data_types,
@@ -186,12 +180,10 @@ fn get_cur_name(name: &str, names: &mut HashMap<String, u16>) -> String {
 
 /// Converts an asm `TypeId` that's a reference to the corresponding non-reference
 /// ast `DataType`.
-fn unref_type(typ: &asm::TypeId) -> DataType {
-    match &typ.0[1..] {
-        "bool" => DataType::Bool,
-        "i32" => DataType::Int(IntSize::I32),
-        "i64" => DataType::Int(IntSize::I64),
-        x => panic!("Unrecognized type: {x}"),
+fn unref_type(typ: &DataType) -> DataType {
+    match typ {
+        DataType::Ref(t) => *t.clone(),
+        x => x.clone(),
     }
 }
 
@@ -209,16 +201,14 @@ fn unref_type(typ: &asm::TypeId) -> DataType {
 fn insert_deref_if_needed(
     last_deref: &mut HashMap<String, u16>,
     names: &mut HashMap<String, u16>,
-    types: &mut HashMap<String, TypeId>,
     insertions: &mut Vec<(usize, HirBody)>,
     id: usize,
     name: &str,
     data_types: &mut HashMap<String, DataType>,
 ) {
     if last_deref.get(name).is_none() || last_deref[name] != names[name] {
-        let typ = unref_type(&types[name]);
+        let typ = unref_type(&data_types[name]);
         let dest = get_cur_name(name, names);
-        types.insert(dest.clone(), make_deref(&types[name]));
         data_types.insert(dest.clone(), typ.clone());
         insertions.push((
             id,
@@ -248,7 +238,6 @@ fn deref_transform_instr(
     id: usize,
     instr: HirInstr,
     names: &mut HashMap<String, u16>,
-    types: &mut HashMap<String, TypeId>,
     insertions: &mut Vec<(usize, HirBody)>,
     last_deref: &mut HashMap<String, u16>,
     data_types: &mut HashMap<String, DataType>,
@@ -259,7 +248,7 @@ fn deref_transform_instr(
         HirInstr::Tail(t) => {
             t.rename_uses(&mut |u, ut| {
                 if variables.contains(u) && ut == UseType::Read {
-                    insert_deref_if_needed(last_deref, names, types, insertions, id, u, data_types);
+                    insert_deref_if_needed(last_deref, names, insertions, id, u, data_types);
                     get_cur_name(u, names)
                 } else {
                     u.to_string()
@@ -296,9 +285,7 @@ fn deref_transform_instr(
         HirInstr::Stmt(stmt) => {
             stmt.rename_uses(&mut |name, ut| {
                 if variables.contains(name) && ut == UseType::Read {
-                    insert_deref_if_needed(
-                        last_deref, names, types, insertions, id, name, data_types,
-                    );
+                    insert_deref_if_needed(last_deref, names, insertions, id, name, data_types);
                     get_cur_name(name, names)
                 } else {
                     name.to_string()
@@ -319,7 +306,6 @@ fn deref_transform_instr(
                     let old_lhs = lhs.clone();
                     // rename the lhs to the reference version
                     *lhs = format!("_{lhs}_ref");
-                    types.insert(lhs.clone(), types[&old_lhs].clone());
                     data_types.insert(lhs.clone(), data_types[&old_lhs].clone());
                 }
                 HirBody::RefStore { lhs, .. } => {

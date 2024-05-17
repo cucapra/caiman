@@ -14,7 +14,6 @@ use self::{
     sched_rename::rename_vars,
     yields::CallGraph,
 };
-pub use sched_rename::original_name;
 
 /// Normalizes the AST by renaming schedule variables, flattening nested
 /// expressions, converting conditional returns to sequences, and inserting

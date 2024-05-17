@@ -10,14 +10,13 @@ use caiman::explication::Hole;
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
-    lower::{data_type_to_ffi_type, IN_STEM},
+    lower::IN_STEM,
     parse::ast::{self, DataType, Flow, SchedTerm, SchedulingFunc, SpecType, Tag},
     typing::{Context, LOCAL_TEMP_FLAGS},
 };
 use caiman::ir;
 
 use super::{
-    data_type_to_storage_type,
     sched_hir::{
         DataMovement, FenceOp, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator,
         TripleTag,
@@ -81,7 +80,7 @@ fn build_copy_cmd(
             node: asm::Node::WriteRef {
                 source: Hole::Filled(asm::NodeId(src.clone())),
                 destination: Hole::Filled(asm::NodeId(dest.to_string())),
-                storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(dest).unwrap())),
+                storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
             },
         })
     }
@@ -104,7 +103,7 @@ fn lower_flat_decl(
         node: asm::Node::AllocTemporary {
             place: Hole::Filled(ir::Place::Local),
             buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
         },
     });
     let mv = build_copy_cmd(&temp_node_name, rhs, f, Some(dest_tag));
@@ -112,7 +111,7 @@ fn lower_flat_decl(
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
             source: Hole::Filled(asm::NodeId(temp_node_name)),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
         },
     });
     (
@@ -134,7 +133,7 @@ fn lower_var_decl(
         node: asm::Node::AllocTemporary {
             place: Hole::Filled(ir::Place::Local),
             buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
         },
     }))];
     if let Some(rhs) = rhs {
@@ -178,9 +177,7 @@ fn lower_op(
                     node: asm::Node::AllocTemporary {
                         place: Hole::Filled(ir::Place::Local),
                         buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
-                        storage_type: Hole::Filled(data_type_to_ffi_type(
-                            f.get_dtype(name).unwrap(),
-                        )),
+                        storage_type: Hole::Filled(f.get_storage_type(name).unwrap()),
                     },
                 }),
             )
@@ -221,7 +218,7 @@ fn lower_op(
                 name: Some(asm::NodeId(name.clone())),
                 node: asm::Node::ReadRef {
                     source: Hole::Filled(asm::NodeId(temp.clone())),
-                    storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(name).unwrap())),
+                    storage_type: Hole::Filled(f.get_storage_type(name).unwrap()),
                 },
             }))
         })
@@ -243,7 +240,7 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
                 source: Hole::Filled(asm::NodeId(src.to_string())),
-                storage_type: Hole::Filled(data_type_to_ffi_type(typ)),
+                storage_type: Hole::Filled(typ.storage_type()),
             },
         }))],
         temp_id,
@@ -281,7 +278,7 @@ fn lower_begin_encode(
             node: asm::Node::AllocTemporary {
                 place: Hole::Filled(place),
                 buffer_flags: Hole::Filled(f.get_flags()[var]),
-                storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(var).unwrap())),
+                storage_type: Hole::Filled(f.get_storage_type(var).unwrap()),
             },
         })));
     }
@@ -343,9 +340,7 @@ fn lower_device_copy(
                     name: Some(asm::NodeId(temp_var_name(temp_id))),
                     node: asm::Node::AllocTemporary {
                         place: Hole::Filled(ir::Place::Local),
-                        storage_type: Hole::Filled(data_type_to_ffi_type(
-                            f.get_dtype(src).unwrap(),
-                        )),
+                        storage_type: Hole::Filled(f.get_storage_type(src).unwrap()),
                         buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
                     },
                 })),
@@ -354,9 +349,7 @@ fn lower_device_copy(
                     node: asm::Node::WriteRef {
                         source: Hole::Filled(asm::NodeId(src.to_string())),
                         destination: Hole::Filled(asm::NodeId(temp_var_name(temp_id))),
-                        storage_type: Hole::Filled(data_type_to_ffi_type(
-                            f.get_dtype(src).unwrap(),
-                        )),
+                        storage_type: Hole::Filled(f.get_storage_type(src).unwrap()),
                     },
                 })),
                 Hole::Filled(asm::Command::Node(asm::NamedNode {
