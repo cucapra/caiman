@@ -251,8 +251,11 @@ def build(test_dir: Path, inputs, quiet: bool):
         )
     return ps.failures
 
-
-#function that compiles a .cair source file. Assumes you are in ./caiman already, so please change working directory manually.
+'''
+function that compiles a .cair source file. 
+Assumes you are in ./caiman already, so please change working directory manually
+before and after you call this function.
+'''
 def compile(test_dir: Path, file):
     #prints colored messages, fancy 
     eprint(f"{COLOR_INFO} compiling Caiman file with Cargo run")
@@ -284,8 +287,11 @@ def compile(test_dir: Path, file):
     #else, return the runtime and output.
     return [t, output]  
 
-
-#function that runs a file 
+'''
+function that runs a file 
+Assumes you are running from /caiman-test, so usually changing the directory with 
+os.chdir(d) is not needed.
+'''
 def run(test_dir: Path, inputs):
     #prints colored messages, fancy 
     eprint(f"{COLOR_INFO} running Caiman file with cargo test")
@@ -385,21 +391,17 @@ def main():
         choices=["compile", "run"],
         help="Choose your command: compile or run"
         )
-
     #might not include this one?  
     parser.add_argument(
         "-q", "--quiet", 
         action="store_true", 
         help="Suppress extra info."
     )
-
     #positional argument 2: filename
     parser.add_argument(
         "file", 
         help="The file to compile or run. Directories are not accepted and will cause the script to break."
-    )
-
-    
+    )   
     #positional argument 3: number of iterations
     parser.add_argument(
         "NUM_ITERS",
@@ -407,13 +409,9 @@ def main():
         help="number of iterations"
         )
     
-
     #parse arguments 
     args = parser.parse_args()
 
-    #print("LAKSDJFLASDKFJASDLKFJKLA")
-
-    #if the file specified is a directory then we walk through it
     #if it's just a file we add it to inputs 
     inputs = []
     '''
@@ -447,6 +445,7 @@ def main():
         compile_time = compile_info[0]
         print("Compile time was {c}".format(c=compile_time))
 
+        #compilation didn't throw an error, so we write data based on number of iterations to a CSV file. 
         write_to_csv(test_dir, filename, args.NUM_ITERS, args.command)
 
     #run
@@ -462,6 +461,7 @@ def main():
         print("Successfully ran file {f}".format(f=filename))
         print("Runtime was {r}".format(r=runtime))
 
+        #compiling/running didn't throw an error, so we write data based on number of iterations to a CSV file. 
         write_to_csv(test_dir, filename, args.NUM_ITERS, args.command)
         
     #unknown 
