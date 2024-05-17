@@ -7,6 +7,8 @@ from sys import stderr
 from dataclasses import dataclass
 from shutil import rmtree
 import os
+import time
+import csv
 
 
 # stupid hack to build a test file for each pair of results
@@ -232,9 +234,11 @@ def process_inputs(
     return ps
 
 
+#function for building caiman and compiling it
 def build(test_dir: Path, inputs, quiet: bool):
     eprint(f"{COLOR_INFO} building caimanc")
     c = Compiler(test_dir)
+    print("ALKSDJFADKS")
 
     eprint(f"{COLOR_INFO} building high-level-caiman")
     hlc = HighLevelCaiman(test_dir)
@@ -248,12 +252,70 @@ def build(test_dir: Path, inputs, quiet: bool):
     return ps.failures
 
 
+#function that compiles a .cair source file
+def compile(test_dir: Path, file):
+    #prints colored messages, fancy 
+    eprint(f"{COLOR_INFO} compiling Caiman file with Cargo run")
+
+    #change directory to /caiman main directory.
+    os.chdir("../")
+
+    #change the filename to have "./caiman-test/ in front of it"
+    f = "./caiman-test/basics/" + file
+
+    #arguments for running
+    args = ["cargo", "run", "--", "--input"]
+    args += [f]
+
+    #time this part. start time:
+    start = time.time()
+
+    #get the output 
+    r2 = subprocess.Popen(args, stdout=subprocess.PIPE)
+    #end time
+    end = time.time()
+
+    #read output into a variable 
+    output = r2.stdout.read()
+
+    #runtime to return
+    t = end - start
+
+    #if running was not a success, raise an exception 
+    if r2.returncode is not None:
+        raise Exception(f"compiling caiman file {file} failed! failed with error code{r2.returncode}") 
+    #else, return the runtime and output.
+    return [t, output]  
+
+
+#function that runs a file 
 def run(test_dir: Path, inputs):
-    eprint(f"{COLOR_INFO} running Cargo tests")
+    #prints colored messages, fancy 
+    eprint(f"{COLOR_INFO} running Caiman file with cargo test")
+
+    #gets the cargo.toml
     manifest_path = test_dir / "Cargo.toml"
+
+    #arguments for running 
     args = ["cargo", "test", "--manifest-path", manifest_path, "--"]
     args += [Path(input).stem for input in inputs]
-    return subprocess.run(args).returncode
+
+    #time this part. start time:
+    start = time.time()
+
+    #process to generate stuff with cargo test:
+    r = subprocess.run(args).returncode
+
+    #end time
+    end = time.time()
+    #runtime to return
+    t = end - start
+
+    #if running was not a success, raise an exception 
+    if r != 0:
+        raise Exception("running caiman file {filename} failed!".format(filename = inputs[i])) 
+    #else, return the runtime 
+    return t
 
 
 def clean(test_dir: Path):
@@ -270,23 +332,64 @@ def clean(test_dir: Path):
     lf = (gen_dir / "lib.rs").open(mode="w")
     lf.write("pub mod util;\n")
 
+def write_to_csv(filename, num_iters, command){
+    #generate the csv name you will be writing to
+    csv_name = filename.split(.)[0] + command + ".csv"
+
+    #find the file in the dummy directory. if file does not exist, create the file. 
+
+}
 
 def main():
+    #makes the test directory, in order to get access to the cargo.toml
     test_dir = Path(__file__).resolve().parent
+
+    #some options that apply to the entire parser 
     parser = argparse.ArgumentParser(
-        description="Caiman Test Suite", fromfile_prefix_chars="@"
+        prog="Timing script",
+        description="Times a single file's compilation and runtime",
+        fromfile_prefix_chars="@"
     )
-    parser.add_argument("command", choices=["compile", "run"])
+
+    #positional argument 1: command type 
     parser.add_argument(
-        "-q", "--quiet", action="store_true", help="Suppress extra info."
-    )
+        "command", 
+        choices=["compile", "run"],
+        help="Choose your command: compile or run"
+        )
+
+    #might not include this one?  
     parser.add_argument(
-        "files", nargs="*", help="If specified, only build/test these file(s)."
+        "-q", "--quiet", 
+        action="store_true", 
+        help="Suppress extra info."
     )
-    parser.add_argument("NUM_ITERS", choices=["1", "2"])
+
+    #positional argument 2: filename
+    parser.add_argument(
+        "file", 
+        help="The file to compile or run. Directories are not accepted and will cause the script to break."
+    )
+
+    '''
+    #positional argument 3: number of iterations
+    parser.add_argument(
+        "NUM_ITERS",
+        type=int, 
+        help="number of iterations"
+        )
+    '''
+
+    #parse arguments 
     args = parser.parse_args()
+
+    #print("LAKSDJFLASDKFJASDLKFJKLA")
+
+    #if the file specified is a directory then we walk through it
+    #if it's just a file we add it to inputs 
     inputs = []
-    for file in args.files:
+    '''
+    for file in args.file:
         if os.path.isdir(file):
             for path, _, filenames in os.walk(file):
                 for filename in filenames:
@@ -294,17 +397,38 @@ def main():
                     if fpath.suffix != ".rs" and fpath.stem.endswith("_test"):
                         inputs.append(Path(path) / fpath)
         else:
-            inputs.append(Path(file))
-    if args.command == "run":
-        ret = build(test_dir, inputs, args.quiet)
-        ret |= run(test_dir, inputs)
-        exit(ret)
-    elif args.command == "build":
-        build(test_dir, inputs, args.quiet)
-    elif args.command == "clean":
-        clean(test_dir)
+            '''
+    #gets the filename from args
+    filename = args.file.split("/")[-1]
+    #print(filename)
+    inputs.append(filename)
+
+    #control flow for running and compiling 
+
+    #compile command.
+    if args.command == "compile":
+        #store the compile time in a compile-time variable. 
+        compile_info = compile(test_dir, filename)
+
+        #if success, print to console and store compile time.
+        print("Successfully compiled file {f}".format(f=filename))
+        compile_time = compile_info[0]
+        print("Compile time was {c}".format(c=compile_time))
+
+    #run
+    elif args.command == "run":
+        #assume Caiman is already built. First, compile the file. 
+        compile(test_dir, filename)
+
+        #next, run it. Runtime is stored in this variable.
+        runtime = run(test_dir, filename)
+
+        print("Successfully ran file {f}".format(f=filename))
+        print("Runtime was {r}".format(r=runtime))
+        
+    #unknown 
     else:
-        eprint("Unknown subcommand. Accepted: run, build, clean")
+        eprint("Unknown subcommand. Accepted: run, compile")
 
 
 if __name__ == "__main__":
