@@ -1,20 +1,20 @@
 version 0.0.2
 
-type i64;
+ffi i64;
 event %event0;
 buffer_space %buffspace;
-native_value %i64n : i64;
+native_value %i64 : i64;
 ref %i64l : i64-local<flags=[]>;
 
-function @lt(i64, i64) -> i64;
-function @main() -> i64;
+function @lt(%i64, %i64) -> %i64;
+function @main() -> %i64;
 
 
 external-cpu-pure[impl @lt] %lt(i64, i64) -> i64;
 
-value[impl default @main] %main() -> [%out: %i64n] {
-    %a = constant %i64n 2;
-    %b = constant %i64n 1;
+value[impl default @main] %main() -> [%out: %i64] {
+    %a = constant %i64 2;
+    %b = constant %i64 1;
     %r_t = call @lt(%a, %b);
     %r = extract %r_t 0;
     
@@ -33,7 +33,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<$time-usable, $time-usable>() ->
-$val.%out-usable $space-usable $time-usable %i64n
+$val.%out-usable $space-usable $time-usable %i64
 {
     %ref = alloc-temporary local [] i64;
 
@@ -56,10 +56,10 @@ $val.%out-usable $space-usable $time-usable %i64n
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_left<$time-usable, $time-usable>
 (
-    %a : $val.%a-usable $space-usable $time-usable %i64n,
-    %b : $val.%b-usable $space-usable $time-usable %i64n
+    %a : $val.%a-usable $space-usable $time-usable %i64,
+    %b : $val.%b-usable $space-usable $time-usable %i64
 ) ->
-$val.%a-usable $space-usable $time-usable %i64n
+$val.%a-usable $space-usable $time-usable %i64
 {
     return %a;
 }
@@ -67,10 +67,10 @@ $val.%a-usable $space-usable $time-usable %i64n
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_right<$time-usable, $time-usable>
 (
-    %a : $val.%a-usable $space-usable $time-usable %i64n,
-    %b : $val.%b-usable $space-usable $time-usable %i64n
+    %a : $val.%a-usable $space-usable $time-usable %i64,
+    %b : $val.%b-usable $space-usable $time-usable %i64
 ) ->
-$val.%b-usable $space-usable $time-usable %i64n
+$val.%b-usable $space-usable $time-usable %i64
 {
     return %b;
 }
@@ -79,8 +79,8 @@ $val.%b-usable $space-usable $time-usable %i64n
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_ret<$time-usable, $time-usable>
-(%s : $val.%s-usable $space-usable $time-usable %i64n) ->
-$val.%out-usable $space-usable $time-usable %i64n
+(%s : $val.%s-usable $space-usable $time-usable %i64) ->
+$val.%out-usable $space-usable $time-usable %i64
 {
     return %s;
 }

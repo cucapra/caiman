@@ -329,6 +329,19 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn ffi_type_hole(input: Node) -> ParseResult<Hole<ast::FFIType>> {
+        Ok(match_nodes!(input.into_children();
+            [ffi_type(f)] => Hole::Filled(f),
+            [hole] => Hole::Empty
+        ))
+    }
+
+    fn ffi_type_hole_sep(input: Node) -> ParseResult<Hole<ast::FFIType>> {
+        Ok(match_nodes!(input.into_children();
+            [ffi_type_hole(f)] => f
+        ))
+    }
+
     fn ffi_array_parameters(input: Node) -> ParseResult<ast::FFIType> {
         Ok(match_nodes!(input.into_children();
             [ffi_type(element_type), n(length)] => ast::FFIType::Array {
@@ -394,8 +407,7 @@ impl CaimanAssemblyParser {
 
     fn typ(input: Node) -> ParseResult<ast::TypeId> {
         Ok(match_nodes!(input.into_children();
-            [ffi_type(t)] => TypeId::FFI(t),
-            [name(name)] => TypeId::Local(name),
+            [name(name)] => TypeId(name),
         ))
     }
 
@@ -605,7 +617,7 @@ impl CaimanAssemblyParser {
 
     fn native_value_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), typ(storage_type)] =>
+            [name_type_separator(name), ffi_type(storage_type)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::NativeValue { storage_type }
@@ -619,9 +631,9 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn ref_type(input: Node) -> ParseResult<(ast::TypeId, ir::Place)> {
+    fn ref_type(input: Node) -> ParseResult<(ast::FFIType, ir::Place)> {
         Ok(match_nodes!(input.into_children();
-            [typ(typ), place(place)] => (typ, place)
+            [ffi_type(typ), place(place)] => (typ, place)
         ))
     }
 
@@ -1313,7 +1325,7 @@ impl CaimanAssemblyParser {
                 name: Some(name),
                 node: ast::Node::Constant {
                     value: Hole::Filled(value),
-                    type_id: Hole::Filled(ast::TypeId::Local(type_id))
+                    type_id: Hole::Filled(ast::TypeId(type_id))
                 }
             }
         ))
@@ -1413,7 +1425,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
                 buffer_flags(buffer_flags),
-                type_hole(storage_type)] => ast::NamedNode {
+                ffi_type_hole(storage_type)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::AllocTemporary {
                         place,
@@ -1438,7 +1450,7 @@ impl CaimanAssemblyParser {
     fn static_sub_alloc_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
-                type_hole_sep(storage_type), name_hole(node)] => ast::NamedNode {
+                ffi_type_hole_sep(storage_type), name_hole(node)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::StaticSubAlloc {
                         node: node.opt().map(|s| NodeId(s)).into(),
@@ -1485,7 +1497,7 @@ impl CaimanAssemblyParser {
                     name: Some(name),
                     node: ast::Node::ReadRef {
                         source: source.opt().map(|s| NodeId(s)).into(),
-                        storage_type: Hole::Filled(ast::TypeId::FFI(storage_type))
+                        storage_type: Hole::Filled(storage_type)
                     }
                 }
         ))
@@ -1493,7 +1505,7 @@ impl CaimanAssemblyParser {
 
     fn borrow_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), borrow_sep, type_hole_sep(storage_type),
+            [assign(name), borrow_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::BorrowRef {
@@ -1506,7 +1518,7 @@ impl CaimanAssemblyParser {
 
     fn write_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [write_sep, type_hole_sep(storage_type),
+            [write_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source), name_hole(destination)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::WriteRef {

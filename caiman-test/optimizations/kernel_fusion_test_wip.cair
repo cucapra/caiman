@@ -5,12 +5,12 @@ types [
     i64,
     array<f32, 1024>,
     slot $f32_local {
-        type : f32,
+        ffi : f32,
         stage : ready,
         place : local,
     },
     slot $f32_arr_local {
-        type : array<f32, 1024>,
+        ffi : array<f32, 1024>,
         stage : ready,
         place : local
     },

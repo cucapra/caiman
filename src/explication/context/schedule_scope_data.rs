@@ -1,3 +1,7 @@
+use std::thread::current;
+
+use itertools::Itertools;
+
 use super::*;
 use crate::explication::util::*;
 
@@ -46,9 +50,9 @@ impl ScheduleScopeData {
         let check = self.storage_node_information.insert(
             schedule_node,
             StorageNodeInformation {
-                instantiation: LocationTriple::new(),
+                instantiation: None,
                 typ,
-                timeline_manager: None
+                timeline_manager: None,
             },
         );
         assert!(
@@ -73,7 +77,12 @@ impl ScheduleScopeData {
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
                 context.debug_info.node(&self.funclet_id, schedule_node)
-            )).instantiation;
+            ))
+            .instantiation;
+
+        let mut new_instantiation = current_instantiation
+            .clone()
+            .unwrap_or(LocationTriple::new());
 
         // potentially modified when checking the timeline
         match instantiation {
@@ -89,11 +98,16 @@ impl ScheduleScopeData {
                             .entry(value.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        match &current_instantiation.value {
-                            Some(location) => { self.instantiations.get_mut(location).unwrap().remove(&schedule_node); },
-                            None => {},
+                        match &new_instantiation.value {
+                            Some(location) => {
+                                self.instantiations
+                                    .get_mut(location)
+                                    .unwrap()
+                                    .remove(&schedule_node);
+                            }
+                            None => {}
                         }
-                        current_instantiation.value = Some(value);
+                        new_instantiation.value = Some(value);
                     }
                 };
                 match timeline {
@@ -105,11 +119,16 @@ impl ScheduleScopeData {
                             .entry(timeline.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        match &current_instantiation.timeline {
-                            Some(location) => { self.instantiations.get_mut(location).unwrap().remove(&schedule_node); },
-                            None => {},
+                        match &new_instantiation.timeline {
+                            Some(location) => {
+                                self.instantiations
+                                    .get_mut(location)
+                                    .unwrap()
+                                    .remove(&schedule_node);
+                            }
+                            None => {}
                         }
-                        current_instantiation.timeline = Some(timeline);
+                        new_instantiation.timeline = Some(timeline);
                     }
                 };
                 match spatial {
@@ -119,15 +138,46 @@ impl ScheduleScopeData {
                             .entry(spatial.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        match &current_instantiation.spatial {
-                            Some(location) => { self.instantiations.get_mut(location).unwrap().remove(&schedule_node); },
-                            None => {},
+                        match &new_instantiation.spatial {
+                            Some(location) => {
+                                self.instantiations
+                                    .get_mut(location)
+                                    .unwrap()
+                                    .remove(&schedule_node);
+                            }
+                            None => {}
                         }
-                        current_instantiation.spatial = Some(spatial);
+                        new_instantiation.spatial = Some(spatial);
                     }
                 };
             }
         }
+
+        *current_instantiation = Some(new_instantiation);
+    }
+
+    pub fn get_node_information(
+        &self,
+        node_id: &NodeId,
+        context: &StaticContext,
+    ) -> &StorageNodeInformation {
+        self.storage_node_information.get(node_id).expect(&format!(
+            "Missing information for node {}",
+            context.debug_info.node(&self.funclet_id, *node_id)
+        ))
+    }
+
+    // unsorted
+    pub fn storage_of_type(
+        &self,
+        target_type: &expir::Type,
+        context: &StaticContext,
+    ) -> Vec<NodeId> {
+        self.storage_node_information
+            .iter()
+            .filter(|(_, info)| is_of_type(target_type, &info.typ))
+            .map(|(n, _)| n.clone())
+            .collect()
     }
 
     // helper for match_triple
@@ -157,27 +207,23 @@ impl ScheduleScopeData {
         timeline_manager: NodeId,
         context: &StaticContext,
     ) {
-        self
-            .storage_node_information
+        self.storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
                 context.debug_info.node(&self.funclet_id, *schedule_node)
-            )).timeline_manager = Some(timeline_manager);
+            ))
+            .timeline_manager = Some(timeline_manager);
     }
 
-    pub fn clear_timeline_manager(
-        &mut self,
-        schedule_node: &NodeId,
-        context: &StaticContext,
-    ) {
-        self
-            .storage_node_information
+    pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
+        self.storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
                 context.debug_info.node(&self.funclet_id, *schedule_node)
-            )).timeline_manager = None;
+            ))
+            .timeline_manager = None;
     }
 
     /*

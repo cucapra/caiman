@@ -1,8 +1,8 @@
 version 0.0.2
 
-type u32;
-type i32;
-type array<i32>;
+ffi u32;
+ffi i32;
+ffi array<i32>;
 event %event0;
 buffer_space %buffspace;
 native_value %ni32 : i32;

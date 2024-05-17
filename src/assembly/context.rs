@@ -31,7 +31,7 @@ pub struct Context {
     pub path: String,
     pub ffi_type_table: Table<FFIType>,
     pub local_type_table: Table<String>,
-    // cause we need to know the storage value of the native value
+    // map from names of native types to the storage type
     pub native_type_map: HashMap<String, FFIType>,
     pub variable_map: HashMap<FuncletId, HashMap<NodeId, expir::Quotient>>,
     // for keeping track of the meanings of meta names for the current scheduling funclet
@@ -178,16 +178,10 @@ impl Context {
                 ast::Declaration::TypeDecl(typ) => match typ {
                     ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
                     ast::TypeDecl::Local(t) => {
-                        // get native value types
                         self.local_type_table.push(t.name.clone());
                         match &t.data {
                             ast::LocalTypeInfo::NativeValue { storage_type } => {
-                                match storage_type {
-                                    ast::TypeId::FFI(f) => {
-                                        self.native_type_map.insert(t.name.clone(), f.clone());
-                                    }
-                                    _ => {}
-                                }
+                                self.native_type_map.insert(t.name.clone(), storage_type.clone());
                             }
                             _ => {}
                         }
@@ -286,10 +280,7 @@ impl Context {
     }
 
     pub fn loc_type_id(&self, typ: &ast::TypeId) -> usize {
-        match typ {
-            ast::TypeId::FFI(ft) => self.ffi_type_id(&ft).0,
-            ast::TypeId::Local(s) => self.local_type_id(&s),
-        }
+        self.local_type_id(&typ.0)
     }
 
     pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Hole<NodeId>) -> expir::Quotient {
@@ -519,16 +510,21 @@ impl Context {
                 let mut funclet_map = HashMap::new();
                 for (index, funclet) in funclet_indices
                     .local_funclet_table
-                    .drain(FuncletId("_UNNAMED_FUNCLET_".to_string())).into_iter().enumerate()
+                    .drain(FuncletId("_UNNAMED_FUNCLET_".to_string()))
+                    .into_iter()
+                    .enumerate()
                 {
                     let mut node_map = HashMap::new();
                     for (node, quot) in variable_map.get_mut(&funclet).unwrap().drain() {
                         node_map.insert(quot, node.0);
                     }
-                    funclet_map.insert(index, FuncletDebugMap {
-                        name: funclet.0,
-                        node_map
-                    });
+                    funclet_map.insert(
+                        index,
+                        FuncletDebugMap {
+                            name: funclet.0,
+                            node_map,
+                        },
+                    );
                 }
                 DebugInfo {
                     type_map,

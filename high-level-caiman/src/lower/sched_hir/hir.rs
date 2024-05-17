@@ -878,20 +878,12 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
 /// Makes the base type of this type into a reference to the existing type
 /// Does not check against references to references
 pub(super) fn make_ref(typ: asm::TypeId) -> asm::TypeId {
-    match typ {
-        asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
-        asm::TypeId::FFI(_) => todo!(),
-    }
+    asm::TypeId(format!("&{typ}"))
 }
 
 /// Makes the base type of this type into a dereference to the existing type
 /// Does not check against references to references
 pub(super) fn make_deref(typ: &asm::TypeId) -> asm::TypeId {
-    match typ {
-        asm::TypeId::Local(type_name) => {
-            assert_eq!(&type_name[0..1], "&");
-            asm::TypeId::Local(type_name[1..].to_string())
-        }
-        asm::TypeId::FFI(_) => todo!(),
-    }
+    assert_eq!(&typ.0[0..1], "&");
+    asm::TypeId(typ.0[1..].to_string())
 }

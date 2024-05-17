@@ -4,29 +4,29 @@ version 0.0.2
 // just a reference/test for syntax parsing
 // the complete set of nodes parsable and all that
 
-type f32;
-type f64;
-type u8;
-type u16;
-type u32;
-type u64;
-type usize;
-type i8;
-type i16;
-type i32;
-type i64;
-type array<i32, 2>;
-type erased_length_array<u32>;
-type tuple<f32, u8>;
-type const_ref<u64>;
-type mut_ref<const_ref<u64>>;
-type const_slice<array<i32, 2>>;
-type mut_slice<i32>;
-type gpu_buffer_ref<i32>;
-type gpu_buffer_slice<i32>;
-type gpu_buffer_allocator;
-type cpu_buffer_allocator;
-type cpu_buffer_ref<i64>;
+ffi f32;
+ffi f64;
+ffi u8;
+ffi u16;
+ffi u32;
+ffi u64;
+ffi usize;
+ffi i8;
+ffi i16;
+ffi i32;
+ffi i64;
+ffi array<i32, 2>;
+ffi erased_length_array<u32>;
+ffi tuple<f32, u8>;
+ffi const_ref<u64>;
+ffi mut_ref<const_ref<u64>>;
+ffi const_slice<array<i32, 2>>;
+ffi mut_slice<i32>;
+ffi gpu_buffer_ref<i32>;
+ffi gpu_buffer_slice<i32>;
+ffi gpu_buffer_allocator;
+ffi cpu_buffer_allocator;
+ffi cpu_buffer_ref<i64>;
 
 native_value %native_i64 : i64;
 ref %slot0 : i64-local<flags=[map_read,map_write,copy_src,copy_dst,storage,uniform]>;

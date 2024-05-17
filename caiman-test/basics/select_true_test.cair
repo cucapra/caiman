@@ -3,18 +3,18 @@ version 0.0.2
 // Codegen regression test where the true branch
 // of a select is taken.
 
-type i64;
+ffi i64;
 ref %i64l : i64-local<flags=[]>;
 event %event0;
 buffer_space %buffspace;
-native_value %i64n : i64;
+native_value %i64 : i64;
 
-function @main() -> i64;
+function @main() -> %i64;
 
-value[impl default @main] %foo() -> [%out: i64] {
-    %x = constant %i64n 1;
-    %y = constant %i64n 1;
-    %z = constant %i64n 2;
+value[impl default @main] %foo() -> [%out: %i64] {
+    %x = constant %i64 1;
+    %y = constant %i64 1;
+    %z = constant %i64 2;
     %r = select %x %y %z;
     return %r;
 }
@@ -29,7 +29,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %foo_main<$time-usable, $time-usable>() ->
-    [%out : $val.%out-usable $space-usable $time-usable %i64n] 
+    [%out : $val.%out-usable $space-usable $time-usable %i64] 
 {
     %x_loc = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_loc;
@@ -64,7 +64,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_ret<$time-usable, $time-usable>
 (%r_loc : $val.%r-usable $space-saved $time-usable %i64l) ->
-[%out : $val.%out-usable $space-usable $time-usable %i64n] {
+[%out : $val.%out-usable $space-usable $time-usable %i64] {
     %r_val = read-ref i64 %r_loc;
     return %r_val;
 }
