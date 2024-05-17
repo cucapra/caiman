@@ -252,13 +252,10 @@ def build(test_dir: Path, inputs, quiet: bool):
     return ps.failures
 
 
-#function that compiles a .cair source file
+#function that compiles a .cair source file. Assumes you are in ./caiman already, so please change working directory manually.
 def compile(test_dir: Path, file):
     #prints colored messages, fancy 
     eprint(f"{COLOR_INFO} compiling Caiman file with Cargo run")
-
-    #change directory to /caiman main directory.
-    os.chdir("../")
 
     #change the filename to have "./caiman-test/ in front of it"
     f = "./caiman-test/basics/" + file
@@ -332,13 +329,44 @@ def clean(test_dir: Path):
     lf = (gen_dir / "lib.rs").open(mode="w")
     lf.write("pub mod util;\n")
 
-def write_to_csv(filename, num_iters, command){
+'''
+Writes data to a csv. This function is called from the assumed directory caiman-test. Please first switch to caiman-test 
+in caller function before calling write_to_csv.
+'''
+def write_to_csv(test_dir, filename, num_iters, command):
+
     #generate the csv name you will be writing to
-    csv_name = filename.split(.)[0] + command + ".csv"
+    csv_name = filename.split(".")[0] + "_" + command + ".csv"
 
     #find the file in the dummy directory. if file does not exist, create the file. 
+    f = open("./test_data/"+csv_name, "w")
 
-}
+    #create a writer for the csv
+    caimanwriter = csv.writer(f, delimiter=' ', quotechar= '|', quoting=csv.QUOTE_MINIMAL)
+
+
+    #for the number of iterations, run the specified command and write the resulting runtime to the csv
+    t = 0
+    
+    #change working directory based on if it's run or compile: compile needs to be in /caiman. compile flag will be 0
+    c = 0
+    if command == "compile": 
+        os.chdir("../")
+        c = 1
+    
+    for i in range(num_iters):
+        #actually do the command
+        if command == "compile":
+            t = compile(test_dir, filename)[0]
+        if command == "run":
+            t = run(test_dir, filename)
+        #write the time to f (the csv)
+        caimanwriter.writerow([i, t])
+    
+    #change working directory back to caiman-test if it got changed 
+    if c == 1:
+        os.chdir("./caiman-test")
+
 
 def main():
     #makes the test directory, in order to get access to the cargo.toml
@@ -371,14 +399,14 @@ def main():
         help="The file to compile or run. Directories are not accepted and will cause the script to break."
     )
 
-    '''
+    
     #positional argument 3: number of iterations
     parser.add_argument(
         "NUM_ITERS",
         type=int, 
         help="number of iterations"
         )
-    '''
+    
 
     #parse arguments 
     args = parser.parse_args()
@@ -407,24 +435,34 @@ def main():
 
     #compile command.
     if args.command == "compile":
+        #change working directory to caiman
+        os.chdir("../")
         #store the compile time in a compile-time variable. 
         compile_info = compile(test_dir, filename)
+        #change working directory back to caiman-test
+        os.chdir("./caiman-test")
 
         #if success, print to console and store compile time.
         print("Successfully compiled file {f}".format(f=filename))
         compile_time = compile_info[0]
         print("Compile time was {c}".format(c=compile_time))
 
+        write_to_csv(test_dir, filename, args.NUM_ITERS, args.command)
+
     #run
     elif args.command == "run":
-        #assume Caiman is already built. First, compile the file. 
+        #assume Caiman is already built. First, compile the file. You must be in /caiman.
+        os.chdir("../")
         compile(test_dir, filename)
+        os.chdir("./caiman-test")
 
         #next, run it. Runtime is stored in this variable.
         runtime = run(test_dir, filename)
 
         print("Successfully ran file {f}".format(f=filename))
         print("Runtime was {r}".format(r=runtime))
+
+        write_to_csv(test_dir, filename, args.NUM_ITERS, args.command)
         
     #unknown 
     else:
