@@ -30,6 +30,25 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_src: true,
 };
 
+/// WGPU flags for sources to encoded GPU calls
+pub const ENCODE_SRC_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: false,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: true,
+    copy_src: false,
+};
+/// WGPU flags for destinations of encoded GPU calls
+pub const ENCODE_DST_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: true,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: false,
+    copy_src: false,
+};
+
 /// A typing environement for deducing quotients.
 #[derive(Debug, Clone)]
 pub struct NodeEnv {
@@ -477,6 +496,28 @@ pub struct Signature {
 pub struct NamedSignature {
     pub input: Vec<(String, DataType)>,
     pub output: Vec<(String, DataType)>,
+}
+
+impl NamedSignature {
+    /// Creates a new named signature from a list of input and output types.
+    #[must_use]
+    pub fn new<'a, I: Iterator<Item = &'a (Option<String>, DataType)>>(
+        input: &[(String, DataType)],
+        output: I,
+    ) -> Self {
+        Self {
+            input: input.to_vec(),
+            output: output
+                .enumerate()
+                .map(|(idx, (name, typ))| {
+                    (
+                        name.clone().unwrap_or_else(|| format!("_out{idx}")),
+                        typ.clone(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        }
+    }
 }
 
 impl From<&NamedSignature> for Signature {

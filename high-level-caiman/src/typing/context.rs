@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_local_type};
 use crate::parse::ast::FullType;
-use crate::typing::LOCAL_TEMP_FLAGS;
+use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, LOCAL_TEMP_FLAGS};
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -21,7 +21,7 @@ use super::{
 
 /// Gets a list of type declarations for the base types used in the program.
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
-    // collect used types
+    // TODO: collect used types
     vec![
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("BufferSpace"),
@@ -30,6 +30,18 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("Event"),
             data: asm::LocalTypeInfo::Event,
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("Encoder"),
+            data: asm::LocalTypeInfo::Encoder {
+                queue_place: ir::Place::Gpu,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("Fence"),
+            data: asm::LocalTypeInfo::Fence {
+                queue_place: ir::Place::Gpu,
+            },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(asm::FFIType::I64)),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(BOOL_FFI_TYPE)),
@@ -62,6 +74,22 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&i64gs"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I64,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_SRC_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&i64gd"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I64,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_DST_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("i32"),
             data: asm::LocalTypeInfo::NativeValue {
                 storage_type: asm::FFIType::I32,
@@ -73,6 +101,22 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Local,
                 buffer_flags: LOCAL_TEMP_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&i32gs"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_SRC_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&i32gd"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_DST_FLAGS,
             },
         })),
     ]
@@ -338,19 +382,7 @@ fn collect_class_signatures(
                 info,
                 ..
             } => {
-                let sig = NamedSignature {
-                    input: input.clone(),
-                    output: output
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, (name, typ))| {
-                            (
-                                name.clone().unwrap_or_else(|| format!("_out{idx}")),
-                                typ.clone(),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                };
+                let sig = NamedSignature::new(input, output.iter());
                 if let Some(member_sig) = &member_sig {
                     if !sig_match(member_sig, &sig) {
                         return Err(type_error(
@@ -421,29 +453,35 @@ fn collect_class_signatures(
 fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     for decl in tl {
         match decl {
-            TopLevel::SpatialFunclet { name, info, .. } => {
+            TopLevel::SpatialFunclet {
+                name,
+                info,
+                input,
+                output,
+                ..
+            } => {
                 ctx.specs.insert(
                     name.to_string(),
                     super::SpecInfo::new(
                         SpecType::Spatial,
-                        NamedSignature {
-                            input: vec![(String::from("bs"), DataType::BufferSpace)],
-                            output: vec![(String::from("_out0"), DataType::BufferSpace)],
-                        },
+                        NamedSignature::new(input, std::iter::once(output)),
                         *info,
                         None,
                     ),
                 );
             }
-            TopLevel::TimelineFunclet { name, info, .. } => {
+            TopLevel::TimelineFunclet {
+                name,
+                info,
+                input,
+                output,
+                ..
+            } => {
                 ctx.specs.insert(
                     name.to_string(),
                     super::SpecInfo::new(
                         SpecType::Timeline,
-                        NamedSignature {
-                            input: vec![(String::from("e"), DataType::Event)],
-                            output: vec![(String::from("_out0"), DataType::Event)],
-                        },
+                        NamedSignature::new(input, std::iter::once(output)),
                         *info,
                         None,
                     ),
