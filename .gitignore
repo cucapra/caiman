@@ -10,6 +10,7 @@ caiman-test/src/bin/*
 caiman-test/src/*
 !caiman-test/src/util.rs
 **/parse/parser.rs
+*.csv
 
 # IDE
 *.sublime-project
