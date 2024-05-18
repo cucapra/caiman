@@ -257,7 +257,8 @@ def compile(test_dir: Path, file):
     eprint(f"{COLOR_INFO} compiling Caiman file with Cargo run")
 
     #change the filename to have "./caiman-test/ in front of it"
-    f = "./caiman-test/basics/" + file
+    #f = "./caiman-test/basics/" + file
+    f = file
 
     #arguments for running
     args = ["cargo", "run", "--", "--input"]
@@ -335,9 +336,11 @@ def clean(test_dir: Path):
 Writes data to a csv. This function is called from the assumed directory caiman-test. Please first switch to caiman-test 
 in caller function before calling write_to_csv.
 '''
-def write_to_csv(test_dir, filename, num_iters, command):
+def write_to_csv(test_dir, path_to_file, num_iters, command):
 
     #generate the csv name you will be writing to
+    #first cut the file path into the file name 
+    filename = path_to_file.split('/')[-1]
     csv_name = filename.split(".")[0] + "_" + command + ".csv"
 
     #find the file in the dummy directory. if file does not exist, create the file. 
@@ -359,9 +362,9 @@ def write_to_csv(test_dir, filename, num_iters, command):
     for i in range(num_iters):
         #actually do the command
         if command == "compile":
-            t = compile(test_dir, filename)[0]
+            t = compile(test_dir, path_to_file)
         if command == "run":
-            t = run(test_dir, filename)
+            t = run(test_dir, path_to_file)
         #write the time to f (the csv)
         caimanwriter.writerow([i, t])
     
@@ -371,11 +374,8 @@ def write_to_csv(test_dir, filename, num_iters, command):
 
 
 def main():
-    #makes the test directory, in order to get access to the cargo.toml
+    #this directory is caiman-test since this line gets the directory time.py lives in
     test_dir = Path(__file__).resolve().parent
-
-    #change working directory to caiman-test
-    os.chdir(test_dir)
 
     #some options that apply to the entire parser 
     parser = argparse.ArgumentParser(
@@ -422,48 +422,54 @@ def main():
                     if fpath.suffix != ".rs" and fpath.stem.endswith("_test"):
                         inputs.append(Path(path) / fpath)
         else:
-            '''
     #gets the filename from args
     filename = args.file.split("/")[-1]
     #print(filename)
     inputs.append(filename)
+    '''
+    #generates the file path by adding it to the working directory
+    wd = os.getcwd()
+    file_path = wd + "/" + args.file
+    
+    #add the file path to inputs
+    inputs.append(file_path)
 
     #control flow for running and compiling 
 
     #compile command.
     if args.command == "compile":
         #change working directory to caiman
-        os.chdir("../")
+        os.chdir(test_dir.parent)
         
         #store the compile time in a compile-time variable. 
-        compile_info = compile(test_dir, filename)
+        compile_info = compile(test_dir, file_path)
         #change working directory back to caiman-test
         
         os.chdir("./caiman-test")
 
         #if success, print to console and store compile time.
-        print("Successfully compiled file {f}".format(f=filename))
+        print("Successfully compiled file {f}".format(f=file_path))
         compile_time = compile_info[0]
         print("Compile time was {c}".format(c=compile_time))
 
         #compilation didn't throw an error, so we write data based on number of iterations to a CSV file. 
-        write_to_csv(test_dir, filename, args.NUM_ITERS, args.command)
+        write_to_csv(test_dir, file_path, args.NUM_ITERS, args.command)
 
     #run
     elif args.command == "run":
         #assume Caiman is already built. First, compile the file. You must be in /caiman.
-        os.chdir("../")
-        compile(test_dir, filename)
+        os.chdir(test_dir.parent)
+        compile(test_dir, file_path)
         os.chdir("./caiman-test")
 
         #next, run it. Runtime is stored in this variable.
-        runtime = run(test_dir, filename)
+        runtime = run(test_dir, file_path)
 
-        print("Successfully ran file {f}".format(f=filename))
+        print("Successfully ran file {f}".format(f=file_path))
         print("Runtime was {r}".format(r=runtime))
 
         #compiling/running didn't throw an error, so we write data based on number of iterations to a CSV file. 
-        write_to_csv(test_dir, filename, args.NUM_ITERS, args.command)
+        write_to_csv(test_dir, file_path, args.NUM_ITERS, args.command)
         
     #unknown 
     else:
