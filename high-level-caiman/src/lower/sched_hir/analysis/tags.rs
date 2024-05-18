@@ -40,13 +40,15 @@ fn override_none_usable(mut tag: TripleTag, dtype: &DataType) -> TripleTag {
     tag
 }
 
-fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
+/// Overrrides unknown info in `tag` with `none()-save` for spatial,
+/// `none()-usable` for timeline, and `none()-dead` for value
+fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
     tag.spatial
         .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
     tag.timeline
         .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
     tag.value
-        .override_unknown_info(none_tag(SpecType::Value, Flow::Usable));
+        .override_unknown_info(none_tag(SpecType::Value, Flow::Dead));
     tag
 }
 
@@ -179,7 +181,20 @@ impl TagAnalysis {
                     }
                 }
             }
-            HirBody::RefLoad { dest, src, .. } | HirBody::DeviceCopy { dest, src, .. } => {
+            HirBody::DeviceCopy {
+                dest,
+                dest_tag,
+                src,
+                ..
+            } => {
+                let t = self.tags.get_mut(dest).unwrap();
+                t.set_specified_info(dest_tag.clone());
+                if let Some(rhs_typ) = self.tags.get(src).cloned() {
+                    let t = self.tags.get_mut(dest).unwrap();
+                    t.value = rhs_typ.value;
+                }
+            }
+            HirBody::RefLoad { dest, src, .. } => {
                 let mut tag = self
                     .tags
                     .get(src)
@@ -241,7 +256,7 @@ impl TagAnalysis {
                 );
                 for (var, tag) in device_vars {
                     self.tags
-                        .insert(var.clone(), override_none_usable_ref(tag.clone()));
+                        .insert(var.clone(), override_defaults_ref(tag.clone()));
                 }
             }
             HirBody::FenceOp { dest, tags, .. } => {
@@ -250,7 +265,14 @@ impl TagAnalysis {
                     override_none_usable(tags.clone(), &DataType::Fence),
                 );
             }
-            HirBody::EncodeDo { .. } => {}
+            HirBody::EncodeDo { dests, .. } => {
+                for (dest, dest_tag) in dests {
+                    let t = self.tags.get_mut(dest).unwrap();
+                    t.set_specified_info(dest_tag.clone());
+                    // TODO: check this
+                    t.value.flow = Some(Flow::Usable);
+                }
+            }
         }
     }
 }

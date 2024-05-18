@@ -74,7 +74,7 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 assert!(names.contains_key(lhs));
             }
             SchedStmt::Encode { stmt, .. } => {
-                for s in &stmt.lhs {
+                for (s, _) in &stmt.lhs {
                     names.insert(s.clone(), Mutability::Const);
                 }
             }
@@ -654,13 +654,13 @@ fn collect_encode(
                 name,
                 enum_cast!(SchedExpr::Term, &stmt.rhs)
             );
-            let dest = stmt.lhs[0].clone();
+            let dest = stmt.lhs[0].0.clone();
             env.add_var_equiv(src, &dest, info)?;
             env.add_usage(&dest, WGPUFlags::CopyDst);
             Ok(())
         }
         EncodedCommand::Invoke => {
-            // TODO: typing encode-do
+            // TODO: typing encode-do (should GPU args be refs or values?)
             // if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
             //     collect_assign_call(
             //         ctx,

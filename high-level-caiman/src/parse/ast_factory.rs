@@ -598,7 +598,7 @@ impl ASTFactory {
         });
 
     #[must_use]
-    pub fn encoded_stmt(&self, l: usize, lhs: Vec<String>, rhs: SchedExpr, r: usize) -> EncodedStmt {
+    pub fn encoded_stmt(&self, l: usize, lhs: Vec<(String, Option<Vec<Tag>>)>, rhs: SchedExpr, r: usize) -> EncodedStmt {
         EncodedStmt {
             info: self.info(l, r),
             lhs,

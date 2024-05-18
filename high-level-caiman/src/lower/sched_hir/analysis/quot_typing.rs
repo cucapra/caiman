@@ -61,16 +61,18 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, Edge, START_BLOCK_ID},
+            cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
             HirBody, HirFuncCall, HirOp, OpType, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{Binop, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag},
+    parse::ast::{
+        Binop, DataType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag,
+    },
     typing::{Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
-use super::continuations::compute_pretinuations;
+use super::{continuations::compute_pretinuations, ssa};
 
 /// Deduces the quotients for the value specification. Returns an error
 /// if unification fails, otherwise, writes the deduced quotients to the tags
@@ -81,6 +83,7 @@ pub fn deduce_val_quots(
     cfg: &mut Cfg,
     spec_info: &SpecInfo,
     ctx: &Context,
+    dtypes: &HashMap<String, DataType>,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
     let (env, selects) = unify_nodes(
@@ -88,6 +91,7 @@ pub fn deduce_val_quots(
         cfg,
         ctx,
         Info::default(),
+        dtypes,
         env,
     )?;
     fill_type_info(&env, cfg, &selects);
@@ -485,6 +489,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
     cfg: &Cfg,
     ctx: &Context,
     info: Info,
+    dtypes: &HashMap<String, DataType>,
     mut env: NodeEnv,
 ) -> Result<(NodeEnv, HashMap<usize, String>), LocalError> {
     let pretinuations = compute_pretinuations(cfg);
@@ -525,55 +530,88 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     op,
                     args,
                 } => unify_op(dests, op, args, *info, ctx, env)?,
-                HirBody::Phi { dest, inputs, .. } => unify_phi(
+                HirBody::Phi { dest, inputs, .. }
+                    if !matches!(
+                        dtypes.get(&ssa::original_name(dest)),
+                        Some(DataType::Fence | DataType::Encoder | DataType::Event),
+                    ) =>
+                {
+                    unify_phi(
+                        dest,
+                        inputs,
+                        &pretinuations,
+                        cfg,
+                        block.id,
+                        &mut selects,
+                        env,
+                    )?
+                }
+                HirBody::DeviceCopy {
                     dest,
-                    inputs,
-                    &pretinuations,
-                    cfg,
-                    block.id,
-                    &mut selects,
+                    src,
+                    info,
+                    dest_tag,
+                    ..
+                } => unify_decl(
+                    dest,
+                    dest_tag,
+                    &SchedTerm::Var {
+                        info: *info,
+                        name: src.clone(),
+                        tag: None,
+                    },
                     env,
                 )?,
-                // TODO
+                HirBody::EncodeDo { dests, func, .. } => unify_call(dests, func, ctx, env)?,
                 HirBody::BeginEncoding { .. }
-                | HirBody::DeviceCopy { .. }
-                | HirBody::EncodeDo { .. }
                 | HirBody::FenceOp { .. }
-                | HirBody::Hole(..) => env,
+                | HirBody::Hole(..)
+                // ignore PHIs for non-value types
+                | HirBody::Phi { .. } => env,
             }
         }
-        env = match &block.terminator {
-            Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, env)?,
-            Terminator::Call(..) => unreachable!(),
-            Terminator::Return { dests, rets, .. } => {
-                // pass through is ignored (like next)
-                // the destination tag is the tag for the merged node, we handle this
-                for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
-                    env = add_var_constraint(dest, ret, Info::default(), env)?;
-                }
-                env
-            }
-            Terminator::FinalReturn(ret_names) => {
-                let output_classes: Vec<_> = env.get_output_classes().to_vec();
-                assert_eq!(ret_names.len(), output_classes.len());
-                for (ret_name, class) in ret_names.iter().zip(output_classes.into_iter()) {
-                    env = add_constraint(
-                        &format!("{ret_name}!"),
-                        &ValQuot::Output(MetaVar::new_var_name(ret_name)),
-                        info,
-                        env,
-                    )?;
-                    env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
-                }
-                env
-            }
-            Terminator::Select { .. }
-            | Terminator::None
-            | Terminator::Next(..)
-            | Terminator::Yield(_) => env,
-        }
+        env = unify_terminator(block, ctx, info, env)?;
     }
     Ok((env, selects))
+}
+
+/// Unifies the terminator of a basic block with the value specification
+fn unify_terminator(
+    block: &BasicBlock,
+    ctx: &Context,
+    info: Info,
+    mut env: NodeEnv,
+) -> Result<NodeEnv, LocalError> {
+    match &block.terminator {
+        Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, env),
+        Terminator::Call(..) => unreachable!(),
+        Terminator::Return { dests, rets, .. } => {
+            // pass through is ignored (like next)
+            // the destination tag is the tag for the merged node, we handle this
+            for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
+                env = add_var_constraint(dest, ret, Info::default(), env)?;
+            }
+            Ok(env)
+        }
+        Terminator::FinalReturn(ret_names) => {
+            let output_classes: Vec<_> = env.get_output_classes().to_vec();
+            assert_eq!(ret_names.len(), output_classes.len());
+            for (ret_name, class) in ret_names.iter().zip(output_classes.into_iter()) {
+                env = add_constraint(
+                    &format!("{ret_name}!"),
+                    &ValQuot::Output(MetaVar::new_var_name(ret_name)),
+                    info,
+                    env,
+                )?;
+                env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
+            }
+            Ok(env)
+        }
+        Terminator::Select { .. }
+        | Terminator::None
+        | Terminator::Next(..)
+        | Terminator::Yield(_) => Ok(env),
+    }
 }
 
 /// Fills the value quotient spec node id in `tag` for `name`. If the quotient is unspecified,
@@ -652,6 +690,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
 /// * `selects` - A map from each block with a select node to the name of the spec variable
 /// which maps to the select node.
 fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>) {
+    // eprintln!("{env:#?}");
     for block in cfg.blocks.values_mut() {
         let mut insertions = vec![];
         for (idx, stmt) in block.stmts.iter_mut().enumerate() {
@@ -675,12 +714,23 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                         fill_val_quotient(name, tag, env, block.id);
                     }
                 }
-                // TODO: typing for encodings
+                HirBody::EncodeDo { dests, func, .. } => {
+                    fill_val_quotient(
+                        &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                        &mut func.tag,
+                        env,
+                        block.id,
+                    );
+                    for (dest, tag) in dests {
+                        fill_val_quotient(dest, tag, env, block.id);
+                    }
+                }
+                HirBody::DeviceCopy { dest, dest_tag, .. } => {
+                    fill_val_quotient(dest, dest_tag, env, block.id);
+                }
                 HirBody::Hole(_)
                 | HirBody::RefLoad { .. }
                 | HirBody::BeginEncoding { .. }
-                | HirBody::DeviceCopy { .. }
-                | HirBody::EncodeDo { .. }
                 | HirBody::FenceOp { .. } => {}
                 HirBody::Phi { dest, .. } => {
                     insertions.push((

@@ -374,7 +374,7 @@ fn lower_device_copy(
 /// * `encoder` - the name of the encoder to use
 /// * `temp_id` - the next available temporary id
 fn lower_encode_do(
-    dests: &[String],
+    dests: &[(String, TripleTag)],
     func: &HirFuncCall,
     encoder: &str,
     temp_id: usize,
@@ -393,7 +393,7 @@ fn lower_encode_do(
             outputs: Hole::Filled(
                 dests
                     .iter()
-                    .map(|n| Hole::Filled(asm::NodeId(n.clone())))
+                    .map(|(n, _)| Hole::Filled(asm::NodeId(n.clone())))
                     .collect(),
             ),
             external_function_id: Hole::Filled(asm::ExternalFunctionId(func.target.to_string())),

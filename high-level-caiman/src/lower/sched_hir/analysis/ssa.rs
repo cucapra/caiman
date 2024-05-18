@@ -89,13 +89,20 @@ fn find_vars(cfg: &Cfg) -> HashMap<String, Vec<usize>> {
                     res.entry(def.clone()).or_default().push(*blk_id);
                 }
             }
-            if let HirBody::RefStore { lhs, .. } = stmt {
-                res.entry(lhs.clone()).or_default().push(*blk_id);
+            if let Some(writes) = stmt.get_write_uses() {
+                for write in writes {
+                    res.entry(write.clone()).or_default().push(*blk_id);
+                }
             }
         }
         if let Some(defs) = block.terminator.get_defs() {
             for def in &defs {
                 res.entry(def.clone()).or_default().push(*blk_id);
+            }
+        }
+        if let Some(writes) = block.terminator.get_write_uses() {
+            for write in writes {
+                res.entry(write.clone()).or_default().push(*blk_id);
             }
         }
     }
@@ -271,7 +278,7 @@ pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>) -> Cfg {
 /// Returns the original name of a variable. For example, `x.0` would become
 /// `x`. If the variable name is not fromatted correctly, this function will return the
 /// passed in name.
-fn original_name(name: &str) -> String {
+pub fn original_name(name: &str) -> String {
     Regex::new(r"\.\d+$").unwrap().replace(name, "").to_string()
 }
 

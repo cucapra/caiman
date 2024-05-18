@@ -180,6 +180,11 @@ MaybeArgFullType: (String, Option<FullType>) = {
     <i: Id> => (String::from(i), None),
 }
 
+MaybeArgTaggedType: (String, Option<Vec<Tag>>) = { 
+    <i: Id> <t: TagOp> => (String::from(i), Some(t)),
+    <i: Id> => (String::from(i), None),
+}
+
 MultiType: Vec<FullType> = {
     "(" <TupleCommaList<FullType>> ")" => <>,
     <FullType> => vec![<>],
@@ -391,7 +396,7 @@ TemplateArgs: TemplateArgs = {
 
 // Encoded scheduling statements which are sent to a device
 EncodedStmt: EncodedStmt = {
-    <@L> <CommaList<Id>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
+    <@L> <CommaList<MaybeArgTaggedType>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
 } 
 
 

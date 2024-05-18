@@ -515,7 +515,7 @@ pub type SchedExpr = NestedExpr<SchedTerm>;
 #[derive(Clone, Debug)]
 pub struct EncodedStmt {
     pub info: Info,
-    pub lhs: Vec<Name>,
+    pub lhs: Vec<MaybeArg<Vec<Tag>>>,
     pub rhs: SchedExpr,
 }
 

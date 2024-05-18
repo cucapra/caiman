@@ -176,6 +176,7 @@ pub enum HirBody {
     DeviceCopy {
         info: Info,
         dest: Name,
+        dest_tag: TripleTag,
         src: Name,
         dir: DataMovement,
         encoder: Name,
@@ -195,7 +196,7 @@ pub enum HirBody {
     /// pointers
     EncodeDo {
         info: Info,
-        dests: Vec<Name>,
+        dests: Vec<(Name, TripleTag)>,
         func: HirFuncCall,
         encoder: Name,
     },
@@ -400,6 +401,10 @@ pub trait Hir {
     /// A def is a **NEW** variable, not a write to an existing variable.
     fn get_defs(&self) -> Option<Vec<String>>;
 
+    /// Get the variables that are written to by this statement.
+    /// These are uses that are written to.
+    fn get_write_uses(&self) -> Option<Vec<String>>;
+
     /// Renames all uses in this statement using the given function which is
     /// passed the name of the variable and the type of use.
     fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String);
@@ -428,6 +433,9 @@ impl Hir for Terminator {
             // but rather they are the defs of the left and right funclets
             Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => None,
         }
+    }
+    fn get_write_uses(&self) -> Option<Vec<String>> {
+        None
     }
 
     fn get_uses(&self, uses: &mut BTreeSet<String>) {
@@ -573,12 +581,13 @@ impl HirBody {
                 match cmd {
                     EncodedCommand::Copy => {
                         assert_eq!(stmt.lhs.len(), 1);  
-                        Self::DeviceCopy { info, dest: stmt.lhs[0].clone(), 
+                        Self::DeviceCopy { info, dest: stmt.lhs[0].0.clone(), 
+                            dest_tag: TripleTag::from_opt(&stmt.lhs[0].1), 
                             src: enum_cast!(SchedTerm::Var {name, ..}, name, enum_cast!(SchedExpr::Term, stmt.rhs)), 
                             dir: DataMovement::HostToDevice, encoder }
                     },
                     EncodedCommand::Invoke => {
-                        let dests = stmt.lhs.into_iter().collect();
+                        let dests = stmt.lhs.into_iter().map(|(nm, tag)| (nm, TripleTag::from_opt(&tag))).collect();
                         if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, stmt.rhs) {
                             let func = HirFuncCall::new(call);
                             Self::EncodeDo { info, dests, func, encoder}
@@ -725,7 +734,7 @@ impl Hir for HirBody {
                 for arg in &func.args {
                     res.insert(arg.clone());
                 }
-                for name in dests {
+                for (name, _) in dests {
                     res.insert(name.clone());
                 }
                 res.insert(encoder.clone());
@@ -738,6 +747,18 @@ impl Hir for HirBody {
             Self::FenceOp { src, .. } => 
                 term_get_uses(src, res),
             
+        }
+    }
+
+    fn get_write_uses(&self) -> Option<Vec<String>> {
+        match self {
+            Self::RefStore { lhs, ..} => Some(vec![lhs.clone()]),
+            Self::EncodeDo { dests, ..} => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
+            Self::ConstDecl { .. } | Self::VarDecl { .. } | Self::RefLoad { .. } 
+            | Self::Op { .. } | Self::Hole(..) | Self::InAnnotation(..) 
+            | Self::OutAnnotation(..) | Self::BeginEncoding { .. } 
+            | Self::Phi { .. } | Self::DeviceCopy { .. } 
+            | Self::FenceOp { .. } => None,
         }
     }
 
@@ -836,7 +857,7 @@ impl Hir for HirBody {
                 for arg in &mut func.args {
                     *arg = f(arg, UseType::Read);
                 }
-                for dest in dests {
+                for (dest, _) in dests {
                     *dest = f(dest, UseType::Write);
                 }
                 *encoder = f(encoder, UseType::Read);

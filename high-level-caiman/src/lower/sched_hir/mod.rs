@@ -539,6 +539,7 @@ impl Funclets {
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,
+            &data_types,
         )
         .unwrap();
         cfg = transform_out_ssa(cfg);

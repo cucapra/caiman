@@ -4,7 +4,7 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     lower::tuple_id,
-    parse::ast::{Binop, DataType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm},
+    parse::ast::{Binop, DataType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TemplateArgs},
 };
 
 use super::{
@@ -46,6 +46,7 @@ fn collect_spec_assign_call(
     lhs: &[(String, Option<DataType>)],
     function: &SpecExpr,
     args: &[SpecExpr],
+    templates: &Option<TemplateArgs>,
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
     info: Info,
@@ -61,7 +62,7 @@ fn collect_spec_assign_call(
             .clone();
         let output_types = signatures.get(func_name).unwrap().output.clone();
         #[allow(clippy::needless_collect)]
-        let arg_nodes: Vec<_> = args
+        let mut arg_nodes: Vec<_> = args
             .iter()
             .map(|arg| {
                 let t = enum_cast!(SpecExpr::Term, arg);
@@ -89,7 +90,18 @@ fn collect_spec_assign_call(
                 ),
             ));
         }
-
+        if let Some(TemplateArgs::Vals(vs)) = templates {
+            let mut res: Vec<_> = vs
+                .iter()
+                .map(|arg| {
+                    let t = enum_cast!(SpecExpr::Term, arg);
+                    let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+                    name.to_string()
+                })
+                .collect();
+            res.extend(arg_nodes);
+            arg_nodes = res;
+        }
         let tuple_name = tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>());
         ctx.nodes.add_quotient(
             &tuple_name,
@@ -164,9 +176,10 @@ fn collect_spec_assign_term(
         SpecTerm::Call {
             function,
             args,
+            templates,
             info,
             ..
-        } => collect_spec_assign_call(lhs, function, args, ctx, signatures, *info),
+        } => collect_spec_assign_call(lhs, function, args, templates, ctx, signatures, *info),
     }
 }
 
