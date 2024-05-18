@@ -19,7 +19,7 @@ match {
   // Keywords (omitting things with symbols in here is ok for some reason)
   "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
   "let", "returns", "return", "var", "if", "else",
-  "i32", "i64", "bool", "Event", "BufferSpace",
+  "i32", "i64", "bool", "Event", "BufferSpace", "Encoder", "Fence",
   "true", "false", "import",
   "pure",
   "node","none","input","output","usable","saved","need","dead",
@@ -137,6 +137,8 @@ BaseType: DataType = {
     "bool" => DataType::Bool,
     "Event" => DataType::Event,
     "BufferSpace" => DataType::BufferSpace,
+    "Encoder" => DataType::Encoder,
+    "Fence" => DataType::Fence,
     <n: Id> => DataType::UserDefined(String::from(n)),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),

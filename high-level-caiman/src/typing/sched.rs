@@ -5,7 +5,7 @@ use crate::{
     error::{type_error, Info, LocalError},
     parse::ast::{
         Binop, DataType, EncodedCommand, EncodedStmt, FullType, SchedExpr, SchedFuncCall,
-        SchedLiteral, SchedStmt, SchedTerm, Uop, WGPUFlags,
+        SchedLiteral, SchedStmt, SchedTerm, TimelineOperation, Uop, WGPUFlags,
     },
 };
 use std::iter::once;
@@ -441,6 +441,61 @@ fn collect_dot(
     Ok(())
 }
 
+/// Collects constraints for a timeline operation (submit or await).
+fn collect_timeline_op(
+    env: &mut DTypeEnv,
+    op: TimelineOperation,
+    dest: &[(String, Option<FullType>)],
+    arg: &SchedExpr,
+    info: Info,
+) -> Result<(), LocalError> {
+    let arg_name = enum_cast!(
+        SchedTerm::Var { name, .. },
+        name,
+        enum_cast!(SchedExpr::Term, arg)
+    );
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Timeline operation has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let dest_name = &dest[0].0;
+    match op {
+        TimelineOperation::Submit => {
+            env.add_dtype_constraint(dest_name, DataType::Fence, info)?;
+            env.add_dtype_constraint(arg_name, DataType::Encoder, info)
+        }
+        TimelineOperation::Await => {
+            // TODO
+            env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
+            env.add_dtype_constraint(arg_name, DataType::Fence, info)
+        }
+    }
+}
+
+/// Collects constraints for an encode begin operation.
+fn collect_begin_encode(
+    env: &mut DTypeEnv,
+    dest: &[(String, Option<FullType>)],
+    info: Info,
+) -> Result<(), LocalError> {
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: EncodeBegin has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let dest_name = &dest[0].0;
+    env.add_dtype_constraint(dest_name, DataType::Encoder, info)
+}
+
 /// Unifies base types for a schedule.
 /// # Returns
 /// The type variables of the values being returned to the parent scope.
@@ -533,13 +588,20 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
             // TODO: implement timeline operations
             SchedStmt::Decl {
-                expr:
-                    Some(SchedExpr::Term(
-                        SchedTerm::TimelineOperation { .. } | SchedTerm::EncodeBegin { .. },
-                    )),
+                lhs,
+                expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { op, arg, info, .. })),
                 ..
+            } => {
+                collect_timeline_op(env, *op, lhs, arg, *info)?;
             }
-            | SchedStmt::InEdgeAnnotation { .. }
+            SchedStmt::Decl {
+                lhs,
+                expr: Some(SchedExpr::Term(SchedTerm::EncodeBegin { info, .. })),
+                ..
+            } => {
+                collect_begin_encode(env, lhs, *info)?;
+            }
+            SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
             SchedStmt::Call(info, call_info) => {

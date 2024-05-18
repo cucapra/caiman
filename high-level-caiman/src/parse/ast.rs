@@ -38,6 +38,8 @@ pub enum DataType {
     Bool,
     BufferSpace,
     Event,
+    Encoder,
+    Fence,
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
     UserDefined(String),
@@ -91,6 +93,8 @@ impl Display for DataType {
             Self::Bool => write!(f, "bool"),
             Self::BufferSpace => write!(f, "BufferSpace"),
             Self::Event => write!(f, "Event"),
+            Self::Encoder => write!(f, "Encoder"),
+            Self::Fence => write!(f, "Fence"),
             Self::Array(..) => todo!(),
             Self::Slice(typ) => {
                 if f.alternate() {

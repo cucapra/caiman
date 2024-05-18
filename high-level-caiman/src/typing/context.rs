@@ -74,7 +74,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i64::gs"),
+            name: String::from("i64::gs"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I64,
                 storage_place: ir::Place::Gpu,
@@ -82,7 +82,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i64::gd"),
+            name: String::from("i64::gd"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I64,
                 storage_place: ir::Place::Gpu,
@@ -103,6 +103,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
+        // TODO: type names
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&i32::gs"),
             data: asm::LocalTypeInfo::Ref {
@@ -112,7 +113,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("&i32::gd"),
+            name: String::from("i32::gd"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Gpu,

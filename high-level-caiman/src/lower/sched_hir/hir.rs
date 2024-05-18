@@ -832,9 +832,12 @@ impl Hir for HirBody {
                 *dest = f(dest, UseType::Write);
                 *encoder = f(encoder, UseType::Read);
             }
-            Self::EncodeDo { func, encoder, ..} => {
+            Self::EncodeDo { func, encoder, dests, ..} => {
                 for arg in &mut func.args {
                     *arg = f(arg, UseType::Read);
+                }
+                for dest in dests {
+                    *dest = f(dest, UseType::Write);
                 }
                 *encoder = f(encoder, UseType::Read);
             }

@@ -1,0 +1,91 @@
+#version 0.1.0
+
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+extern(gpu) simple2(x : i32) -> out: i32
+{
+    path : "gpu_external2.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x: i32, b: bool) -> out: i32
+{
+    c :- 1
+    y :- simple'<c, c, c>(x)
+    y2 :- simple2'<c, c, c>(x)
+    ret :- y if b else y2
+    returns ret
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc1, rem1 :- encode_event(e)
+    sub :- submit_event(rem1)
+    snc :- sync_event(loc1, sub)
+    returns snc
+}
+
+sptl space(bs: BufferSpace) -> out: BufferSpace {
+    returns bs
+}
+
+
+fn foo_impl(x: &i32, b: bool) -> i32 impls space, foo_time, foo {
+    @in {input: node(tmln.e), output: node(tmln.out) };
+    let e = encode-begin @ node(tmln.(loc1, rem1)) { x_gpu, y_gpu } gpu;
+    encode e.copy[x_gpu <- x];
+    @out { x_gpu: none(sptl)-saved, 
+           y_gpu: [none(val)-dead, none(sptl)-saved] 
+    };
+    let f = if b {
+        @in { input: node(tmln.loc1), output: node(tmln.loc1),
+            x_gpu: [node(tmln.rem1), node(val.x)], 
+            y_gpu: [node(tmln.rem1), none(val)-dead],
+            e: node(tmln.rem1)
+        };
+        encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu) @ node(val.y)];
+        @out { y_gpu: [node(tmln.sub)-usable, node(val.y)-usable] };
+        submit @ node(tmln.sub) e
+    } else {
+        @in { input: node(tmln.loc1), output: node(tmln.loc1),
+            x_gpu: [node(tmln.rem1), node(val.x)], 
+            y_gpu: [node(tmln.rem1), none(val)-dead],
+            e: node(tmln.rem1)
+        };
+        encode e.call[y_gpu <- simple2'<1, 1, 1>(x_gpu) @ node(val.y2)];
+        @out { y_gpu: [node(tmln.sub)-usable, node(val.y2)-usable] };
+        submit @ node(tmln.sub) e
+    };
+    @in { input: node(tmln.loc1), output: node(tmln.out),
+        y_gpu: [node(tmln.sub), node(val.ret)], f: [node(tmln.sub), none(val)] };
+    @out {input: node(tmln.out), output: node(tmln.out) };
+    (await @ node(tmln.snc) f).y_gpu
+}
+
+pipeline main { foo_impl }

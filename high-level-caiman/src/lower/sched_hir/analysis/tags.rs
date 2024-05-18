@@ -40,6 +40,16 @@ fn override_none_usable(mut tag: TripleTag, dtype: &DataType) -> TripleTag {
     tag
 }
 
+fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
+    tag.spatial
+        .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
+    tag.timeline
+        .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
+    tag.value
+        .override_unknown_info(none_tag(SpecType::Value, Flow::Usable));
+    tag
+}
+
 /// Tag analysis for determining tags
 /// Top: empty set
 /// Meet: union
@@ -125,6 +135,7 @@ impl TagAnalysis {
 
 impl TagAnalysis {
     /// Transfer function for an HIR body statement
+    #[allow(clippy::too_many_lines)]
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
@@ -218,7 +229,28 @@ impl TagAnalysis {
                 }
             }
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
-            HirBody::BeginEncoding { .. } | HirBody::EncodeDo { .. } | HirBody::FenceOp { .. } => {}
+            HirBody::BeginEncoding {
+                encoder,
+                tags,
+                device_vars,
+                ..
+            } => {
+                self.tags.insert(
+                    encoder.clone(),
+                    override_none_usable(tags.clone(), &DataType::Encoder),
+                );
+                for (var, tag) in device_vars {
+                    self.tags
+                        .insert(var.clone(), override_none_usable_ref(tag.clone()));
+                }
+            }
+            HirBody::FenceOp { dest, tags, .. } => {
+                self.tags.insert(
+                    dest.clone().unwrap(),
+                    override_none_usable(tags.clone(), &DataType::Fence),
+                );
+            }
+            HirBody::EncodeDo { .. } => {}
         }
     }
 }
