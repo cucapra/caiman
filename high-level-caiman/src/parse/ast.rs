@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+};
 
 use caiman::ir;
 
@@ -38,12 +41,13 @@ pub enum DataType {
     Bool,
     BufferSpace,
     Event,
-    Encoder,
-    Fence,
+    Encoder(Option<Box<DataType>>),
+    Fence(Option<Box<DataType>>),
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
     UserDefined(String),
     Ref(Box<DataType>),
+    Record(BTreeMap<String, FlaggedType>),
 }
 
 impl PartialEq for DataType {
@@ -93,8 +97,8 @@ impl Display for DataType {
             Self::Bool => write!(f, "bool"),
             Self::BufferSpace => write!(f, "BufferSpace"),
             Self::Event => write!(f, "Event"),
-            Self::Encoder => write!(f, "Encoder"),
-            Self::Fence => write!(f, "Fence"),
+            Self::Encoder(None) => write!(f, "Encoder"),
+            Self::Fence(None) => write!(f, "Fence"),
             Self::Array(..) => todo!(),
             Self::Slice(typ) => {
                 if f.alternate() {
@@ -111,6 +115,15 @@ impl Display for DataType {
                     write!(f, "&{typ}")
                 }
             }
+            Self::Record(fields) => {
+                write!(f, "{{ ")?;
+                for (name, typ) in fields {
+                    write!(f, "{name}: {typ}, ")?;
+                }
+                write!(f, "}}")
+            }
+            Self::Encoder(Some(typ)) => write!(f, "Encoder'{typ}"),
+            Self::Fence(Some(typ)) => write!(f, "Fence'{typ}"),
         }
     }
 }
@@ -345,7 +358,7 @@ impl PartialEq for Tag {
 impl Eq for Tag {}
 
 /// WGPU flags that can be applied to a buffer
-#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
 pub enum WGPUFlags {
     Storage,
     MapWrite,
@@ -353,6 +366,19 @@ pub enum WGPUFlags {
     CopySrc,
     CopyDst,
     Uniform,
+}
+
+impl std::fmt::Display for WGPUFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Storage => write!(f, "storage"),
+            Self::MapWrite => write!(f, "map_write"),
+            Self::MapRead => write!(f, "map_read"),
+            Self::CopySrc => write!(f, "copy_src"),
+            Self::CopyDst => write!(f, "copy_dst"),
+            Self::Uniform => write!(f, "uniform"),
+        }
+    }
 }
 
 impl TryFrom<&str> for WGPUFlags {
@@ -387,10 +413,19 @@ impl WGPUFlags {
 
 /// WGPU settings that can be applied to a buffer. Settings
 /// are flags that can have values, such as `alignment_bits`
-#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
 pub enum WGPUSettings {
     AlignmentBits(usize),
     ByteSize(usize),
+}
+
+impl std::fmt::Display for WGPUSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AlignmentBits(val) => write!(f, "alignment_bits={val}"),
+            Self::ByteSize(val) => write!(f, "byte_size={val}"),
+        }
+    }
 }
 
 impl WGPUSettings {
@@ -414,15 +449,43 @@ impl WGPUSettings {
 /// A flagged type is a base type parameterized by an optional set of WGPU
 /// flags and settings
 /// Ex. `i64<storage, map_write, alignment_bits=8>`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FlaggedType {
     pub info: Info,
     pub base: DataType,
     /// WGPU flags, can be empty
-    pub flags: Vec<WGPUFlags>,
+    pub flags: BTreeSet<WGPUFlags>,
     /// WGPU settings, (flags that can have values, such as `alignment_bits`)
     /// can be empty
-    pub settings: Vec<WGPUSettings>,
+    pub settings: BTreeSet<WGPUSettings>,
+}
+
+impl std::fmt::Display for FlaggedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.base)?;
+        if !self.flags.is_empty() || !self.settings.is_empty() {
+            write!(f, "'<")?;
+            for flag in &self.flags {
+                write!(f, "{flag}, ")?;
+            }
+            for setting in &self.settings {
+                write!(f, "{setting}, ")?;
+            }
+            write!(f, ">")?;
+        }
+        Ok(())
+    }
+}
+
+impl From<DataType> for FlaggedType {
+    fn from(base: DataType) -> Self {
+        Self {
+            info: Info::default(),
+            base,
+            flags: BTreeSet::new(),
+            settings: BTreeSet::new(),
+        }
+    }
 }
 
 /// A full scheduling type:

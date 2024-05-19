@@ -11,7 +11,7 @@ pub use hir::*;
 
 use crate::{
     lower::IN_STEM,
-    parse::ast::{DataType, SchedulingFunc},
+    parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS},
 };
 use caiman::assembly::ast::{self as asm};
@@ -547,8 +547,24 @@ impl Funclets {
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
         );
-        // TODO: populate active fences from function inputs
-        let _ = analyze(&mut cfg, &ActiveFences::top(&[]));
+        let _ = analyze(
+            &mut cfg,
+            &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
+                if let Some(FullType {
+                    base:
+                        Some(FlaggedType {
+                            base: DataType::Fence(_),
+                            ..
+                        }),
+                    ..
+                }) = t
+                {
+                    Some(n)
+                } else {
+                    None
+                }
+            })),
+        );
         let finfo = FuncInfo {
             name: f.name,
             input: hir_inputs,
@@ -593,7 +609,7 @@ impl Funclets {
             }
         }
         for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
-            data_types.insert(format!("{RET_VAR}{id}"), out_ty.clone());
+            data_types.insert(format!("{RET_VAR}{id}"), out_ty.base.clone());
         }
         (data_types, variables, f.flags.clone())
     }

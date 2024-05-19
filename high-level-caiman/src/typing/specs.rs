@@ -112,14 +112,15 @@ fn collect_spec_assign_call(
         );
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
-                if a != typ {
+                if a != &typ.base {
                     return Err(type_error(
                         info,
                         &format!("Annotation of {name} conflicts with return type of {func_name}",),
                     ));
                 }
             }
-            ctx.types.add_dtype_constraint(name, typ.clone(), info)?;
+            ctx.types
+                .add_dtype_constraint(name, typ.base.clone(), info)?;
             ctx.nodes.add_quotient(
                 name,
                 ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
@@ -127,7 +128,7 @@ fn collect_spec_assign_call(
         }
         for (arg_name, arg_type) in arg_nodes.iter().zip(input_types.iter()) {
             ctx.types
-                .add_dtype_constraint(arg_name, arg_type.clone(), info)?;
+                .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
         }
         Ok(())
     } else {
@@ -322,7 +323,7 @@ fn resolve_types(
 fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError> {
     let info = ctx.info;
     for (arg, typ) in ctx.sig.input.clone() {
-        env.types.add_dtype_constraint(&arg, typ, info)?;
+        env.types.add_dtype_constraint(&arg, typ.base, info)?;
         env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
     }
     Ok(())
@@ -348,7 +349,7 @@ fn collect_spec_returns(
                 ));
             }
             env.types
-                .add_dtype_constraint(name, ctx.sig.output[0].1.clone(), info)?;
+                .add_dtype_constraint(name, ctx.sig.output[0].1.base.clone(), info)?;
             env.nodes.add_quotient(
                 &ctx.sig.output[0].0,
                 ValQuot::Output(MetaVar::new_class_name(name)),
@@ -381,7 +382,7 @@ fn collect_spec_returns(
                 }
             }
             for (name, (class, typ)) in constraints {
-                env.types.add_dtype_constraint(name, typ, info)?;
+                env.types.add_dtype_constraint(name, typ.base, info)?;
                 env.nodes
                     .add_quotient(&class, ValQuot::Output(MetaVar::new_class_name(name)));
             }

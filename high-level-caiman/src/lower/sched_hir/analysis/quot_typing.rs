@@ -533,7 +533,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                 HirBody::Phi { dest, inputs, .. }
                     if !matches!(
                         dtypes.get(&ssa::original_name(dest)),
-                        Some(DataType::Fence | DataType::Encoder | DataType::Event),
+                        Some(DataType::Fence(_) | DataType::Encoder(_) | DataType::Event),
                     ) =>
                 {
                     unify_phi(

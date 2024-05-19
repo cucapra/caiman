@@ -252,7 +252,7 @@ impl TagAnalysis {
             } => {
                 self.tags.insert(
                     encoder.clone(),
-                    override_none_usable(tags.clone(), &DataType::Encoder),
+                    override_none_usable(tags.clone(), &DataType::Encoder(None)),
                 );
                 for (var, tag) in device_vars {
                     self.tags
@@ -262,7 +262,7 @@ impl TagAnalysis {
             HirBody::FenceOp { dest, tags, .. } => {
                 self.tags.insert(
                     dest.clone().unwrap(),
-                    override_none_usable(tags.clone(), &DataType::Fence),
+                    override_none_usable(tags.clone(), &DataType::Fence(None)),
                 );
             }
             HirBody::EncodeDo { dests, .. } => {

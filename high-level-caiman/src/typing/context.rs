@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::binop_to_str;
-use crate::parse::ast::FullType;
+use crate::parse::ast::{FlaggedType, FullType};
 use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, LOCAL_TEMP_FLAGS};
 use crate::{
     lower::BOOL_FFI_TYPE,
@@ -259,7 +259,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             }
             for ((decl_name, decl_typ), (_, spec_typ)) in input.iter().zip(val_sig.input.iter()) {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {
-                    if !dt.base.refines(spec_typ) {
+                    if !dt.base.refines(&spec_typ.base) {
                         return Err(type_error(
                             *info,
                             &format!(
@@ -273,8 +273,9 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                 }
             }
             let outs = val_sig.output.clone();
-            let must_be_mut =
-                collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
+            let must_be_mut = collect_schedule(
+                &ctx, &mut env, statements, output, input, &outs, *info, name,
+            )?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
                 sched_info
@@ -311,10 +312,7 @@ fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
     } in externs
     {
         let op_name = binop_to_str(*op, &format!("{op_l:#}"), &format!("{op_r:#}")).to_string();
-        let sig = Signature {
-            input: vec![op_l.clone(), op_r.clone()],
-            output: vec![ret.clone()],
-        };
+        let sig = Signature::new(vec![op_l.clone(), op_r.clone()], vec![ret.clone()]);
         ctx.signatures.insert(op_name.clone(), sig.clone());
         ctx.scheds.insert(op_name, SchedOrExtern::Extern(sig));
     }
@@ -408,16 +406,13 @@ fn collect_class_signatures(
                 info,
                 ..
             } => {
-                let sig = NamedSignature {
-                    input: input
+                let sig = NamedSignature::new(
+                    &input
                         .iter()
                         .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
                         .collect::<Vec<_>>(),
-                    output: output
-                        .iter()
-                        .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
-                        .collect::<Vec<_>>(),
-                };
+                    output.iter(),
+                );
                 let unnamed_sig = Signature::from(&sig);
                 if let Some(member_sig) = &member_sig {
                     if member_sig != &unnamed_sig {
@@ -519,7 +514,6 @@ fn make_signature(
                     .base
                     .as_ref()
                     .ok_or_else(|| type_error(info, "Schedule inputs require a type"))?
-                    .base
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -529,7 +523,6 @@ fn make_signature(
                 Ok(x.base
                     .as_ref()
                     .ok_or_else(|| type_error(info, "Function outputs require a data type"))?
-                    .base
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -570,6 +563,16 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
     Ok(ctx)
 }
 
+fn collect_user_defined_types(tl: &[TopLevel]) -> HashMap<String, FlaggedType> {
+    let mut res = HashMap::new();
+    for decl in tl {
+        if let TopLevel::Typedef { name, typ, .. } = decl {
+            res.insert(name.clone(), typ.clone());
+        }
+    }
+    res
+}
+
 impl Context {
     /// Creates a global context from a list of top-level declarations.
     /// # Errors
@@ -584,6 +587,7 @@ impl Context {
             signatures: HashMap::new(),
             scheds: HashMap::new(),
             externs: HashSet::new(),
+            user_types: collect_user_defined_types(tl),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;

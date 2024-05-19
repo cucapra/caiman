@@ -87,13 +87,13 @@ impl DataType {
             Self::BufferSpace => TypeId(String::from("BufferSpace")),
             Self::Event => TypeId(String::from("Event")),
             Self::UserDefined(name) => TypeId(name.clone()),
-            Self::Encoder => TypeId(String::from("Encoder")),
-            Self::Fence => TypeId(String::from("Fence")),
+            Self::Encoder(None) => TypeId(String::from("Encoder")),
+            Self::Fence(None) => TypeId(String::from("Fence")),
             Self::Ref(t) => TypeId(format!(
                 "&{}",
                 t.asm_type()
             )),
-            Self::Array(..) | Self::Slice(..) => unimplemented!("TODO"),
+            _ => unimplemented!("TODO"),
         }
     }
     

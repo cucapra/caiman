@@ -166,8 +166,8 @@ impl TryFrom<DTypeConstraint> for DataType {
                 DTypeConstraint::try_from(x).map_err(|_| ())?,
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
-            DTypeConstraint::Encoder => Ok(Self::Encoder),
-            DTypeConstraint::Fence => Ok(Self::Fence),
+            DTypeConstraint::Encoder => Ok(Self::Encoder(None)),
+            DTypeConstraint::Fence => Ok(Self::Fence(None)),
         }
     }
 }
@@ -225,8 +225,8 @@ impl From<DataType> for DTypeConstraint {
             DataType::BufferSpace => Self::BufferSpace,
             DataType::Event => Self::Event,
             DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
-            DataType::Encoder => Self::Encoder,
-            DataType::Fence => Self::Fence,
+            DataType::Encoder(None) => Self::Encoder,
+            DataType::Fence(None) => Self::Fence,
             _ => todo!(),
         }
     }

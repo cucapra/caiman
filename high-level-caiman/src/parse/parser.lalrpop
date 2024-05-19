@@ -2,6 +2,7 @@
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
+use std::collections::BTreeMap;
 
 
 grammar(astf: &ASTFactory);
@@ -137,13 +138,20 @@ BaseType: DataType = {
     "bool" => DataType::Bool,
     "Event" => DataType::Event,
     "BufferSpace" => DataType::BufferSpace,
-    "Encoder" => DataType::Encoder,
-    "Fence" => DataType::Fence,
+    "Encoder" => DataType::Encoder(None),
+    "Fence" => DataType::Fence(None),
     <n: Id> => DataType::UserDefined(String::from(n)),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
     "&" <BaseType> => DataType::Ref(Box::new(<>)),
+    "{" <v: CommaList<Arg<FlaggedType>>> "}" => {
+        let mut map = BTreeMap::new();
+        for (k, v) in v {
+            map.insert(k, v);
+        }
+        DataType::Record(map)
+    },
 }
 
 MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
@@ -254,7 +262,8 @@ QuotRef: QuotientReference = {
 
 // Flagged type: base type with flags and settings
 FlaggedType: FlaggedType = {
-    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_type(<>)
+    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_type(<>),
+    <@L> <BaseType> "'" <BaseType> <("<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_template_type(<>),
 }
 
 // Flag or setting. A flag is a name with no value. A setting is a name with a value

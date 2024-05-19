@@ -4,8 +4,8 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     parse::ast::{
-        Binop, DataType, EncodedCommand, EncodedStmt, FullType, SchedExpr, SchedFuncCall,
-        SchedLiteral, SchedStmt, SchedTerm, TimelineOperation, Uop, WGPUFlags,
+        Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType, FullType, SchedExpr,
+        SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, TimelineOperation, Uop, WGPUFlags,
     },
 };
 use std::iter::once;
@@ -369,14 +369,14 @@ fn collect_assign_call(
         ));
     }
     for (arg, arg_type) in arg_names.iter().zip(sig.input.iter()) {
-        env.add_dtype_constraint(arg, arg_type.clone(), info)?;
+        env.add_dtype_constraint(arg, arg_type.base.clone(), info)?;
     }
     for ((dest_name, dest_annot), typ) in dest.iter().zip(sig.output.iter()) {
         if let Some(FullType {
             base: Some(anot), ..
         }) = &dest_annot
         {
-            if &anot.base != typ {
+            if anot.base != typ.base {
                 return Err(type_error(
                     info,
                     &format!(
@@ -385,7 +385,7 @@ fn collect_assign_call(
                 ));
             }
         }
-        env.add_dtype_constraint(dest_name, typ.clone(), info)?;
+        env.add_dtype_constraint(dest_name, typ.base.clone(), info)?;
     }
     Ok(())
 }
@@ -466,13 +466,13 @@ fn collect_timeline_op(
     let dest_name = &dest[0].0;
     match op {
         TimelineOperation::Submit => {
-            env.add_dtype_constraint(dest_name, DataType::Fence, info)?;
-            env.add_dtype_constraint(arg_name, DataType::Encoder, info)
+            env.add_dtype_constraint(dest_name, DataType::Fence(None), info)?;
+            env.add_dtype_constraint(arg_name, DataType::Encoder(None), info)
         }
         TimelineOperation::Await => {
             // TODO
             env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
-            env.add_dtype_constraint(arg_name, DataType::Fence, info)
+            env.add_dtype_constraint(arg_name, DataType::Fence(None), info)
         }
     }
 }
@@ -493,7 +493,7 @@ fn collect_begin_encode(
         ));
     }
     let dest_name = &dest[0].0;
-    env.add_dtype_constraint(dest_name, DataType::Encoder, info)
+    env.add_dtype_constraint(dest_name, DataType::Encoder(None), info)
 }
 
 /// Unifies base types for a schedule.
@@ -693,12 +693,14 @@ fn collect_encode(
 /// * `fn_name` - The name of the function.
 /// # Returns
 /// A mapping of mutable names to their info.
+#[allow(clippy::too_many_arguments)]
 pub fn collect_schedule(
     ctx: &Context,
     env: &mut DTypeEnv,
     stmts: &[SchedStmt],
     fn_out: &[FullType],
-    sig_outs: &[(String, DataType)],
+    fn_in: &[(String, Option<FullType>)],
+    sig_outs: &[(String, FlaggedType)],
     info: Info,
     fn_name: &str,
 ) -> Result<HashMap<String, Info>, LocalError> {
@@ -729,7 +731,7 @@ pub fn collect_schedule(
             base: Some(anot), ..
         } = fn_t
         {
-            if !anot.base.refines(&sig_t.1) {
+            if !anot.base.refines(&sig_t.1.base) {
                 return Err(type_error(
                     info,
                     &format!(
@@ -740,6 +742,17 @@ pub fn collect_schedule(
             env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
         } else {
             panic!("Function return type has no base type");
+        }
+    }
+    for (var, typ) in fn_in {
+        if let Some(FullType {
+            base: Some(FlaggedType { flags, .. }),
+            ..
+        }) = &typ
+        {
+            for flag in flags {
+                env.add_usage(var, *flag);
+            }
         }
     }
     Ok(mutables)

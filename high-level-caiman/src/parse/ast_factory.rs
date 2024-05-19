@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::unused_self, clippy::option_option)]
+use std::collections::BTreeSet;
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};
@@ -306,13 +307,13 @@ impl ASTFactory {
         // are there a limited set of WGPU flags/setting we should check for?
         Ok(match flags {
             Some(flags) => {
-                let mut args = vec![];
-                let mut settings = vec![];
+                let mut args = BTreeSet::new();
+                let mut settings = BTreeSet::new();
                 for (key, val) in flags {
                     if let Some(val) = val {
-                        settings.push(WGPUSettings::try_from_kv(&key, &val).map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
+                        settings.insert(WGPUSettings::try_from_kv(&key, &val).map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
                     } else {
-                        args.push(key[..].try_into().map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
+                        args.insert(key[..].try_into().map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
                     }
                 }
                 FlaggedType {
@@ -324,10 +325,24 @@ impl ASTFactory {
             None => FlaggedType {
                 info: self.info(l, r),
                 base: t,
-                flags: Vec::new(),
-                settings: Vec::new(),
+                flags: BTreeSet::new(),
+                settings: BTreeSet::new(),
             }
         })
+    }
+
+    /// Constructs a flagged type from a data type and a list of flags/settings
+    /// Flags/settings are optional
+    /// # Errors
+    /// Returns an error if the flags/settings are invalid
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn flagged_template_type(&self, l: usize, t: DataType, p: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
+        match t {
+            DataType::Encoder(None) => self.flagged_type(l, DataType::Encoder(Some(Box::new(p))), flags, r),
+            DataType::Fence(None) => self.flagged_type(l, DataType::Fence(Some(Box::new(p))), flags, r),
+            _ => Err(custom_parse_error!(self.info(l, r), "Invalid template type {p:?} to base type {t:?}"))
+        }
+        
     }
 
     #[must_use]

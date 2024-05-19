@@ -1,10 +1,10 @@
 pub mod context;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, SpecType, Uop, WGPUFlags},
+    parse::ast::{Binop, DataType, FlaggedType, SpecType, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -487,15 +487,41 @@ impl SchedInfo {
 /// A function type signature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature {
-    pub input: Vec<DataType>,
-    pub output: Vec<DataType>,
+    pub input: Vec<FlaggedType>,
+    pub output: Vec<FlaggedType>,
+}
+
+impl Signature {
+    #[must_use]
+    pub fn new(input: Vec<DataType>, output: Vec<DataType>) -> Self {
+        Self {
+            input: input
+                .into_iter()
+                .map(|x| FlaggedType {
+                    info: Info::default(),
+                    base: x,
+                    flags: BTreeSet::new(),
+                    settings: BTreeSet::new(),
+                })
+                .collect(),
+            output: output
+                .into_iter()
+                .map(|x| FlaggedType {
+                    info: Info::default(),
+                    base: x,
+                    flags: BTreeSet::new(),
+                    settings: BTreeSet::new(),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// A function type signature with named inputs.
 #[derive(Debug, Clone)]
 pub struct NamedSignature {
-    pub input: Vec<(String, DataType)>,
-    pub output: Vec<(String, DataType)>,
+    pub input: Vec<(String, FlaggedType)>,
+    pub output: Vec<(String, FlaggedType)>,
 }
 
 impl NamedSignature {
@@ -506,13 +532,16 @@ impl NamedSignature {
         output: I,
     ) -> Self {
         Self {
-            input: input.to_vec(),
+            input: input
+                .iter()
+                .map(|(name, typ)| (name.clone(), FlaggedType::from(typ.clone())))
+                .collect(),
             output: output
                 .enumerate()
                 .map(|(idx, (name, typ))| {
                     (
                         name.clone().unwrap_or_else(|| format!("_out{idx}")),
-                        typ.clone(),
+                        FlaggedType::from(typ.clone()),
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -562,6 +591,8 @@ pub struct Context {
     pub scheds: HashMap<String, SchedOrExtern>,
     /// Set of external function names.
     pub externs: HashSet<String>,
+    /// User defined types. Map from type name to type.
+    pub user_types: HashMap<String, FlaggedType>,
 }
 
 /// A typed binary operation.

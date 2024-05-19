@@ -350,9 +350,9 @@ pub struct ActiveFences {
 }
 
 impl ActiveFences {
-    pub fn top(fences: &[String]) -> Self {
+    pub fn top<'a, T: Iterator<Item = &'a String>>(fences: T) -> Self {
         Self {
-            active_fences: fences.iter().cloned().collect(),
+            active_fences: fences.cloned().collect(),
         }
     }
 }
