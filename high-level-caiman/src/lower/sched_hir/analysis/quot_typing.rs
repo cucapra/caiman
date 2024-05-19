@@ -80,25 +80,47 @@ use super::{continuations::compute_pretinuations, ssa};
 pub fn deduce_val_quots(
     inputs: &mut [(String, TripleTag)],
     outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
     cfg: &mut Cfg,
     spec_info: &SpecInfo,
     ctx: &Context,
     dtypes: &HashMap<String, DataType>,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
-    let (env, selects) = unify_nodes(
-        inputs.iter().map(|(name, _)| name),
-        cfg,
-        ctx,
-        Info::default(),
-        dtypes,
-        env,
-    )?;
+    let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes)?;
+    let (env, selects) = unify_nodes(cfg, ctx, Info::default(), dtypes, env)?;
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, &env);
     Ok(())
 }
 
+fn add_io_constraints(
+    mut env: NodeEnv,
+    inputs: &mut [(String, TripleTag)],
+    outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
+    dtypes: &HashMap<String, DataType>,
+) -> Result<NodeEnv, LocalError> {
+    env.override_output_classes(output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)));
+    for (idx, (arg_name, fn_in_tag)) in inputs
+        .iter()
+        .filter(|(arg, _)| is_val_dtype(&dtypes[&ssa::original_name(arg)]))
+        .enumerate()
+    {
+        let class_name = if let Some(annoted_quot) = &fn_in_tag.value.quot_var.spec_var {
+            annoted_quot.clone()
+        } else {
+            let spec_classes = env.get_input_classes();
+            if idx < spec_classes.len() {
+                spec_classes[idx].clone()
+            } else {
+                continue;
+            }
+        };
+        env = add_node_eq(arg_name, &class_name, Info::default(), env)?;
+    }
+    Ok(env)
+}
 /// Adds a type constraint to the environment
 /// # Arguments
 /// * `lhs` - The name of the variable to constrain
@@ -114,7 +136,7 @@ fn add_constraint(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_constraint(lhs, rhs)
+    env.add_fallible_constraint(lhs, rhs)
         .map_err(|e| {
             type_error(
                 info,
@@ -484,9 +506,10 @@ fn unify_call(
     Ok(env)
 }
 
-/// Unifies nodes of a schedule with that of the value specification
+/// Unifies nodes of a schedule with that of the value specification. Also
+/// unifies the output classes of the schedule based on the arguments to the
+/// final return statement.
 /// # Arguments
-/// * `inputs` - The names of the input variables
 /// * `cfg` - The cfg
 /// * `specs` - The specs
 /// * `ctx` - The context
@@ -495,8 +518,7 @@ fn unify_call(
 /// # Returns
 /// The updated environment and a map from block id to select node name if the block contains
 /// a deduced select statement, or an error if the unification fails
-fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
-    inputs: T,
+fn unify_nodes(
     cfg: &Cfg,
     ctx: &Context,
     info: Info,
@@ -505,9 +527,6 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
 ) -> Result<(NodeEnv, HashMap<usize, String>), LocalError> {
     let pretinuations = compute_pretinuations(cfg);
     let mut selects = HashMap::new();
-    for (in_name, class_name) in inputs.zip(env.get_input_classes().to_vec()) {
-        env = add_node_eq(in_name, &class_name, info, env)?;
-    }
     for block in cfg.blocks.values() {
         for stmt in &block.stmts {
             env = match stmt {
@@ -615,7 +634,9 @@ fn unify_terminator(
                     info,
                     env,
                 )?;
-                env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
+                if let Some(class) = class {
+                    env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
+                }
             }
             Ok(env)
         }
@@ -646,7 +667,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: u
         let old_spec_var = tag.value.quot_var.spec_var.as_ref();
         assert!(
             old_spec_var.is_none() || old_spec_var.unwrap() == &node,
-            "Cannot unify output class {name} with unequal nodes {node} and {}",
+            "Cannot unify class {name} with unequal nodes {node} and {}",
             old_spec_var.unwrap()
         );
         tag.value = Tag {
@@ -801,11 +822,13 @@ fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTa
     assert_eq!(output_classes.len(), outputs.len());
     for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
         tag.value.quot = Some(Quotient::Node);
-        fill_val_quotient(
-            &MetaVar::new_class_name(&output_class).into_string(),
-            tag,
-            env,
-            START_BLOCK_ID,
-        );
+        if let Some(output_class) = output_class {
+            fill_val_quotient(
+                &MetaVar::new_class_name(&output_class).into_string(),
+                tag,
+                env,
+                START_BLOCK_ID,
+            );
+        }
     }
 }

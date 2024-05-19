@@ -181,7 +181,7 @@ impl Kind for String {}
 #[test]
 fn test_rev_lookup() {
     let mut env: Env<String, String> = Env::new();
-    env.add_class_constraint(
+    env.add_fallible_class_constraint(
         "$a",
         &Constraint::Term(
             String::from("int"),
@@ -192,7 +192,7 @@ fn test_rev_lookup() {
         ),
     )
     .unwrap();
-    env.add_class_constraint(
+    env.add_fallible_class_constraint(
         "$b",
         &Constraint::Term(
             String::from("int"),
@@ -203,7 +203,7 @@ fn test_rev_lookup() {
         ),
     )
     .unwrap();
-    env.add_class_constraint(
+    env.add_fallible_class_constraint(
         "$c",
         &Constraint::Term(
             String::from("add"),
@@ -262,7 +262,7 @@ fn test_rev_lookup() {
 #[test]
 fn step_wise_rev_lookup() {
     let mut env: Env<String, String> = Env::new();
-    env.add_class_constraint(
+    env.add_fallible_class_constraint(
         "$a",
         &Constraint::Term(
             String::from("int"),
@@ -273,7 +273,7 @@ fn step_wise_rev_lookup() {
         ),
     )
     .unwrap();
-    env.add_class_constraint(
+    env.add_fallible_class_constraint(
         "$b",
         &Constraint::Term(
             String::from("int"),
@@ -284,7 +284,7 @@ fn step_wise_rev_lookup() {
         ),
     )
     .unwrap();
-    env.add_class_constraint(
+    env.add_fallible_class_constraint(
         "$c",
         &Constraint::Term(
             String::from("add"),
@@ -335,7 +335,7 @@ fn step_wise_rev_lookup() {
     )
     .unwrap();
 
-    env.add_class_constraint("$c", &Constraint::Var(String::from("r")))
+    env.add_fallible_class_constraint("$c", &Constraint::Var(String::from("r")))
         .unwrap();
 
     assert_eq!(env.get_class_id("r").unwrap(), "$c");

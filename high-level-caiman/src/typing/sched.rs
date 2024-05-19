@@ -701,20 +701,8 @@ pub fn collect_schedule(
     stmts: &[SchedStmt],
     fn_out: &[FullType],
     fn_in: &[(String, Option<FullType>)],
-    sig_outs: &[(String, FlaggedType)],
     info: Info,
-    fn_name: &str,
 ) -> Result<HashMap<String, Info>, LocalError> {
-    if fn_out.len() != sig_outs.len() {
-        return Err(type_error(
-            info,
-            &format!(
-                "{info}: Spec has {} outputs, function has {}",
-                sig_outs.len(),
-                fn_out.len()
-            ),
-        ));
-    }
     let mut mutables = HashMap::new();
     let rets = collect_sched_helper(ctx, env, stmts.iter(), stmts.len(), &mut mutables)?;
     if rets.len() != fn_out.len() {
@@ -727,19 +715,11 @@ pub fn collect_schedule(
             ),
         ));
     }
-    for ((ret_name, fn_t), sig_t) in rets.iter().zip(fn_out.iter()).zip(sig_outs.iter()) {
+    for (ret_name, fn_t) in rets.iter().zip(fn_out.iter()) {
         if let FullType {
             base: Some(anot), ..
         } = fn_t
         {
-            if !anot.base.refines(&sig_t.1.base) {
-                return Err(type_error(
-                    info,
-                    &format!(
-                        "{info}: Declared function returns of {fn_name} are incompatible with value specification",
-                    ),
-                ));
-            }
             env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
         } else {
             panic!("Function return type has no base type");

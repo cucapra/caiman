@@ -53,17 +53,22 @@ fn build_copy_cmd(
                 None
             }
         });
-    if let Some(quot) = val_quot {
-        if f.is_literal_value(&quot) {
+    if let Some(quot) = &val_quot {
+        if f.is_literal_value(quot) {
             return asm::Command::Node(asm::NamedNode {
                 name: None,
                 node: asm::Node::LocalDoBuiltin {
-                    operation: Hole::Filled(quot),
+                    operation: Hole::Filled(quot.clone()),
                     inputs: Hole::Filled(vec![]),
                     outputs: Hole::Filled(vec![Hole::Filled(asm::NodeId(dest.to_string()))]),
                 },
             });
         }
+    }
+    if let SchedTerm::Lit { info, lit, .. } = src {
+        panic!(
+            "{info}: Missing or mismatched tags for literal value {lit:#?}\nQuotient: {val_quot:#?}",
+        );
     }
     let src = enum_cast!(SchedTerm::Var { name, .. }, name, src);
     if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {

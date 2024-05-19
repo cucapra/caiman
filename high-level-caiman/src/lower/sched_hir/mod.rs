@@ -532,10 +532,16 @@ impl Funclets {
             .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
             .collect();
         let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
+        let output_dtypes: Vec<_> = f
+            .output
+            .iter()
+            .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
+            .collect();
 
         deduce_val_quots(
             &mut hir_inputs,
             &mut hir_outputs,
+            &output_dtypes,
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,

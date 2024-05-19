@@ -20,6 +20,7 @@ use super::{
 };
 
 /// Gets a list of type declarations for the base types used in the program.
+#[allow(clippy::too_many_lines)]
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     // TODO: collect used types
     vec![
@@ -106,6 +107,14 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         // TODO: type names
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&i32::gs"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_SRC_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i32::gs"),
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Gpu,
@@ -281,10 +290,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     panic!("All input data types should be specified for now");
                 }
             }
-            let outs = val_sig.output.clone();
-            let must_be_mut = collect_schedule(
-                &ctx, &mut env, statements, output, input, &outs, *info, name,
-            )?;
+            let must_be_mut = collect_schedule(&ctx, &mut env, statements, output, input, *info)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
                 sched_info

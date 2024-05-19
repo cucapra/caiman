@@ -1,0 +1,30 @@
+#version 0.1.0
+
+// one spec implemented with multiple functions, breaking
+// the injectivity of the function to spec mapping
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(s: BufferSpace) -> BufferSpace {
+    returns s
+}
+
+val foo(x: i64) -> i64 {
+    g :- x + 10
+    h :- g * 2
+    k :- h + 10 
+    returns k /  2
+}
+
+fn foo1(z: i64) -> i64 impls foo, time, space {
+    let r @ node(val.h) = foo2(z);
+    (r + 10) / 2
+}
+
+fn foo2(a: i64 @ node(val)) -> i64 @ node(val.h) impls foo, time, space {
+    (a + 10) * 2
+}
+
+pipeline main { foo1 }

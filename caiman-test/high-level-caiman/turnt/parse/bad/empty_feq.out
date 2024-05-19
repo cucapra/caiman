@@ -1,5 +1,7 @@
 Error: At "empty_feq.cm" 2:10, 
   Parsing Error: Unrecognized token: '}', expected one of [
     "\"extern\"",
+    "\"sptl\"",
+    "\"tmln\"",
     "\"val\"",
 ]

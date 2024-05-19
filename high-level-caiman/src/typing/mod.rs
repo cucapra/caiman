@@ -4,7 +4,7 @@ mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Uop, WGPUFlags},
+    parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Tag, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -59,7 +59,7 @@ pub struct NodeEnv {
     /// List of input node class names, without the leading `$` symbol.
     inputs: Vec<String>,
     /// List of output node class names, without the leading `$` symbol.
-    outputs: Vec<String>,
+    outputs: Vec<Option<String>>,
 }
 
 impl Default for NodeEnv {
@@ -92,7 +92,7 @@ impl NodeEnv {
         }
         let class_name = format!("${class_name}");
         self.env
-            .add_class_constraint(&class_name, &From::from(&constraint))
+            .add_fallible_class_constraint(&class_name, &From::from(&constraint))
             .unwrap();
         self.spec_nodes
             .entry(constraint.get_type())
@@ -107,13 +107,31 @@ impl NodeEnv {
     /// If any of the class names contain a `$`.
     pub fn set_output_classes(&mut self, sig: &NamedSignature) {
         assert!(sig.output.iter().all(|(x, _)| !x.contains('$')));
-        self.outputs = sig.output.iter().map(|(x, _)| x.clone()).collect();
+        self.outputs = sig.output.iter().map(|(x, _)| Some(x.clone())).collect();
     }
 
-    /// Gets the output classes, without the leading `$` symbol.
+    /// Gets the output classes of the scheduling function,
+    /// without the leading `$` symbol. A class may be `None` if it is not
+    /// annotated and does not match up with anything in the spec.
     #[must_use]
-    pub fn get_output_classes(&self) -> &[String] {
+    pub fn get_output_classes(&self) -> &[Option<String>] {
         &self.outputs
+    }
+
+    /// Overrides the output classes with the output classes annotated at the
+    /// scheduling function.
+    pub fn override_output_classes<'a, T: Iterator<Item = (&'a DataType, &'a Tag)>>(
+        &mut self,
+        outputs: T,
+    ) {
+        for (id, (_, tag)) in outputs.filter(|(dt, _)| is_val_dtype(dt)).enumerate() {
+            if id >= self.outputs.len() {
+                self.outputs.push(None);
+            }
+            if let Some(annotated_quot) = &tag.quot_var.spec_var {
+                self.outputs[id] = Some(annotated_quot.clone());
+            }
+        }
     }
 
     /// Returns true if the name is a wildcard name
@@ -121,16 +139,9 @@ impl NodeEnv {
         !name.starts_with('$')
     }
 
-    /// Adds a constraint to the type variable `name`. If the constraint
-    /// uniquely identifies a quotient class, unifies the quotient class with
-    /// the type variable.
-    /// # Errors
-    /// Returns an error if unification fails.
-    /// # Panics
-    /// If the name contains a `$`.
-    pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
-        assert!(!name.contains('$'));
-        self.env.add_constraint(name, &From::from(constraint))?;
+    /// Checks if the constraint uniquely identifies a quotient class and
+    /// unifies the class with the type variable if it does.
+    fn check_for_unique_match(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
         if let Some(matches) = self.spec_nodes.get(&constraint.get_type()) {
             let mut last_match_classes = None;
             for (possible_match, match_classes) in matches {
@@ -143,7 +154,7 @@ impl NodeEnv {
             }
             if let Some(last_match_classes) = last_match_classes {
                 if last_match_classes.len() == 1 {
-                    self.env.add_class_constraint(
+                    self.env.add_fallible_class_constraint(
                         last_match_classes.iter().next().unwrap(),
                         &Constraint::Var(name.to_string()),
                     )?;
@@ -151,6 +162,24 @@ impl NodeEnv {
             }
         }
         Ok(())
+    }
+
+    /// Adds a constraint to the type variable `name`. If the constraint
+    /// uniquely identifies a quotient class, unifies the quotient class with
+    /// the type variable.
+    /// # Errors
+    /// Returns an error if unification fails.
+    /// # Panics
+    /// If the name contains a `$`.
+    pub fn add_fallible_constraint(
+        &mut self,
+        name: &str,
+        constraint: &ValQuot,
+    ) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        self.env
+            .add_fallible_constraint(name, &From::from(constraint))?;
+        self.check_for_unique_match(name, constraint)
     }
 
     /// Adds a constraint to the type variable `name` with another variable.
@@ -162,7 +191,7 @@ impl NodeEnv {
         assert!(!name.contains('$'));
         assert!(!equiv.contains('$'));
         self.env
-            .add_constraint(name, &Constraint::Var(equiv.to_string()))
+            .add_fallible_constraint(name, &Constraint::Var(equiv.to_string()))
     }
 
     /// Adds an equivalence between variable `name` and spec node name `class_name`.
@@ -179,7 +208,7 @@ impl NodeEnv {
         };
         assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
         self.env
-            .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
+            .add_fallible_class_constraint(&class_name, &Constraint::Var(name.to_string()))
     }
 
     /// Returns the variable's matching node name in the spec if it has one.

@@ -767,10 +767,11 @@ impl Hir for HirBody {
         match self {
             Self::RefStore { lhs, ..} => Some(vec![lhs.clone()]),
             Self::EncodeDo { dests, ..} => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
+            Self::DeviceCopy { dest, .. } => Some(vec![dest.clone()]),
             Self::ConstDecl { .. } | Self::VarDecl { .. } | Self::RefLoad { .. } 
             | Self::Op { .. } | Self::Hole(..) | Self::InAnnotation(..) 
             | Self::OutAnnotation(..) | Self::BeginEncoding { .. } 
-            | Self::Phi { .. } | Self::DeviceCopy { .. } 
+            | Self::Phi { .. }
             | Self::FenceOp { .. } => None,
         }
     }
