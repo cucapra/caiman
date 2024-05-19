@@ -321,14 +321,8 @@ impl Fact for TagAnalysis {
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         match stmt {
-            HirInstr::Tail(
-                Terminator::Call(dests, HirFuncCall { tag, .. })
-                | Terminator::Select { dests, tag, .. },
-            ) => {
-                // TODO: can a call/select tags be something else?
-                tag.spatial = none_tag(SpecType::Spatial, Flow::Usable);
-                tag.timeline = none_tag(SpecType::Timeline, Flow::Usable);
-                tag.value.flow = Some(Flow::Usable);
+            HirInstr::Tail(Terminator::Select { dests, tag, .. }) => {
+                tag.override_unknown_info(TripleTag::new_none_usable());
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
@@ -342,10 +336,7 @@ impl Fact for TagAnalysis {
                 call: HirFuncCall { tag, .. },
                 ..
             }) => {
-                // TODO: call tags
-                tag.spatial = none_tag(SpecType::Spatial, Flow::Usable);
-                tag.timeline = none_tag(SpecType::Timeline, Flow::Usable);
-                tag.value.flow = Some(Flow::Usable);
+                tag.override_unknown_info(TripleTag::new_none_usable());
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
@@ -375,6 +366,7 @@ impl Fact for TagAnalysis {
                 | Terminator::FinalReturn(_)
                 | Terminator::Yield(_),
             ) => (),
+            HirInstr::Tail(Terminator::Call(..)) => panic!("Call should be eliminated"),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }

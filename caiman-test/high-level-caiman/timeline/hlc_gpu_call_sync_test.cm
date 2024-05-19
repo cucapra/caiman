@@ -49,27 +49,33 @@ sptl space(bs: BufferSpace) -> BufferSpace {
 
 
 fn foo_impl(x: &i32 @ node(tmln.ret)) -> i32 impls foo_time, foo, space {
-    @in { input: node(tmln.e), output: node(tmln.out) };
+    @in { input: input(tmln.e), output: node(tmln.out) };
     let e = encode-begin @ node(tmln.(loc, rem)) { x_gpu, y_gpu } gpu;
     encode e.copy[x_gpu <- x];
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let f = submit @ node(tmln.sub) e;
-    let r = bar_impl(f, y_gpu) @ [node(tmln.ret), node(val.y2)];
-    @in {input: node(tmln.ret), output: node(tmln.out)};
-    @out {input: node(tmln.out), output: node(tmln.e)};
+    let r = bar_impl(f, y_gpu) @ node(tmln.ret);
+    @in {input: node(tmln.ret), output: node(tmln.out) };
+    @out {input: node(tmln.out), output: node(tmln.out) };
     r
 }
 
-fn bar_impl(f: Fence @ [node(tmln.f), none(val)], 
-            x: i32'<storage, map_read> @ [node(tmln.f), node(val.x)]) -> i32 
+fn bar_impl(f: Fence @ [input(tmln.f), none(val)], 
+            x: i32'<storage, map_read> @ [input(tmln.f), none(sptl)-saved]) -> i32 
             impls bar_time, bar, space 
 {
+    @in { input: input(tmln.e), output: node(tmln.out) };
     let e = encode-begin @ node(tmln.(loc, rem)) { x_gpu, y_gpu } gpu;
-    let t = 3;
+    let t: i32 = 3;
     encode e.copy[x_gpu <- t];
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let f2 = submit @ node(tmln.sub) e;
-    let y = (await @ node(tmln.snc) f2).y_gpu;
+    let y = (await @ node(tmln.snc1) f2).y_gpu;
+    // TODO: we rename nodes normally, but currently aren't doing
+    // that for timeline stuff. Hence the `x_0` to "manually" rename
     let x2 = (await @ node(tmln.snc2) f).x_0;
+    @out { input: node(tmln.out), output: node(tmln.out) };
     x2 + y
 }
+
+pipeline main { foo_impl }

@@ -676,6 +676,7 @@ fn collect_encode(
             // } else {
             //     unreachable!();
             // }
+            env.add_usage(&stmt.lhs[0].0, WGPUFlags::MapRead);
             Ok(())
         }
     }

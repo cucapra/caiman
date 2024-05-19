@@ -27,6 +27,13 @@ impl TripleTag {
             timeline: Tag::new_unspecified(SpecType::Timeline),
         }
     }
+    pub const fn new_none_usable() -> Self {
+        Self {
+            value: Tag::new_none_usable(SpecType::Value),
+            spatial: Tag::new_none_usable(SpecType::Spatial),
+            timeline: Tag::new_none_usable(SpecType::Timeline),
+        }
+    }
     pub fn from_opt(tags: &Option<Tags>) -> Self {
         tags.as_ref().map_or_else(|| Self::from_owned_opt(None), |tags| Self::from_tags(tags))
     }
@@ -315,15 +322,21 @@ impl HirFuncCall {
             return Self {
                 target: name,
                 args,
-                tag: Self::to_val_tuple_tag(TripleTag::from_opt(&value.tag)),
+                tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
             };
         }
         panic!("Invalid internal function call")
     }
 
-    fn to_val_tuple_tag(mut tag: TripleTag) -> TripleTag {
+    fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
         if let Some(val) = tag.value.quot_var.spec_var.as_mut() {
             *val = tuple_id(&[val.clone()]);
+        }
+        if let Some(sptl) = tag.spatial.quot_var.spec_var.as_mut() {
+            *sptl = tuple_id(&[sptl.clone()]);
+        }
+        if let Some(tmln) = tag.timeline.quot_var.spec_var.as_mut() {
+            *tmln = tuple_id(&[tmln.clone()]);
         }
         tag
     }

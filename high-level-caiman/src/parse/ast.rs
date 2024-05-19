@@ -322,6 +322,19 @@ impl Tag {
         }
     }
 
+    /// Creates a new tag with none quotient and usable flow
+    #[must_use]
+    pub const fn new_none_usable(spec_type: SpecType) -> Self {
+        Self {
+            quot: Some(Quotient::None),
+            quot_var: QuotientReference {
+                spec_type,
+                spec_var: None,
+            },
+            flow: Some(Flow::Usable),
+        }
+    }
+
     /// Updates the tag so that all non-null parts of `other` are copied to `self`
     pub fn set_specified_info(&mut self, other: Self) {
         if other.quot.is_some() {
