@@ -748,16 +748,19 @@ impl std::fmt::Display for ExternDefMembers {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct SpecFunclet {
+    pub info: Info,
+    pub name: String,
+    pub input: Vec<Arg<DataType>>,
+    pub output: Vec<(Option<String>, DataType)>,
+    pub statements: Vec<SpecStmt>,
+}
+
 /// Function class members. Either an extern function or a value functlet
 #[derive(Clone, Debug)]
 pub enum ClassMembers {
-    ValueFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Arg<DataType>>,
-        output: Vec<(Option<String>, DataType)>,
-        statements: Vec<SpecStmt>,
-    },
+    ValueFunclet(SpecFunclet),
     Extern {
         info: Info,
         name: String,
@@ -767,6 +770,8 @@ pub enum ClassMembers {
         output: Vec<(Option<String>, DataType)>,
         def: Option<ExternDef>,
     },
+    TimelineFunclet(SpecFunclet),
+    SpatialFunclet(SpecFunclet),
 }
 
 impl ClassMembers {
@@ -774,7 +779,10 @@ impl ClassMembers {
     #[must_use]
     pub fn get_name(&self) -> String {
         match self {
-            Self::ValueFunclet { name, .. } | Self::Extern { name, .. } => name.clone(),
+            Self::ValueFunclet(SpecFunclet { name, .. })
+            | Self::Extern { name, .. }
+            | Self::TimelineFunclet(SpecFunclet { name, .. })
+            | Self::SpatialFunclet(SpecFunclet { name, .. }) => name.clone(),
         }
     }
 
@@ -782,7 +790,10 @@ impl ClassMembers {
     #[must_use]
     pub const fn get_info(&self) -> Info {
         match self {
-            Self::ValueFunclet { info, .. } | Self::Extern { info, .. } => *info,
+            Self::ValueFunclet(SpecFunclet { info, .. })
+            | Self::Extern { info, .. }
+            | Self::TimelineFunclet(SpecFunclet { info, .. })
+            | Self::SpatialFunclet(SpecFunclet { info, .. }) => *info,
         }
     }
 
@@ -794,7 +805,9 @@ impl ClassMembers {
                 input.iter().map(|(_, typ)| typ.clone()).collect(),
                 output.iter().map(|(_, typ)| typ.clone()).collect(),
             ),
-            Self::ValueFunclet { input, output, .. } => (
+            Self::SpatialFunclet(SpecFunclet { input, output, .. })
+            | Self::TimelineFunclet(SpecFunclet { input, output, .. })
+            | Self::ValueFunclet(SpecFunclet { input, output, .. }) => (
                 input.iter().map(|(_, typ)| typ.clone()).collect(),
                 output.iter().map(|(_, typ)| typ.clone()).collect(),
             ),
@@ -815,20 +828,6 @@ pub enum TopLevel {
         info: Info,
         name: String,
         members: Vec<ClassMembers>,
-    },
-    TimelineFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Arg<DataType>>,
-        output: NamedOutput<DataType>,
-        statements: Vec<SpecStmt>,
-    },
-    SpatialFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Arg<DataType>>,
-        output: NamedOutput<DataType>,
-        statements: Vec<SpecStmt>,
     },
     SchedulingFunc {
         info: Info,

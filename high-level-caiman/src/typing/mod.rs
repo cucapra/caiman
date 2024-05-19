@@ -4,7 +4,7 @@ mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, FlaggedType, SpecType, Uop, WGPUFlags},
+    parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -706,5 +706,46 @@ fn uop_to_contraints(
             let a = a.instantiate(env);
             (a.clone(), a)
         }
+    }
+}
+
+#[must_use]
+#[allow(unused)]
+pub const fn is_timeline_dtype(t: &DataType) -> bool {
+    matches!(
+        t,
+        DataType::Event | DataType::Fence(_) | DataType::Encoder(_)
+    )
+}
+
+#[must_use]
+#[allow(unused)]
+pub const fn is_timeline_fulltype(t: &FullType) -> bool {
+    if let Some(t) = &t.base {
+        is_timeline_dtype(&t.base)
+    } else {
+        false
+    }
+}
+
+#[must_use]
+pub const fn is_val_dtype(t: &DataType) -> bool {
+    // TODO: Add more types
+    matches!(
+        t,
+        DataType::Int(_)
+            | DataType::Float(_)
+            | DataType::Bool
+            | DataType::Ref(_)
+            | DataType::Array(_, _)
+    )
+}
+
+#[must_use]
+pub const fn is_val_fulltype(t: &FullType) -> bool {
+    if let Some(t) = &t.base {
+        is_val_dtype(&t.base)
+    } else {
+        false
     }
 }

@@ -12,7 +12,7 @@ mod lower_spec;
 mod sched_hir;
 
 use lower_schedule::lower_schedule;
-use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funclet};
+use lower_spec::lower_spec;
 
 #[macro_export]
 macro_rules! enum_cast {
@@ -160,8 +160,10 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                 };
                 for f in members {
                     match f {
-                        ClassMembers::ValueFunclet { .. } => {
-                            let funclet = lower_val_funclet(f, &name, typing_ctx);
+                        ClassMembers::SpatialFunclet(..) |
+                        ClassMembers::TimelineFunclet(..) |
+                        ClassMembers::ValueFunclet(..) => {
+                            let funclet = lower_spec(f, &name, typing_ctx);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
                         ClassMembers::Extern {
@@ -177,18 +179,6 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                 }
                 asm.declarations
                     .push(asm::Declaration::FunctionClass(class));
-            }
-            sf @ TopLevel::SpatialFunclet { .. } => {
-                asm.declarations
-                    .push(asm::Declaration::Funclet(lower_spatial_funclet(
-                        sf, typing_ctx,
-                    )));
-            }
-            tf @ TopLevel::TimelineFunclet { .. } => {
-                asm.declarations
-                    .push(asm::Declaration::Funclet(lower_timeline_funclet(
-                        tf, typing_ctx,
-                    )));
             }
             TopLevel::SchedulingFunc {
                 name,

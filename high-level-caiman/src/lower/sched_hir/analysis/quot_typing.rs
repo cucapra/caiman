@@ -69,7 +69,7 @@ use crate::{
     parse::ast::{
         Binop, DataType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag,
     },
-    typing::{Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
+    typing::{is_val_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
 use super::{continuations::compute_pretinuations, ssa};
@@ -440,6 +440,7 @@ fn unify_call(
     dests: &[(String, TripleTag)],
     call: &HirFuncCall,
     ctx: &Context,
+    dtypes: &HashMap<String, DataType>,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     // TODO: info
@@ -456,7 +457,17 @@ fn unify_call(
         &tuple_name,
         &ValQuot::Call(
             f_class,
-            call.args.iter().map(MetaVar::new_var_name).collect(),
+            call.args
+                .iter()
+                .filter_map(|arg| {
+                    if let Some(t) = dtypes.get(&ssa::original_name(arg)) {
+                        if is_val_dtype(t) {
+                            return Some(MetaVar::new_var_name(arg));
+                        }
+                    }
+                    None
+                })
+                .collect(),
         ),
         Info::default(),
         env,
@@ -562,7 +573,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     },
                     env,
                 )?,
-                HirBody::EncodeDo { dests, func, .. } => unify_call(dests, func, ctx, env)?,
+                HirBody::EncodeDo { dests, func, .. } => unify_call(dests, func, ctx, dtypes, env)?,
                 HirBody::BeginEncoding { .. }
                 | HirBody::FenceOp { .. }
                 | HirBody::Hole(..)
@@ -570,7 +581,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                 | HirBody::Phi { .. } => env,
             }
         }
-        env = unify_terminator(block, ctx, info, env)?;
+        env = unify_terminator(block, ctx, info, dtypes, env)?;
     }
     Ok((env, selects))
 }
@@ -580,10 +591,11 @@ fn unify_terminator(
     block: &BasicBlock,
     ctx: &Context,
     info: Info,
+    dtypes: &HashMap<String, DataType>,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     match &block.terminator {
-        Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, env),
+        Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, dtypes, env),
         Terminator::Call(..) => unreachable!(),
         Terminator::Return { dests, rets, .. } => {
             // pass through is ignored (like next)

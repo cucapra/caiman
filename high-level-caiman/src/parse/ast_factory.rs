@@ -622,22 +622,44 @@ impl ASTFactory {
     }
     // TOP-Level:
 
-    struct_variant_factory!(value_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: Option<Vec<NamedOutput<DataType>>>, statements: Vec<SpecStmt>) 
-        -> ClassMembers:ClassMembers::ValueFunclet {
-            name: name,
-            input: input,
-            output: output.unwrap_or_default(),
-            statements: statements
-        });
+    #[must_use] 
+    pub fn value_funclet(&self, l: usize, name: String, input: Vec<Arg<DataType>>, 
+        output: Option<Vec<NamedOutput<DataType>>>, statements: Vec<SpecStmt>, r: usize) 
+        -> ClassMembers {
+            ClassMembers::ValueFunclet(SpecFunclet {
+                info: self.info(l, r),
+                name,
+                input,
+                output: output.unwrap_or_default(),
+                statements,
+            })
+    }
 
-    struct_variant_factory!(space_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: NamedOutput<DataType>, statements: Vec<SpecStmt>) 
-        -> TopLevel:TopLevel::SpatialFunclet);
+    #[must_use] 
+    pub fn space_funclet(&self, l: usize, name: String, input: Vec<Arg<DataType>>, 
+        output: Vec<NamedOutput<DataType>>, statements: Vec<SpecStmt>, r: usize) 
+        -> ClassMembers {
+            ClassMembers::SpatialFunclet(SpecFunclet {
+                info: self.info(l, r),
+                name,
+                input,
+                output,
+                statements,
+            })
+    }
 
-    struct_variant_factory!(time_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: NamedOutput<DataType>, statements: Vec<SpecStmt>) 
-        -> TopLevel:TopLevel::TimelineFunclet);
+    #[must_use] 
+    pub fn time_funclet(&self, l: usize, name: String, input: Vec<Arg<DataType>>, 
+        output: Vec<NamedOutput<DataType>>, statements: Vec<SpecStmt>, r: usize) 
+        -> ClassMembers {
+            ClassMembers::TimelineFunclet(SpecFunclet {
+                info: self.info(l, r),
+                name,
+                input,
+                output,
+                statements,
+            })
+    }
 
     struct_variant_factory!(function_class(name: String, members: Vec<ClassMembers>) 
         -> TopLevel:TopLevel::FunctionClass);

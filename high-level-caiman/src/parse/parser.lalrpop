@@ -50,20 +50,6 @@ TopLevel: TopLevel = {
     "feq" <Id> "{" <ClassMembers+> "}" 
     <@R> => astf.function_class(<>),
 
-    <@L>
-    "tmln" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MaybeNamed<BaseType>>
-    "{"
-        <SpecStmt*>
-    "}"
-    <@R> => astf.time_funclet(<>),
-
-    <@L>
-    "sptl" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MaybeNamed<BaseType>>
-    "{"
-        <SpecStmt*>
-    "}"
-    <@R> => astf.space_funclet(<>),
-
     <l: @L>
     "const" <n: Id> "=" <e: SchedExpr> <u: (";")?>
     <r: @L> =>? astf.const_def(l, n, e, r),
@@ -93,6 +79,20 @@ ClassMembers: ClassMembers = {
         <SpecStmt*>
     "}"
     <@R> => astf.value_funclet(<>),
+
+    <@L>
+    "tmln" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MultiNamedBaseType>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.time_funclet(<>),
+
+    <@L>
+    "sptl" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MultiNamedBaseType>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.space_funclet(<>),
 
     <@L>
     "extern" "(" <Id> ")" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 

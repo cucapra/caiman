@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::binop_to_str;
-use crate::parse::ast::{FlaggedType, FullType};
+use crate::parse::ast::{FlaggedType, FullType, SpecFunclet};
 use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, LOCAL_TEMP_FLAGS};
 use crate::{
     lower::BOOL_FFI_TYPE,
@@ -15,8 +15,8 @@ use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
 use super::types::DTypeConstraint;
 use super::{
-    sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo, SchedOrExtern, Signature,
-    SpecInfo, SpecType, TypedBinop,
+    is_val_fulltype, sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo,
+    SchedOrExtern, Signature, SpecInfo, SpecType, TypedBinop,
 };
 
 /// Gets a list of type declarations for the base types used in the program.
@@ -163,12 +163,12 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
     for decl in tl {
         if let TopLevel::FunctionClass { members, .. } = decl {
             for m in members {
-                if let ClassMembers::ValueFunclet {
-                    statements,
-                    input,
+                if let ClassMembers::ValueFunclet(SpecFunclet {
                     name,
+                    input,
+                    statements,
                     ..
-                } = m
+                }) = m
                 {
                     let spec = ctx.specs.get_mut(name).unwrap();
                     for (name, typ) in input {
@@ -251,13 +251,22 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             let mut env = DTypeEnv::new();
             let spec_name = &ctx.scheds[name].unwrap_sched().value;
             let val_sig = &ctx.specs[spec_name].sig;
-            if input.len() != val_sig.input.len() {
+            if input
+                .iter()
+                .filter(|(_, typ)| typ.as_ref().map(is_val_fulltype).unwrap_or_default())
+                .count()
+                != val_sig.input.len()
+            {
                 return Err(type_error(
                     *info,
                     &format!("Function inputs of {name} do not match the spec {spec_name}"),
                 ));
             }
-            for ((decl_name, decl_typ), (_, spec_typ)) in input.iter().zip(val_sig.input.iter()) {
+            for ((decl_name, decl_typ), (_, spec_typ)) in input
+                .iter()
+                .filter(|(_, typ)| typ.as_ref().map(is_val_fulltype).unwrap_or_default())
+                .zip(val_sig.input.iter())
+            {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {
                     if !dt.base.refines(&spec_typ.base) {
                         return Err(type_error(
@@ -366,6 +375,36 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
     res
 }
 
+/// Collects spec info for a given spec funclet. Returns the updated context and
+/// member signature.
+fn collect_spec_sig(
+    mut member_sig: Option<Signature>,
+    class_name: &str,
+    spec: &SpecFunclet,
+    spec_type: SpecType,
+    mut ctx: Context,
+) -> Result<(Context, Option<Signature>), LocalError> {
+    let sig = NamedSignature::new(&spec.input, spec.output.iter());
+    if let Some(member_sig) = &member_sig {
+        if !sig_match(member_sig, &sig) {
+            return Err(type_error(
+                spec.info,
+                &format!(
+                    "Function class {class_name} has inconsistent signatures for member {}",
+                    spec.name,
+                ),
+            ));
+        }
+    } else {
+        member_sig = Some(From::from(&sig));
+    }
+    ctx.specs.insert(
+        spec.name.to_string(),
+        SpecInfo::new(spec_type, sig, spec.info, Some(class_name)),
+    );
+    Ok((ctx, member_sig))
+}
+
 fn collect_class_signatures(
     members: &[ClassMembers],
     mut ctx: Context,
@@ -374,30 +413,23 @@ fn collect_class_signatures(
     let mut member_sig = None;
     for m in members {
         match m {
-            ClassMembers::ValueFunclet {
-                name,
-                input,
-                output,
-                info,
-                ..
-            } => {
-                let sig = NamedSignature::new(input, output.iter());
-                if let Some(member_sig) = &member_sig {
-                    if !sig_match(member_sig, &sig) {
-                        return Err(type_error(
-                            *info,
-                            &format!(
-                                "Function class {class_name} has inconsistent signatures for member {name}",
-                            ),
-                        ));
-                    }
-                } else {
-                    member_sig = Some(From::from(&sig));
-                }
-                ctx.specs.insert(
-                    name.to_string(),
-                    SpecInfo::new(SpecType::Value, sig, *info, Some(class_name)),
-                );
+            ClassMembers::TimelineFunclet(spec) => {
+                let (new_ctx, new_sig) =
+                    collect_spec_sig(member_sig, class_name, spec, SpecType::Timeline, ctx)?;
+                ctx = new_ctx;
+                member_sig = new_sig;
+            }
+            ClassMembers::SpatialFunclet(spec) => {
+                let (new_ctx, new_sig) =
+                    collect_spec_sig(member_sig, class_name, spec, SpecType::Spatial, ctx)?;
+                ctx = new_ctx;
+                member_sig = new_sig;
+            }
+            ClassMembers::ValueFunclet(spec) => {
+                let (new_ctx, new_sig) =
+                    collect_spec_sig(member_sig, class_name, spec, SpecType::Value, ctx)?;
+                ctx = new_ctx;
+                member_sig = new_sig;
             }
             ClassMembers::Extern {
                 name,
@@ -448,49 +480,13 @@ fn collect_class_signatures(
 
 fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     for decl in tl {
-        match decl {
-            TopLevel::SpatialFunclet {
-                name,
-                info,
-                input,
-                output,
-                ..
-            } => {
-                ctx.specs.insert(
-                    name.to_string(),
-                    super::SpecInfo::new(
-                        SpecType::Spatial,
-                        NamedSignature::new(input, std::iter::once(output)),
-                        *info,
-                        None,
-                    ),
-                );
-            }
-            TopLevel::TimelineFunclet {
-                name,
-                info,
-                input,
-                output,
-                ..
-            } => {
-                ctx.specs.insert(
-                    name.to_string(),
-                    super::SpecInfo::new(
-                        SpecType::Timeline,
-                        NamedSignature::new(input, std::iter::once(output)),
-                        *info,
-                        None,
-                    ),
-                );
-            }
-            TopLevel::FunctionClass {
-                name: class_name,
-                members,
-                ..
-            } => {
-                ctx = collect_class_signatures(members, ctx, class_name)?;
-            }
-            _ => (),
+        if let TopLevel::FunctionClass {
+            name: class_name,
+            members,
+            ..
+        } = decl
+        {
+            ctx = collect_class_signatures(members, ctx, class_name)?;
         }
     }
     Ok(ctx)
