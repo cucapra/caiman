@@ -481,6 +481,7 @@ fn collect_timeline_op(
 fn collect_begin_encode(
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
+    defs: &[(String, Option<FullType>)],
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
@@ -493,7 +494,16 @@ fn collect_begin_encode(
         ));
     }
     let dest_name = &dest[0].0;
-    env.add_dtype_constraint(dest_name, DataType::Encoder(None), info)
+    env.add_dtype_constraint(dest_name, DataType::Encoder(None), info)?;
+    for (def_name, def_annot) in defs {
+        if let Some(FullType {
+            base: Some(anot), ..
+        }) = def_annot
+        {
+            env.add_dtype_constraint(def_name, anot.base.clone(), info)?;
+        }
+    }
+    Ok(())
 }
 
 /// Unifies base types for a schedule.
@@ -596,10 +606,10 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             }
             SchedStmt::Decl {
                 lhs,
-                expr: Some(SchedExpr::Term(SchedTerm::EncodeBegin { info, .. })),
+                expr: Some(SchedExpr::Term(SchedTerm::EncodeBegin { info, defs, .. })),
                 ..
             } => {
-                collect_begin_encode(env, lhs, *info)?;
+                collect_begin_encode(env, lhs, defs, *info)?;
             }
             SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
@@ -717,10 +727,14 @@ pub fn collect_schedule(
     }
     for (ret_name, fn_t) in rets.iter().zip(fn_out.iter()) {
         if let FullType {
-            base: Some(anot), ..
+            base: Some(FlaggedType { base, flags, .. }),
+            ..
         } = fn_t
         {
-            env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
+            env.add_dtype_constraint(ret_name, base.clone(), info)?;
+            for flag in flags {
+                env.add_usage(ret_name, *flag);
+            }
         } else {
             panic!("Function return type has no base type");
         }

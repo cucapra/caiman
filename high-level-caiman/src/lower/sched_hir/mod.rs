@@ -608,6 +608,7 @@ impl Funclets {
     ) {
         let mut data_types = f.types.clone();
         let mut variables = HashSet::new();
+        let mut flags = f.flags.clone();
         for (var, typ) in &f.types {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
@@ -615,9 +616,17 @@ impl Funclets {
             }
         }
         for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
-            data_types.insert(format!("{RET_VAR}{id}"), out_ty.base.clone());
+            let out_name = format!("{RET_VAR}{id}");
+            data_types.insert(out_name.clone(), out_ty.base.clone());
+            if !out_ty.flags.is_empty() {
+                let mut flag = flags.get(&out_name).copied().unwrap_or_default();
+                for f in &out_ty.flags {
+                    f.apply_flag(&mut flag);
+                }
+                flags.insert(out_name, flag);
+            }
         }
-        (data_types, variables, f.flags.clone())
+        (data_types, variables, flags)
     }
 
     /// Gets the funclet with the given id

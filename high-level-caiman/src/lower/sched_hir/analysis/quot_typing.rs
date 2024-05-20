@@ -69,7 +69,7 @@ use crate::{
     parse::ast::{
         Binop, DataType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag,
     },
-    typing::{is_val_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
+    typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
 use super::{continuations::compute_pretinuations, ssa};
@@ -90,7 +90,7 @@ pub fn deduce_val_quots(
     let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes)?;
     let (env, selects) = unify_nodes(cfg, ctx, Info::default(), dtypes, env)?;
     fill_type_info(&env, cfg, &selects);
-    fill_io_type_info(inputs, outputs, &env);
+    fill_io_type_info(inputs, outputs, output_dtypes, &env);
     Ok(())
 }
 
@@ -104,7 +104,7 @@ fn add_io_constraints(
     env.override_output_classes(output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)));
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
-        .filter(|(arg, _)| is_val_dtype(&dtypes[&ssa::original_name(arg)]))
+        .filter(|(arg, _)| is_value_dtype(&dtypes[&ssa::original_name(arg)]))
         .enumerate()
     {
         let class_name = if let Some(annoted_quot) = &fn_in_tag.value.quot_var.spec_var {
@@ -513,19 +513,31 @@ fn unify_call(
             call.args
                 .iter()
                 .filter_map(|arg| {
-                    if let Some(t) = dtypes.get(&ssa::original_name(arg)) {
-                        if is_val_dtype(t) {
-                            return Some(MetaVar::new_var_name(arg));
-                        }
+                    let t = dtypes.get(&ssa::original_name(arg)).unwrap_or_else(|| {
+                        panic!("Missing type info for {}", ssa::original_name(arg))
+                    });
+                    if is_value_dtype(t) {
+                        Some(MetaVar::new_var_name(arg))
+                    } else {
+                        None
                     }
-                    None
                 })
                 .collect(),
         ),
         Info::default(),
         env,
     )?;
-    for (idx, (dest, tag)) in dests.iter().enumerate() {
+    for (idx, (dest, tag)) in dests
+        .iter()
+        .filter(|(x, _)| {
+            is_value_dtype(
+                dtypes
+                    .get(&ssa::original_name(x))
+                    .unwrap_or_else(|| panic!("Missing type info for {}", ssa::original_name(x))),
+            )
+        })
+        .enumerate()
+    {
         env = add_type_annot(dest, tag, env)?;
         env = add_overrideable_constraint(
             dest,
@@ -658,9 +670,15 @@ fn unify_terminator(
         }
         Terminator::FinalReturn(ret_names) => {
             let output_classes: Vec<_> = env.get_function_output_classes().to_vec();
-            assert_eq!(ret_names.len(), output_classes.len());
-            for (idx, (ret_name, class)) in
-                ret_names.iter().zip(output_classes.into_iter()).enumerate()
+            for (idx, (ret_name, class)) in ret_names
+                .iter()
+                .filter(|rname| {
+                    is_value_dtype(dtypes.get(&ssa::original_name(rname)).unwrap_or_else(|| {
+                        panic!("Missing dtype for {}", ssa::original_name(rname))
+                    }))
+                })
+                .zip(output_classes.into_iter())
+                .enumerate()
             {
                 if let Some(func_class) = class {
                     if idx < env.get_spec_output_classes().len()
@@ -859,13 +877,22 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
 /// * `inputs` - The names of the input variables
 /// * `outputs` - The type information for the outputs
 /// * `env` - The current environment
-fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTag], env: &NodeEnv) {
+fn fill_io_type_info(
+    inputs: &mut [(String, TripleTag)],
+    outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
+    env: &NodeEnv,
+) {
     for (name, tag) in inputs.iter_mut() {
         fill_val_quotient(name, tag, env, START_BLOCK_ID);
     }
     let output_classes = env.get_function_output_classes().to_vec();
-    assert_eq!(output_classes.len(), outputs.len());
-    for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
+    for (tag, output_class) in outputs
+        .iter_mut()
+        .zip(output_dtypes.iter())
+        .filter_map(|(t, dt)| if is_value_dtype(dt) { Some(t) } else { None })
+        .zip(output_classes)
+    {
         if tag.value.quot.is_none() {
             tag.value.quot = Some(Quotient::Node);
         }

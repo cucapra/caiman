@@ -141,7 +141,7 @@ impl NodeEnv {
         &mut self,
         outputs: T,
     ) {
-        for (id, (_, tag)) in outputs.filter(|(dt, _)| is_val_dtype(dt)).enumerate() {
+        for (id, (_, tag)) in outputs.filter(|(dt, _)| is_value_dtype(dt)).enumerate() {
             if id >= self.outputs.len() {
                 self.outputs.push(None);
             }
@@ -770,7 +770,7 @@ pub const fn is_timeline_fulltype(t: &FullType) -> bool {
 }
 
 #[must_use]
-pub const fn is_val_dtype(t: &DataType) -> bool {
+pub const fn is_value_dtype(t: &DataType) -> bool {
     // TODO: Add more types
     matches!(
         t,
@@ -783,9 +783,9 @@ pub const fn is_val_dtype(t: &DataType) -> bool {
 }
 
 #[must_use]
-pub const fn is_val_fulltype(t: &FullType) -> bool {
+pub const fn is_value_fulltype(t: &FullType) -> bool {
     if let Some(t) = &t.base {
-        is_val_dtype(&t.base)
+        is_value_dtype(&t.base)
     } else {
         false
     }

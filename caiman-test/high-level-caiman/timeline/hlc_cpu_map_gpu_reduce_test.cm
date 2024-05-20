@@ -1,5 +1,7 @@
 #version 0.1.0
 
+// same as cpu_map_gpu_reduce, but in hlc
+
 extern(cpu) pure baz() -> i32
 extern(cpu) pure bar() -> i32
 extern(gpu) gpu_merge(x : i32, y: i32) -> out: i32

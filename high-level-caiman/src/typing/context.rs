@@ -15,7 +15,7 @@ use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
 use super::types::DTypeConstraint;
 use super::{
-    is_val_fulltype, sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo,
+    is_value_fulltype, sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo,
     SchedOrExtern, Signature, SpecInfo, SpecType, TypedBinop,
 };
 
@@ -262,7 +262,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             let val_sig = &ctx.specs[spec_name].sig;
             if input
                 .iter()
-                .filter(|(_, typ)| typ.as_ref().map(is_val_fulltype).unwrap_or_default())
+                .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
                 .count()
                 != val_sig.input.len()
             {
@@ -273,7 +273,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             }
             for ((decl_name, decl_typ), (_, spec_typ)) in input
                 .iter()
-                .filter(|(_, typ)| typ.as_ref().map(is_val_fulltype).unwrap_or_default())
+                .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
                 .zip(val_sig.input.iter())
             {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {

@@ -305,7 +305,11 @@ impl Fact for TagAnalysis {
                             // return value, which might change types in the last
                             // funclet. To avoid overriding the final output type,
                             // we don't do anything when it meets with a different value
-                            assert!(k.starts_with("_out"), "Unexpected tag conflict with {k}");
+                            assert!(
+                                k.starts_with("_out"),
+                                "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
+                                old_v.get(),
+                            );
                         }
                         // TODO: we assume quotient node names are solved and don't worry
                         // about those conflicts
