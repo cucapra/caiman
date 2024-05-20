@@ -96,6 +96,10 @@ pub fn deduce_val_quots(
     Ok(())
 }
 
+/// Adds constraints to the environment based on input and output annotations.
+/// Any unspecified annotations are going to be assumed to match up with the
+/// spec. Requires that the input and output variables of a given dimension
+/// (timeline, value, etc.) are kept in the same relative order as the spec.
 fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],

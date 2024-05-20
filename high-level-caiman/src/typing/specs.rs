@@ -119,6 +119,10 @@ fn get_target_signature(
     Ok((input_types, output_types))
 }
 
+/// Gets a list of arguments (regular arguments + non-type template args)
+/// to a function call.
+/// # Panics
+/// Panics if the arguments are not lowered to variables
 fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Vec<String> {
     let mut arg_nodes: Vec<_> = args
         .iter()
