@@ -136,7 +136,7 @@ fn add_constraint(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_fallible_constraint(lhs, rhs)
+    env.add_constraint(lhs, rhs)
         .map_err(|e| {
             type_error(
                 info,
@@ -145,6 +145,36 @@ fn add_constraint(
         })
         .unwrap();
     Ok(env)
+}
+
+/// Adds a type constraint to the environment, allowing value
+/// information from `TripleTag` to override the constraint.
+/// # Arguments
+/// * `lhs` - The name of the variable to constrain
+/// * `rhs` - The constraint to apply to the type variable
+/// * `info` - The source info for the constraint
+/// * `env` - The current environment
+/// # Returns
+/// The updated environment
+#[allow(clippy::unnecessary_wraps)]
+fn add_overrideable_constraint(
+    lhs: &str,
+    lhs_tag: &TripleTag,
+    rhs: &ValQuot,
+    info: Info,
+    env: NodeEnv,
+) -> Result<NodeEnv, LocalError> {
+    if matches!(lhs_tag.value.quot, Some(Quotient::None)) {
+        return Ok(env);
+    }
+    if let Some(annot) = &lhs_tag.value.quot_var.spec_var {
+        if let Some(class_constraint) = env.get_spec_node(annot) {
+            if !class_constraint.alpha_equiv(&From::from(rhs)) {
+                return Ok(env);
+            }
+        }
+    }
+    add_constraint(lhs, rhs, info, env)
 }
 
 /// Constrains two type variables to be equal
@@ -475,8 +505,9 @@ fn unify_call(
             .collect::<Vec<_>>(),
     );
     env = add_type_annot(&tuple_name, &call.tag, env)?;
-    env = add_constraint(
+    env = add_overrideable_constraint(
         &tuple_name,
+        &call.tag,
         &ValQuot::Call(
             f_class,
             call.args
@@ -496,8 +527,9 @@ fn unify_call(
     )?;
     for (idx, (dest, tag)) in dests.iter().enumerate() {
         env = add_type_annot(dest, tag, env)?;
-        env = add_constraint(
+        env = add_overrideable_constraint(
             dest,
+            tag,
             &ValQuot::Extract(MetaVar::new_var_name(&tuple_name), idx),
             Info::default(),
             env,
@@ -625,17 +657,30 @@ fn unify_terminator(
             Ok(env)
         }
         Terminator::FinalReturn(ret_names) => {
-            let output_classes: Vec<_> = env.get_output_classes().to_vec();
+            let output_classes: Vec<_> = env.get_function_output_classes().to_vec();
             assert_eq!(ret_names.len(), output_classes.len());
-            for (ret_name, class) in ret_names.iter().zip(output_classes.into_iter()) {
-                env = add_constraint(
-                    &format!("{ret_name}!"),
-                    &ValQuot::Output(MetaVar::new_var_name(ret_name)),
-                    info,
-                    env,
-                )?;
-                if let Some(class) = class {
-                    env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
+            for (idx, (ret_name, class)) in
+                ret_names.iter().zip(output_classes.into_iter()).enumerate()
+            {
+                if let Some(func_class) = class {
+                    if idx < env.get_spec_output_classes().len()
+                        && env.get_spec_output_classes()[idx] == func_class
+                    {
+                        env = add_constraint(
+                            &format!("{ret_name}!"),
+                            &ValQuot::Output(MetaVar::new_var_name(ret_name)),
+                            info,
+                            env,
+                        )?;
+                        env = add_node_eq(
+                            &format!("{ret_name}!"),
+                            &func_class,
+                            Info::default(),
+                            env,
+                        )?;
+                    } else {
+                        env = add_node_eq(ret_name, &func_class, info, env)?;
+                    }
                 }
             }
             Ok(env)
@@ -818,10 +863,12 @@ fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTa
     for (name, tag) in inputs.iter_mut() {
         fill_val_quotient(name, tag, env, START_BLOCK_ID);
     }
-    let output_classes = env.get_output_classes().to_vec();
+    let output_classes = env.get_function_output_classes().to_vec();
     assert_eq!(output_classes.len(), outputs.len());
     for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
-        tag.value.quot = Some(Quotient::Node);
+        if tag.value.quot.is_none() {
+            tag.value.quot = Some(Quotient::Node);
+        }
         if let Some(output_class) = output_class {
             fill_val_quotient(
                 &MetaVar::new_class_name(&output_class).into_string(),

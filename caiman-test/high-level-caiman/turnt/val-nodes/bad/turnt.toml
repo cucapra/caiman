@@ -1,0 +1,6 @@
+[envs.val-nodes]	
+# Put output in a separate file to look at it, but don't use the output	
+# for determining success or failure.	
+command = """	
+    ../../../../../target/debug/hlc --lower {filename} 2>&1 > /dev/null \	
+    | sed -n '/Error/,$p' | grep . > {base}.debug"""

@@ -56,10 +56,12 @@ pub struct NodeEnv {
     /// Map of quotient type to a map between quotients and their equivalence
     /// class names.
     spec_nodes: HashMap<VQType, HashMap<ValQuot, HashSet<String>>>,
-    /// List of input node class names, without the leading `$` symbol.
+    /// List of spec input node class names, without the leading `$` symbol.
     inputs: Vec<String>,
-    /// List of output node class names, without the leading `$` symbol.
+    /// List of function output node class names, without the leading `$` symbol.
     outputs: Vec<Option<String>>,
+    /// List of spec output node class names, without the leading `$` symbol.
+    spec_outputs: Vec<String>,
 }
 
 impl Default for NodeEnv {
@@ -69,6 +71,7 @@ impl Default for NodeEnv {
             spec_nodes: HashMap::new(),
             inputs: Vec::new(),
             outputs: Vec::new(),
+            spec_outputs: Vec::new(),
         }
     }
 }
@@ -77,6 +80,12 @@ impl NodeEnv {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Gets the class constraint of the spec node.
+    #[must_use]
+    pub fn get_spec_node(&self, class: &str) -> Option<Constraint<VQType, ()>> {
+        self.env.get_type(&format!("${class}"))
     }
 
     /// Adds a quotient class and its constraints to the environment.
@@ -92,7 +101,7 @@ impl NodeEnv {
         }
         let class_name = format!("${class_name}");
         self.env
-            .add_fallible_class_constraint(&class_name, &From::from(&constraint))
+            .add_class_constraint(&class_name, &From::from(&constraint))
             .unwrap();
         self.spec_nodes
             .entry(constraint.get_type())
@@ -107,14 +116,22 @@ impl NodeEnv {
     /// If any of the class names contain a `$`.
     pub fn set_output_classes(&mut self, sig: &NamedSignature) {
         assert!(sig.output.iter().all(|(x, _)| !x.contains('$')));
-        self.outputs = sig.output.iter().map(|(x, _)| Some(x.clone())).collect();
+        self.spec_outputs = sig.output.iter().map(|(x, _)| x.clone()).collect();
+        self.outputs = self.spec_outputs.iter().cloned().map(Some).collect();
     }
 
-    /// Gets the output classes of the scheduling function,
-    /// without the leading `$` symbol. A class may be `None` if it is not
+    /// Gets the output classes of the spec,
+    /// without the leading `$` symbol.
+    #[must_use]
+    pub fn get_spec_output_classes(&self) -> &[String] {
+        &self.spec_outputs
+    }
+
+    /// Gets the output classes of the function,
+    /// without the leading `$` symbol. A class may be `None` if it is not  
     /// annotated and does not match up with anything in the spec.
     #[must_use]
-    pub fn get_output_classes(&self) -> &[Option<String>] {
+    pub fn get_function_output_classes(&self) -> &[Option<String>] {
         &self.outputs
     }
 
@@ -154,7 +171,7 @@ impl NodeEnv {
             }
             if let Some(last_match_classes) = last_match_classes {
                 if last_match_classes.len() == 1 {
-                    self.env.add_fallible_class_constraint(
+                    self.env.add_class_constraint(
                         last_match_classes.iter().next().unwrap(),
                         &Constraint::Var(name.to_string()),
                     )?;
@@ -171,14 +188,9 @@ impl NodeEnv {
     /// Returns an error if unification fails.
     /// # Panics
     /// If the name contains a `$`.
-    pub fn add_fallible_constraint(
-        &mut self,
-        name: &str,
-        constraint: &ValQuot,
-    ) -> Result<(), String> {
+    pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
         assert!(!name.contains('$'));
-        self.env
-            .add_fallible_constraint(name, &From::from(constraint))?;
+        self.env.add_constraint(name, &From::from(constraint))?;
         self.check_for_unique_match(name, constraint)
     }
 
@@ -191,7 +203,7 @@ impl NodeEnv {
         assert!(!name.contains('$'));
         assert!(!equiv.contains('$'));
         self.env
-            .add_fallible_constraint(name, &Constraint::Var(equiv.to_string()))
+            .add_constraint(name, &Constraint::Var(equiv.to_string()))
     }
 
     /// Adds an equivalence between variable `name` and spec node name `class_name`.
@@ -208,7 +220,7 @@ impl NodeEnv {
         };
         assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
         self.env
-            .add_fallible_class_constraint(&class_name, &Constraint::Var(name.to_string()))
+            .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
     }
 
     /// Returns the variable's matching node name in the spec if it has one.

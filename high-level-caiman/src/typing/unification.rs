@@ -323,6 +323,25 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
     pub const fn is_var(&self) -> bool {
         matches!(self, Self::Var(_))
     }
+
+    /// Returns true if the constraints are equal, up to alpha equivalence.
+    pub fn alpha_equiv(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Atom(a), Self::Atom(b)) => a == b,
+            (Self::Term(op_a, args_a), Self::Term(op_b, args_b)) => {
+                op_a == op_b && args_a.len() == args_b.len() && {
+                    for (a, b) in args_a.iter().zip(args_b.iter()) {
+                        if !a.alpha_equiv(b) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+            }
+            (Self::Var(_), Self::Var(_)) => true,
+            _ => false,
+        }
+    }
 }
 
 /// A typing environment.
@@ -439,56 +458,17 @@ impl<T: Kind, A: Kind> Env<T, A> {
         }
     }
 
-    /// Same as `add_constraint_helper`, but only errors if we're trying to unify two
-    /// things with different classes.
-    fn add_fallible_constraint_helper(
-        &mut self,
-        var: &NodePtr<T, A>,
-        constraint: &Constraint<T, A>,
-    ) -> Result<(), String> {
-        let c = self.contraint_to_node(constraint);
-        if !unify(var, &c)
-            && representative(var).borrow().get_class().is_some()
-            && c.borrow().get_class().is_some()
-        {
-            // only error if we are trying to unify two things with different classes
-            // if one of them is not in a class, ignore the error?
-            // TODO: restrict this error ignoring to function call boundaries
-            return Err(format!(
-                "variable {:#?} != constraint {:#?}",
-                *representative(var).borrow(),
-                *c.borrow()
-            ));
-        }
-        Ok(())
-    }
-
-    /// Adds a constraint to the environment.
-    /// # Arguments
-    /// - `var`: The name of the type variable to add the constraint to.
-    /// - `constraint`: The constraint to add.
-    /// # Errors
-    /// Returns `Err` if the constraint cannot be added (unification fails)
-    pub fn add_fallible_constraint(
-        &mut self,
-        var: &str,
-        constraint: &Constraint<T, A>,
-    ) -> Result<(), String> {
-        let var = self.get_or_make_node(var);
-        self.add_fallible_constraint_helper(&var, constraint)
-    }
-
     /// Adds a constraint to an equivalence class.
     /// # Arguments
     /// - `class_name`: The name of the class to add the constraint to.
     /// - `constraint`: The constraint to add.
-    pub fn add_fallible_class_constraint(
+    pub fn add_class_constraint(
         &mut self,
         class_name: &str,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let class = self.new_class_type(class_name);
-        self.add_fallible_constraint_helper(&class, constraint)
+        self.add_constraint_helper(&class, constraint)
     }
 
     /// Gets the node for a variable, creating it if it does not exist.
