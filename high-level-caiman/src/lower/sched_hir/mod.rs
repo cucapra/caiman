@@ -10,6 +10,7 @@ use std::{
 pub use hir::*;
 
 use crate::{
+    error::LocalError,
     lower::IN_STEM,
     parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS},
@@ -81,7 +82,7 @@ impl<'a> Funclet<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
     pub fn next_blocks(&self) -> Vec<Hole<asm::FuncletId>> {
         match &self.block.terminator {
-            Terminator::FinalReturn(_) => vec![],
+            Terminator::FinalReturn(..) => vec![],
             Terminator::Select { .. } => {
                 let mut e = self
                     .parent
@@ -99,12 +100,12 @@ impl<'a> Funclet<'a> {
                 assert_eq!(res.len(), 2);
                 res
             }
-            Terminator::None
+            Terminator::None(..)
             | Terminator::Return { .. }
-            | Terminator::Next(_)
+            | Terminator::Next(..)
             | Terminator::Call(..)
             | Terminator::CaptureCall { .. }
-            | Terminator::Yield(_) => {
+            | Terminator::Yield(..) => {
                 let e = self
                     .parent
                     .cfg
@@ -167,7 +168,7 @@ impl<'a> Funclet<'a> {
             Terminator::Call(..)
             | Terminator::CaptureCall { .. }
             | Terminator::Select { .. }
-            | Terminator::Yield(_) => {
+            | Terminator::Yield(..) => {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
@@ -176,9 +177,9 @@ impl<'a> Funclet<'a> {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
-            Terminator::FinalReturn(_)
-            | Terminator::None
-            | Terminator::Next(_)
+            Terminator::FinalReturn(..)
+            | Terminator::None(..)
+            | Terminator::Next(..)
             | Terminator::Return { .. } => self
                 .parent
                 .exiting_vars(&[self.id()])
@@ -460,13 +461,14 @@ impl Funclets {
     ) -> HashMap<usize, BTreeSet<String>> {
         let mut captured_out = HashMap::new();
         for (id, bb) in &mut cfg.blocks {
-            if matches!(bb.terminator, Terminator::None)
+            if matches!(bb.terminator, Terminator::None(..))
                 && cfg
                     .graph
                     .get(id)
                     .map_or(false, |e| !matches!(e, Edge::None))
             {
                 bb.terminator = Terminator::Next(
+                    bb.terminator.get_info(),
                     live_vars
                         .get_out_fact(*id)
                         .live_set
@@ -504,7 +506,7 @@ impl Funclets {
                         passthrough.push(v.clone());
                     }
                 }
-            } else if let Terminator::Yield(captures) = &mut bb.terminator {
+            } else if let Terminator::Yield(_, captures) = &mut bb.terminator {
                 let lives = live_vars.get_out_fact(*id).live_set();
                 *captures = lives.iter().cloned().collect();
                 captured_out.insert(*id, lives.clone());
@@ -515,7 +517,7 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
+    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Result<Self, LocalError> {
         let mut cfg = Cfg::new(f.statements, &f.output, ctx);
         let (mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
@@ -546,8 +548,8 @@ impl Funclets {
             &ctx.specs[&specs.value.0],
             ctx,
             &data_types,
-        )
-        .unwrap();
+            f.info,
+        )?;
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
@@ -576,7 +578,7 @@ impl Funclets {
             input: hir_inputs,
             output: hir_outputs,
         };
-        Self {
+        Ok(Self {
             cfg,
             live_vars,
             type_info,
@@ -587,7 +589,7 @@ impl Funclets {
             literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
             variables,
             flags,
-        }
+        })
     }
 
     /// Collects a map of variable names to their base types as local types,

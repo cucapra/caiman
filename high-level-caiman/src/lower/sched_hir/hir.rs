@@ -173,6 +173,7 @@ pub enum HirBody {
     },
     /// Load from a reference into a new variable
     RefLoad {
+        info: Info,
         dest: Name,
         typ: DataType,
         src: Name,
@@ -239,6 +240,7 @@ pub enum HirBody {
     InAnnotation(Info, Vec<(String, TripleTag)>),
     OutAnnotation(Info, Vec<(String, TripleTag)>),
     Phi {
+        info: Info,
         dest: Name,
         /// Map from incoming block id to the incoming variable name 
         /// from that block
@@ -286,6 +288,7 @@ impl HirOp {
 #[derive(Clone, Debug)]
 #[allow(clippy::module_name_repetitions)]
 pub struct HirFuncCall {
+    pub info: Info,
     pub target: String,
     pub args: Vec<String>,
     pub tag: TripleTag,
@@ -320,6 +323,7 @@ impl HirFuncCall {
                 }))
                 .collect();
             return Self {
+                info: value.info,
                 target: name,
                 args,
                 tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
@@ -364,6 +368,7 @@ pub enum Terminator {
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
     Select {
+        info: Info,
         dests: Vec<(String, TripleTag)>,
         guard: String,
         tag: TripleTag,
@@ -373,6 +378,7 @@ pub enum Terminator {
     /// For returning from the function, the destination variables are
     /// `_out0`, `_out1`, etc.
     Return {
+        info: Info,
         /// The destination names and tags for the return values in the **parent** scope
         dests: Vec<(String, TripleTag)>,
         /// The returned variables in the child scope
@@ -385,16 +391,16 @@ pub enum Terminator {
     /// a return statement in the frontend, but rather a special return statement
     /// for final block in the canonical CFG. Takes an argument which is
     /// the names of the return values. Essentially returns `_out0` to `_out{n-1}`
-    FinalReturn(Vec<String>),
+    FinalReturn(Info, Vec<String>),
     /// No terminator, continue to the next block. A `None` terminator is just
     /// a temporary value until live vars and tag analysis can be done to know
     /// what the output variables are for the `Next` terminator
-    None,
+    None(Info),
     /// No terminator, continue to next block with the specified returns
-    Next(Vec<String>),
+    Next(Info, Vec<String>),
     /// A yield which will capture its arguments to pass them to the
     /// continuation
-    Yield(Vec<String>),
+    Yield(Info, Vec<String>),
 }
 
 /// How a variable is used in a statement.
@@ -432,9 +438,17 @@ pub trait Hir {
         self.get_uses(&mut res);
         res
     }
+
+    fn get_info(&self) -> Info;
 }
 
 impl Hir for Terminator {
+    fn get_info(&self) -> Info {
+        match self {
+            Self::Call(_, call) | Self::CaptureCall { call, .. } => call.info,
+            Self::Select { info, .. } | Self::Return { info, .. } | Self::FinalReturn(info, ..) | Self::None(info) | Self::Next(info, ..) | Self::Yield(info, ..) => *info,
+        }
+    }
     fn get_defs(&self) -> Option<Vec<String>> {
         match self {
             Self::Call(defs, ..)
@@ -444,7 +458,7 @@ impl Hir for Terminator {
             }
             // we don't consider the defs of a select to be defs of this terminator,
             // but rather they are the defs of the left and right funclets
-            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => None,
+            Self::FinalReturn(..) | Self::Select { .. } | Self::None(..) | Self::Next(..) | Self::Yield(..) => None,
         }
     }
     fn get_write_uses(&self) -> Option<Vec<String>> {
@@ -466,10 +480,10 @@ impl Hir for Terminator {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(names) | Self::Next(names) | Self::Yield(names)=> {
+            Self::FinalReturn(_, names) | Self::Next(_, names) | Self::Yield(_, names)=> {
                 uses.extend(names.iter().cloned());
             }
-            Self::None => (),
+            Self::None(..) => (),
         }
     }
 
@@ -483,12 +497,12 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Next(rets) | Self::FinalReturn(rets) => {
+            Self::Next(_, rets) | Self::FinalReturn(_, rets) => {
                 for node in rets {
                     *node = f(node, UseType::Read);
                 }
             }
-            Self::Yield(names) => {
+            Self::Yield(_, names) => {
                 for name in names.iter_mut() {
                     *name = f(name, UseType::Read);
                 }
@@ -498,7 +512,7 @@ impl Hir for Terminator {
                     *node = f(node, UseType::Read);
                 }
             }
-            Self::None => (),
+            Self::None(..) => (),
         }
     }
 
@@ -511,7 +525,7 @@ impl Hir for Terminator {
                     *dest = f(dest);
                 }
             }
-            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => (),
+            Self::FinalReturn(..) | Self::Select { .. } | Self::None(..) | Self::Next(..) | Self::Yield(..) => (),
         }
     }
 }
@@ -715,6 +729,11 @@ impl HirBody {
 
 }
 impl Hir for HirBody {
+    fn get_info(&self) -> Info {
+        match self {
+            Self::RefStore { info, .. } | Self::RefLoad { info, .. } | Self::DeviceCopy { info, .. } | Self::BeginEncoding { info, .. } | Self::EncodeDo { info, .. } | Self::FenceOp { info, .. } | Self::ConstDecl { info, .. } | Self::VarDecl { info, .. } | Self::Hole(info) | Self::Op { info, .. } | Self::InAnnotation(info, ..) | Self::OutAnnotation(info, ..) | Self::Phi { info, .. } => *info,
+        }
+    }
     fn get_uses(&self, res: &mut BTreeSet<String>) {
         match self {
             Self::ConstDecl { rhs, .. } => {

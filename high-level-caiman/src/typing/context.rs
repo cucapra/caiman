@@ -172,26 +172,18 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
     for decl in tl {
         if let TopLevel::FunctionClass { members, .. } = decl {
             for m in members {
-                if let ClassMembers::ValueFunclet(SpecFunclet {
-                    name,
-                    input,
-                    statements,
-                    ..
-                }) = m
+                if let ClassMembers::ValueFunclet(funclet)
+                | ClassMembers::TimelineFunclet(funclet) = m
                 {
-                    let spec = ctx.specs.get_mut(name).unwrap();
-                    for (name, typ) in input {
+                    let spec = ctx.specs.get_mut(&funclet.name).unwrap();
+                    for (name, typ) in &funclet.input {
                         spec.types.insert(name.clone(), typ.clone());
                     }
-                    // for (name, _) in input.iter() {
-                    //     spec.nodes
-                    //         .insert(name.clone(), SpecNode::Input(name.clone()));
-                    // }
-                    // for name in output.iter().filter_map(|x| x.0.as_ref()) {
-                    //     spec.nodes
-                    //         .insert(name.clone(), SpecNode::Output(name.clone()));
-                    // }
-                    existing_externs.extend(collect_spec(statements, spec, &ctx.signatures)?);
+                    existing_externs.extend(collect_spec(
+                        &funclet.statements,
+                        spec,
+                        &ctx.signatures,
+                    )?);
                 }
             }
         }

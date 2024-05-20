@@ -403,6 +403,7 @@ impl ASTFactory {
                 args,
                 tag,
                 yield_call: _,
+                ..
             }) if tag.is_none() => {
                 let target = Self::sched_to_spec_expr(*target)?;
                 let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
@@ -539,18 +540,14 @@ impl ASTFactory {
 
     // scheduling function calls:
 
-    /// Constructs a scheduling function call
-    #[must_use]
-    pub fn sched_fn_call(&self, target: SchedExpr, templates: Option<TemplateArgs>, args: Vec<SchedExpr>, tag: Option<Tags>) 
-        -> SchedFuncCall {
-        SchedFuncCall {
-            target: Box::new(target),
-            templates: templates,
-            args: args,
-            yield_call: false,
-            tag,
-        }
-    }
+    // Constructs a scheduling function call
+    struct_variant_factory!(sched_fn_call(target: SchedExpr, templates: Option<TemplateArgs>, args: Vec<SchedExpr>, tag: Option<Tags>) -> SchedFuncCall:SchedFuncCall {
+        target: Box::new(target),
+        templates: templates,
+        args: args,
+        yield_call: false,
+        tag: tag
+    });
 
     /// Constructs template value arguments for a scheduling function call
     /// # Errors

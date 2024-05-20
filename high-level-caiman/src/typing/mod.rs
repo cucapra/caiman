@@ -283,10 +283,10 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         let c = constraint.instantiate(&mut self.env);
-        self.env.add_constraint(name, &c).map_err(|_| {
+        self.env.add_constraint(name, &c).map_err(|c| {
             type_error(
                 info,
-                &format!("Failed to unify type constraints of variable {name}"),
+                &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
         })
     }
@@ -326,10 +326,10 @@ impl DTypeEnv {
     pub fn add_var_equiv(&mut self, name: &str, equiv: &str, info: Info) -> Result<(), LocalError> {
         self.env
             .add_constraint(name, &Constraint::Var(equiv.to_string()))
-            .map_err(|_| {
+            .map_err(|c| {
                 type_error(
                     info,
-                    &format!("Failed to unify type constraints of variable {name}"),
+                    &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
                 )
             })
     }
@@ -343,10 +343,10 @@ impl DTypeEnv {
         constraint: &Constraint<CDataType, ADataType>,
         info: Info,
     ) -> Result<(), LocalError> {
-        self.env.add_constraint(name, constraint).map_err(|_| {
+        self.env.add_constraint(name, constraint).map_err(|c| {
             type_error(
                 info,
-                &format!("Failed to unify type constraints of variable {name}"),
+                &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
         })
     }

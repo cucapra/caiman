@@ -30,7 +30,7 @@ val bar(x : i32) -> out: i32 {
     returns x + y
 }
 
-tmln bar_time(e: Event, r: Event) -> out: Event {
+tmln bar_time(e: Event, r: Encoder) -> out: Event {
     loc, rem :- encode_event(e)
     sub :- submit_event(rem)
     sub2 :- submit_event(r)

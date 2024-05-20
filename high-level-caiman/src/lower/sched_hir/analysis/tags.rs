@@ -365,10 +365,10 @@ impl Fact for TagAnalysis {
                 }
             }
             HirInstr::Tail(
-                Terminator::None
+                Terminator::None(..)
                 | Terminator::Next(..)
-                | Terminator::FinalReturn(_)
-                | Terminator::Yield(_),
+                | Terminator::FinalReturn(..)
+                | Terminator::Yield(..),
             ) => (),
             HirInstr::Tail(Terminator::Call(..)) => panic!("Call should be eliminated"),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),

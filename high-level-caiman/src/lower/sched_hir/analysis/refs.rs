@@ -33,6 +33,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
     enum_cast,
+    error::Info,
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
         Hir, HirBody, HirInstr, HirOp, UseType,
@@ -205,6 +206,7 @@ fn insert_deref_if_needed(
     id: usize,
     name: &str,
     data_types: &mut HashMap<String, DataType>,
+    info: Info,
 ) {
     if last_deref.get(name).is_none() || last_deref[name] != names[name] {
         let typ = unref_type(&data_types[name]);
@@ -213,6 +215,7 @@ fn insert_deref_if_needed(
         insertions.push((
             id,
             HirBody::RefLoad {
+                info,
                 dest,
                 src: format!("_{name}_ref"),
                 typ,
@@ -246,9 +249,10 @@ fn deref_transform_instr(
     match instr {
         // TODO: generalize terminator usage
         HirInstr::Tail(t) => {
+            let info = t.get_info();
             t.rename_uses(&mut |u, ut| {
                 if variables.contains(u) && ut == UseType::Read {
-                    insert_deref_if_needed(last_deref, names, insertions, id, u, data_types);
+                    insert_deref_if_needed(last_deref, names, insertions, id, u, data_types, info);
                     get_cur_name(u, names)
                 } else {
                     u.to_string()
@@ -283,9 +287,12 @@ fn deref_transform_instr(
             }
         }
         HirInstr::Stmt(stmt) => {
+            let info = stmt.get_info();
             stmt.rename_uses(&mut |name, ut| {
                 if variables.contains(name) && ut == UseType::Read {
-                    insert_deref_if_needed(last_deref, names, insertions, id, name, data_types);
+                    insert_deref_if_needed(
+                        last_deref, names, insertions, id, name, data_types, info,
+                    );
                     get_cur_name(name, names)
                 } else {
                     name.to_string()

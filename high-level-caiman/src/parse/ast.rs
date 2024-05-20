@@ -40,8 +40,11 @@ pub enum DataType {
     Float(FloatSize),
     Bool,
     BufferSpace,
+    /// A local event
     Event,
+    /// A remote event, specifically an encoder
     Encoder(Option<Box<DataType>>),
+    /// A remote event, specifically a fence
     Fence(Option<Box<DataType>>),
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
@@ -526,6 +529,7 @@ pub type Tags = Vec<Tag>;
 /// Can be an encoded statement or have a list of arguments.
 #[derive(Clone, Debug)]
 pub struct SchedFuncCall {
+    pub info: Info,
     pub target: Box<SchedExpr>,
     pub templates: Option<TemplateArgs>,
     pub args: Vec<SchedExpr>,

@@ -705,6 +705,7 @@ fn flatten_sched_term_children(
                 args,
                 tag,
                 yield_call,
+                info: fn_info,
             },
         )) => {
             let mut all_instrs = vec![];
@@ -750,6 +751,7 @@ fn flatten_sched_term_children(
                         templates,
                         tag,
                         yield_call,
+                        info: fn_info,
                     },
                 )),
             )

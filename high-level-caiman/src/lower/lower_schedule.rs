@@ -678,7 +678,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         Terminator::Return {
             rets, passthrough, ..
         } => lower_ret(rets, passthrough, temp_id, f),
-        Terminator::Next(vars) => {
+        Terminator::Next(_, vars) => {
             vec![Hole::Filled(asm::Command::TailEdge(
                 asm::TailEdge::Return {
                     return_values: Hole::Filled(
@@ -689,7 +689,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
                 },
             ))]
         }
-        Terminator::FinalReturn(n) => vec![Hole::Filled(asm::Command::TailEdge(
+        Terminator::FinalReturn(_, n) => vec![Hole::Filled(asm::Command::TailEdge(
             asm::TailEdge::Return {
                 return_values: Hole::Filled(
                     n.iter()
@@ -700,12 +700,12 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         ))],
         Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
         // TODO: review this
-        Terminator::None => panic!("None terminator not replaced by Next"),
+        Terminator::None(..) => panic!("None terminator not replaced by Next"),
         Terminator::Call(..) => panic!("Call not replaced by CaptureCall"),
         Terminator::CaptureCall { call, captures, .. } => {
             lower_func_call(call, captures, temp_id, f)
         }
-        Terminator::Yield(captures) => lower_yield(captures, temp_id, f),
+        Terminator::Yield(_, captures) => lower_yield(captures, temp_id, f),
     }
 }
 
@@ -884,6 +884,6 @@ pub fn lower_schedule(
             .map(asm::FuncletId)
             .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
     };
-    let blocks = Funclets::new(func, &specs, ctx);
+    let blocks = Funclets::new(func, &specs, ctx)?;
     Ok(blocks.funclets().iter().map(lower_block).collect())
 }
