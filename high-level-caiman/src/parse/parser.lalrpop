@@ -2,7 +2,6 @@
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
-use std::collections::BTreeMap;
 
 
 grammar(astf: &ASTFactory);
@@ -145,13 +144,7 @@ BaseType: DataType = {
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
     "&" <BaseType> => DataType::Ref(Box::new(<>)),
-    "{" <v: CommaList<Arg<FlaggedType>>> "}" => {
-        let mut map = BTreeMap::new();
-        for (k, v) in v {
-            map.insert(k, v);
-        }
-        DataType::Record(map)
-    },
+    "{" <CommaList<Arg<FlaggedType>>> "}" => ASTFactory::class_type(<>),
 }
 
 MultiNamedBaseType: Vec<(Option<String>, DataType)> = {

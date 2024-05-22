@@ -15,7 +15,11 @@
 //! Different instantiations of the unification problem must map their
 //! constraints onto this simple format.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    rc::Rc,
+};
 
 type NodePtr<T, A> = Rc<RefCell<Node<T, A>>>;
 
@@ -46,6 +50,16 @@ where
         args: Vec<NodePtr<T, A>>,
         /// The unique id of the equivalence class the term is a member of.
         class_id: Option<String>,
+    },
+    /// A term where the
+    DynamicTerm {
+        parent: Option<NodePtr<T, A>>,
+        op: T,
+        args: BTreeMap<String, NodePtr<T, A>>,
+        class_id: Option<String>,
+        /// If the constraint is the lowest in the subtype lattice
+        /// and unification which such cannot meet to a lower type
+        is_lowest: bool,
     },
     /// A concrete base type
     Atom(A),
@@ -122,6 +136,19 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
                 // }
                 t.finish()
             }
+            Self::DynamicTerm {
+                op, args, class_id, ..
+            } => {
+                let id = class_id.as_ref().map_or_else(
+                    || format!("{op:?}"),
+                    |class_id| format!("{op:?}:{class_id}"),
+                );
+                let mut t = f.debug_struct(&id);
+                for (k, v) in args.iter() {
+                    t.field(k, &v.borrow());
+                }
+                t.finish()
+            }
             Self::Atom(a) => write!(f, "{a:#?}"),
         }
     }
@@ -133,7 +160,9 @@ impl<T: Kind, A: Kind> Node<T, A> {
     /// Panics if the node is an atom.
     fn parent(&mut self) -> &mut Option<NodePtr<T, A>> {
         match self {
-            Self::Var { ref mut parent, .. } | Self::Term { ref mut parent, .. } => parent,
+            Self::Var { ref mut parent, .. }
+            | Self::Term { ref mut parent, .. }
+            | Self::DynamicTerm { ref mut parent, .. } => parent,
             Self::Atom(_) => panic!("Atoms have no parent"),
         }
     }
@@ -150,6 +179,9 @@ impl<T: Kind, A: Kind> Node<T, A> {
             }
             | Self::Term {
                 ref mut class_id, ..
+            }
+            | Self::DynamicTerm {
+                ref mut class_id, ..
             } => class_id,
             Self::Atom(_) => panic!("Atoms have no class"),
         }
@@ -157,7 +189,9 @@ impl<T: Kind, A: Kind> Node<T, A> {
 
     fn get_class(&self) -> &Option<String> {
         match self {
-            Self::Var { class_id, .. } | Self::Term { class_id, .. } => class_id,
+            Self::Var { class_id, .. }
+            | Self::Term { class_id, .. }
+            | Self::DynamicTerm { class_id, .. } => class_id,
             Self::Atom(_) => panic!("Atoms have no class"),
         }
     }
@@ -211,6 +245,26 @@ fn deep_clone<T: Kind, A: Kind>(
             cloned_ptrs.insert(key, r.clone());
             r
         }
+        Node::DynamicTerm {
+            parent,
+            op,
+            args,
+            class_id,
+            is_lowest,
+        } => {
+            let r = Rc::new(RefCell::new(Node::DynamicTerm {
+                parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
+                op: op.clone(),
+                args: args
+                    .iter()
+                    .map(|(k, v)| (k.clone(), deep_clone(v, cloned_ptrs)))
+                    .collect(),
+                class_id: class_id.clone(),
+                is_lowest: *is_lowest,
+            }));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
     }
 }
 
@@ -228,6 +282,18 @@ fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
         Node::Var { parent: None, .. } | Node::Atom(_) => n.clone(),
         Node::Term { parent, args, .. } => {
             for a in args {
+                *a = representative(a);
+            }
+            #[allow(clippy::option_if_let_else)]
+            if let Some(parent) = parent {
+                *parent = representative(parent);
+                parent.clone()
+            } else {
+                n.clone()
+            }
+        }
+        Node::DynamicTerm { parent, args, .. } => {
+            for a in args.values_mut() {
                 *a = representative(a);
             }
             #[allow(clippy::option_if_let_else)]
@@ -266,7 +332,10 @@ fn union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
 
     if a.borrow().is_var() {
         *a.borrow_mut().parent() = Some(b);
-    } else {
+    } else if !matches!(
+        (&*a.borrow(), &*b.borrow()),
+        (Node::DynamicTerm { .. }, Node::DynamicTerm { .. })
+    ) {
         *b.borrow_mut().parent() = Some(a);
     }
 }
@@ -290,6 +359,24 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                 ..
             },
         ) => op_a == op_b && args_a.len() == args_b.len(),
+        (
+            Node::DynamicTerm {
+                op: op_a,
+                is_lowest: is_lowest_a,
+                args: args_a,
+                ..
+            },
+            Node::DynamicTerm {
+                op: op_b,
+                is_lowest: is_lowest_b,
+                args: args_b,
+                ..
+            },
+        ) => {
+            op_a == op_b
+                && (!is_lowest_a || args_a.len() >= args_b.len())
+                && (!is_lowest_b || args_b.len() >= args_a.len())
+        }
         (Node::Var { .. }, _) | (_, Node::Var { .. }) => true,
         _ => false,
     }
@@ -308,38 +395,143 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
     if can_union(&a, &b) {
         union(&a, &b);
     }
-    let borrow_a = a.borrow();
-    let borrow_b = b.borrow();
-    match (&*borrow_a, &*borrow_b) {
-        (Node::Atom(a), Node::Atom(b)) => a == b,
+    {
+        let borrow_a = a.borrow();
+        let borrow_b = b.borrow();
+        match (&*borrow_a, &*borrow_b) {
+            (Node::Atom(a), Node::Atom(b)) => return a == b,
+            (
+                Node::Term {
+                    op: op_a,
+                    args: a_args,
+                    ..
+                },
+                Node::Term {
+                    op: op_b,
+                    args: b_args,
+                    ..
+                },
+            ) => {
+                if op_a != op_b || a_args.len() != b_args.len() {
+                    return false;
+                }
+                for (a, b) in a_args.iter().zip(b_args.iter()) {
+                    if !unify(a, b) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            (
+                Node::DynamicTerm {
+                    op: op_a,
+                    args: args_a,
+                    is_lowest: is_lowest_a,
+                    ..
+                },
+                Node::DynamicTerm {
+                    op: op_b,
+                    args: args_b,
+                    is_lowest: is_lowest_b,
+                    ..
+                },
+            ) => {
+                if op_a != op_b
+                    || (*is_lowest_a && args_b.len() > args_a.len())
+                    || (*is_lowest_b && args_a.len() > args_b.len())
+                {
+                    return false;
+                }
+                for (k, a) in args_a.iter() {
+                    if let Some(b) = args_b.get(k) {
+                        if !unify(a, b) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            (Node::Var { .. }, _) | (_, Node::Var { .. }) => return true,
+            _ => return false,
+        }
+    }
+    union_dynamic_terms(&a, &b);
+    true
+}
+
+/// Meets two dynamic terms by reparenting them. If one term is a subtype of the other,
+/// the subtype will become the parent. If neither is a subtype of the other, a new
+/// parent will be created which is the greatest lower bound of the two terms.
+fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
+    match (&mut *a.borrow_mut(), &mut *b.borrow_mut()) {
         (
-            Node::Term {
-                op: op_a,
+            Node::DynamicTerm {
+                is_lowest: true, ..
+            },
+            Node::DynamicTerm { parent, .. },
+        ) => {
+            parent.replace(a.clone());
+        }
+        (
+            Node::DynamicTerm { parent, .. },
+            Node::DynamicTerm {
+                is_lowest: true, ..
+            },
+        ) => {
+            parent.replace(b.clone());
+        }
+        (
+            Node::DynamicTerm { args: a_args, .. },
+            Node::DynamicTerm {
+                args: b_args,
+                parent,
+                ..
+            },
+        ) if b_args.iter().all(|(k, _)| a_args.contains_key(k)) => {
+            parent.replace(a.clone());
+        }
+        (
+            Node::DynamicTerm {
+                parent,
                 args: a_args,
                 ..
             },
-            Node::Term {
-                op: op_b,
-                args: b_args,
+            Node::DynamicTerm { args: b_args, .. },
+        ) if a_args.iter().all(|(k, _)| b_args.contains_key(k)) => {
+            parent.replace(b.clone());
+        }
+        (
+            Node::DynamicTerm {
+                op,
+                class_id,
+                args: args_a,
+                is_lowest: is_lowest_a,
+                parent,
+            },
+            Node::DynamicTerm {
+                args: args_b,
+                is_lowest: is_lowest_b,
+                parent: parent_b,
                 ..
             },
         ) => {
-            if op_a != op_b || a_args.len() != b_args.len() {
-                //panic!("Unification failed");
-                return false;
-            }
-            let mut success = true;
-            for (a, b) in a_args.iter().zip(b_args.iter()) {
-                if !unify(a, b) {
-                    // continue trying in case we can deduce more information
-                    // ex: we have a hole
-                    success = false;
-                }
-            }
-            success
+            assert!(parent.is_none());
+            assert!(parent_b.is_none());
+            let arg_union: BTreeMap<_, _> = args_a
+                .iter()
+                .chain(args_b.iter())
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            let new_parent = Rc::new(RefCell::new(Node::DynamicTerm {
+                parent: None,
+                op: op.clone(),
+                args: arg_union,
+                class_id: class_id.clone(),
+                is_lowest: *is_lowest_a || *is_lowest_b,
+            }));
+            parent.replace(new_parent.clone());
+            parent_b.replace(new_parent);
         }
-        (Node::Var { .. }, _) | (_, Node::Var { .. }) => true,
-        _ => false,
+        _ => panic!("Invalid dynamic term union"),
     }
 }
 
@@ -353,6 +545,7 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
 pub enum Constraint<T: Kind, A: Kind> {
     Atom(A),
     Term(T, Vec<Constraint<T, A>>),
+    DynamicTerm(T, BTreeMap<String, Constraint<T, A>>, bool),
     Var(String),
 }
 
@@ -532,6 +725,18 @@ impl<T: Kind, A: Kind> Env<T, A> {
                 class_id: None,
             })),
             Constraint::Var(name) => self.get_or_make_node(name),
+            Constraint::DynamicTerm(op, args, is_lowest) => {
+                Rc::new(RefCell::new(Node::DynamicTerm {
+                    parent: None,
+                    op: op.clone(),
+                    args: args
+                        .iter()
+                        .map(|(k, v)| (k.clone(), self.contraint_to_node(v)))
+                        .collect(),
+                    class_id: None,
+                    is_lowest: *is_lowest,
+                }))
+            }
         }
     }
 
@@ -548,6 +753,18 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
             ),
             Node::Var { id, .. } => Constraint::Var(format!("%{id}")),
+            Node::DynamicTerm {
+                op,
+                args,
+                is_lowest,
+                ..
+            } => Constraint::DynamicTerm(
+                op.clone(),
+                args.iter()
+                    .map(|(k, v)| (k.clone(), Self::node_to_constraint(v)))
+                    .collect(),
+                *is_lowest,
+            ),
         }
     }
 

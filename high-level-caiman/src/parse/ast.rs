@@ -50,7 +50,11 @@ pub enum DataType {
     Slice(Box<DataType>),
     UserDefined(String),
     Ref(Box<DataType>),
-    Record(BTreeMap<String, FlaggedType>),
+    Record(BTreeMap<String, DataType>),
+    Class {
+        public: Box<DataType>,
+        private: Box<DataType>,
+    },
 }
 
 impl PartialEq for DataType {
@@ -127,6 +131,9 @@ impl Display for DataType {
             }
             Self::Encoder(Some(typ)) => write!(f, "Encoder'{typ}"),
             Self::Fence(Some(typ)) => write!(f, "Fence'{typ}"),
+            Self::Class { public, private } => {
+                write!(f, "Class{{public: {public}, private: {private}}}",)
+            }
         }
     }
 }

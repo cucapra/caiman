@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::unification::{Constraint, Env, Kind};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -341,4 +343,55 @@ fn step_wise_rev_lookup() {
     assert_eq!(env.get_class_id("r").unwrap(), "$c");
     assert_eq!(env.get_class_id("a").unwrap(), "$a");
     assert_eq!(env.get_class_id("j").unwrap(), "$b");
+}
+
+#[test]
+fn test_subtype_lattice() {
+    let mut env = Env::<String, String>::new();
+    let mut r1 = BTreeMap::new();
+    r1.insert(
+        String::from("l1"),
+        Constraint::Term(
+            String::from("int"),
+            vec![Constraint::Var(String::from("l1_t"))],
+        ),
+    );
+    r1.insert(String::from("l2"), Constraint::Atom(String::from("I32")));
+    env.add_class_constraint(
+        "$r",
+        &Constraint::DynamicTerm(String::from("record"), r1, false),
+    )
+    .unwrap();
+    let mut r2 = BTreeMap::new();
+    r2.insert(
+        String::from("l1"),
+        Constraint::Term(
+            String::from("int"),
+            vec![Constraint::Atom(String::from("I32"))],
+        ),
+    );
+    r2.insert(String::from("l3"), Constraint::Atom(String::from("bool")));
+    env.add_class_constraint(
+        "$r",
+        &Constraint::DynamicTerm(String::from("record"), r2, false),
+    )
+    .unwrap();
+    let ty = env.get_type("$r").unwrap();
+    if let Constraint::DynamicTerm(_, r, _) = ty {
+        assert_eq!(r.len(), 3);
+        assert_eq!(
+            r.get("l1").unwrap(),
+            &Constraint::Term(
+                String::from("int"),
+                vec![Constraint::Atom(String::from("I32"))]
+            )
+        );
+        assert_eq!(r.get("l2").unwrap(), &Constraint::Atom(String::from("I32")));
+        assert_eq!(
+            r.get("l3").unwrap(),
+            &Constraint::Atom(String::from("bool"))
+        );
+    } else {
+        panic!("Expected record type");
+    }
 }

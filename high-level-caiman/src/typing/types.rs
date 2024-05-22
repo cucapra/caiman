@@ -1,3 +1,5 @@
+use std::{collections::BTreeMap, vec};
+
 use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
 
 use super::unification::{Constraint, Env, Kind};
@@ -8,6 +10,10 @@ pub enum CDataType {
     Int,
     Float,
     Ref,
+    Record,
+    Encoder,
+    Fence,
+    Class,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,9 +24,8 @@ pub enum ADataType {
     Bool,
     BufferSpace,
     Event,
-    // TODO: records for encoders and fences?
-    Encoder,
-    Fence,
+    SpecEncoder,
+    SpecFence,
 }
 
 impl Kind for CDataType {}
@@ -48,8 +53,21 @@ pub enum DTypeConstraint {
     /// A reference constraint which contains a dtype constraint
     /// that will be instantiated to a new inner data type constraint.
     RefN(Box<DTypeConstraint>),
-    Encoder,
-    Fence,
+    Encoder(Constraint<CDataType, ADataType>),
+    Fence(Constraint<CDataType, ADataType>),
+    EncoderN(Box<DTypeConstraint>),
+    FenceN(Box<DTypeConstraint>),
+    Record(BTreeMap<String, DTypeConstraint>, bool),
+    Class {
+        public: Constraint<CDataType, ADataType>,
+        private: Constraint<CDataType, ADataType>,
+    },
+    ClassN {
+        public: Box<DTypeConstraint>,
+        private: Box<DTypeConstraint>,
+    },
+    SpecEncoder,
+    SpecFence,
 }
 
 impl From<IntSize> for ADataType {
@@ -139,8 +157,28 @@ impl DTypeConstraint {
             Self::Event => Constraint::Atom(ADataType::Event),
             Self::Ref(x) => Constraint::Term(CDataType::Ref, vec![x]),
             Self::RefN(x) => Constraint::Term(CDataType::Ref, vec![x.instantiate(env)]),
-            Self::Encoder => Constraint::Atom(ADataType::Encoder),
-            Self::Fence => Constraint::Atom(ADataType::Fence),
+            Self::Encoder(typ) => Constraint::Term(CDataType::Encoder, vec![typ]),
+            Self::Fence(public) => Constraint::Term(CDataType::Fence, vec![public]),
+            Self::Record(fields, is_lowest) => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in fields {
+                    mp.insert(k, v.instantiate(env));
+                }
+                Constraint::DynamicTerm(CDataType::Record, mp, is_lowest)
+            }
+            Self::Class { public, private } => {
+                Constraint::Term(CDataType::Class, vec![public, private])
+            }
+            Self::EncoderN(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
+            Self::FenceN(public) => {
+                Constraint::Term(CDataType::Fence, vec![public.instantiate(env)])
+            }
+            Self::ClassN { public, private } => Constraint::Term(
+                CDataType::Class,
+                vec![public.instantiate(env), private.instantiate(env)],
+            ),
+            Self::SpecEncoder => Constraint::Atom(ADataType::SpecEncoder),
+            Self::SpecFence => Constraint::Atom(ADataType::SpecFence),
         }
     }
 }
@@ -150,6 +188,9 @@ const DEFAULT_FLOAT_SIZE: FloatSize = FloatSize::F64;
 
 impl TryFrom<DTypeConstraint> for DataType {
     type Error = ();
+    /// Tries to convert a data type constraint into a concrete data type.
+    /// If the high-level data type constraint is not constrained enough to be converted
+    /// into a concrete data type, an error is returned.
     fn try_from(dt: DTypeConstraint) -> Result<Self, ()> {
         match dt {
             DTypeConstraint::Int(Some(x)) => Ok(Self::Int(x)),
@@ -166,8 +207,40 @@ impl TryFrom<DTypeConstraint> for DataType {
                 DTypeConstraint::try_from(x).map_err(|_| ())?,
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
-            DTypeConstraint::Encoder => Ok(Self::Encoder(None)),
-            DTypeConstraint::Fence => Ok(Self::Fence(None)),
+            // allow abstract encoders and fences
+            DTypeConstraint::Encoder(typ) => Ok(Self::Encoder(Some(Box::new(Self::try_from(
+                DTypeConstraint::try_from(typ).map_err(|_| ())?,
+            )?)))),
+            DTypeConstraint::Fence(vars) => Ok(Self::Fence(Some(Box::new(Self::try_from(
+                DTypeConstraint::try_from(vars).map_err(|_| ())?,
+            )?)))),
+            DTypeConstraint::Record(fields, _) => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in fields {
+                    mp.insert(k, Self::try_from(v)?);
+                }
+                Ok(Self::Record(mp))
+            }
+            DTypeConstraint::Class { public, private } => Ok(Self::Class {
+                public: Box::new(Self::try_from(
+                    DTypeConstraint::try_from(public).map_err(|_| ())?,
+                )?),
+                private: Box::new(Self::try_from(
+                    DTypeConstraint::try_from(private).map_err(|_| ())?,
+                )?),
+            }),
+            DTypeConstraint::ClassN { public, private } => Ok(Self::Class {
+                public: Box::new(Self::try_from(*public)?),
+                private: Box::new(Self::try_from(*private)?),
+            }),
+            DTypeConstraint::EncoderN(typ) => {
+                Ok(Self::Encoder(Some(Box::new(Self::try_from(*typ)?))))
+            }
+            DTypeConstraint::FenceN(vars) => {
+                Ok(Self::Fence(Some(Box::new(Self::try_from(*vars)?))))
+            }
+            DTypeConstraint::SpecEncoder => Ok(Self::Encoder(None)),
+            DTypeConstraint::SpecFence => Ok(Self::Fence(None)),
         }
     }
 }
@@ -188,7 +261,7 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                         match d {
                             Constraint::Atom(x) => Ok(Self::Int(Some(x.try_into()?))),
                             Constraint::Var(_) => Ok(Self::Int(None)),
-                            Constraint::Term(..) => unreachable!(),
+                            Constraint::Term(..) | Constraint::DynamicTerm(..) => unreachable!(),
                         }
                     }
                     Constraint::Term(CDataType::Float, mut v) => {
@@ -196,7 +269,7 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                         match d {
                             Constraint::Atom(x) => Ok(Self::Float(Some(x.try_into()?))),
                             Constraint::Var(_) => Ok(Self::Float(None)),
-                            Constraint::Term(..) => unreachable!(),
+                            Constraint::Term(..) | Constraint::DynamicTerm(..) => unreachable!(),
                         }
                     }
                     _ => unreachable!(),
@@ -208,8 +281,39 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                 Ok(Self::Ref(d))
             }
             Constraint::Var(_) => Ok(Self::Any),
-            Constraint::Atom(ADataType::Encoder) => Ok(Self::Encoder),
-            Constraint::Atom(ADataType::Fence) => Ok(Self::Fence),
+            Constraint::Term(CDataType::Encoder, mut v) => {
+                assert_eq!(
+                    v.len(),
+                    1,
+                    "Encoder constraint should have exactly one child"
+                );
+                let d = v.swap_remove(0);
+                Ok(Self::Encoder(d))
+            }
+            Constraint::Term(CDataType::Fence, mut v) => {
+                assert_eq!(v.len(), 1, "Fence constraint should have exactly one child");
+                let d = v.swap_remove(0);
+                Ok(Self::Fence(d))
+            }
+            Constraint::DynamicTerm(CDataType::Record, fields, lowest) => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in fields {
+                    mp.insert(k, Self::try_from(v)?);
+                }
+                Ok(Self::Record(mp, lowest))
+            }
+            Constraint::Term(CDataType::Class, mut v) => {
+                assert_eq!(
+                    v.len(),
+                    2,
+                    "Class constraint should have exactly two children"
+                );
+                let public = v.swap_remove(0);
+                let private = v.swap_remove(0);
+                Ok(Self::Class { public, private })
+            }
+            Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
+            Constraint::Atom(ADataType::SpecFence) => Ok(Self::SpecFence),
             _ => todo!(),
         }
     }
@@ -225,8 +329,22 @@ impl From<DataType> for DTypeConstraint {
             DataType::BufferSpace => Self::BufferSpace,
             DataType::Event => Self::Event,
             DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
-            DataType::Encoder(None) => Self::Encoder,
-            DataType::Fence(None) => Self::Fence,
+            DataType::Encoder(None) => Self::SpecEncoder,
+            DataType::Fence(None) => Self::SpecFence,
+            DataType::Encoder(Some(x)) => Self::EncoderN(Box::new(Self::from(*x))),
+            DataType::Fence(Some(x)) => Self::FenceN(Box::new(Self::from(*x))),
+            DataType::Record(fields) => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in fields {
+                    mp.insert(k, Self::from(v));
+                }
+                Self::Record(mp, false)
+            }
+            DataType::Class { public, private } => Self::ClassN {
+                public: Box::new(Self::from(*public)),
+                private: Box::new(Self::from(*private)),
+            },
+
             _ => todo!(),
         }
     }

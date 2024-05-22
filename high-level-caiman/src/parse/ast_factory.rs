@@ -2,7 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::unused_self, clippy::option_option)]
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};
@@ -732,5 +732,20 @@ impl ASTFactory {
                 MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, maj, min, patch));
         }
         Ok(prog)
+    }
+
+    #[must_use] 
+    pub fn class_type(v: Vec<Arg<FlaggedType>>) -> DataType {
+        let mut public = BTreeMap::new();
+        let mut private = BTreeMap::new();
+        for (name, typ) in v {
+            if typ.flags.contains(&WGPUFlags::MapRead) {
+                public.insert(name, typ.base);
+            } else {
+                private.insert(name, typ.base);
+            }
+        }
+        DataType::Class { public: Box::new(DataType::Record(public)), 
+            private: Box::new(DataType::Record(private)) }
     }
 }
