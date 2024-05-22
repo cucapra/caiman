@@ -41,7 +41,10 @@ impl InState {
 
     pub fn hole_error(&self, context: &StaticContext) -> String {
         format!(
-            "TODO Hole in node {}",
+            "TODO Hole in funclet {} for node {}",
+            context
+                .debug_info
+                .funclet(&self.get_latest_scope().funclet_id),
             context.debug_info.node_expir(
                 self.get_current_funclet_id(),
                 self.get_current_node(context)
@@ -52,14 +55,17 @@ impl InState {
         )
     }
 
-    pub fn get_node_error(&self, context: &StaticContext) -> String {
+    pub fn node_error(&self, node_id: NodeId, context: &StaticContext) -> String {
         format!(
-            "in spec node {}",
-            context.debug_info.node(
-                &self.get_current_funclet_id(),
-                self.get_current_node_id().unwrap()
-            )
+            "for node {}",
+            context
+                .debug_info
+                .node(&self.get_current_funclet_id(), node_id)
         )
+    }
+
+    pub fn current_node_error(&self, context: &StaticContext) -> String {
+        self.node_error(self.get_current_node_id().unwrap(), context)
     }
 
     pub fn expect_location(&self) -> Location {
@@ -224,13 +230,24 @@ impl InState {
 
     // operation stuff
 
-    pub fn add_operation(&mut self, operation: Location, context: &StaticContext) {
+    pub fn add_value_operation(&mut self, operation: Location, context: &StaticContext) {
         self.get_latest_scope_mut()
-            .add_operation(operation, context);
+            .add_value_operation(operation, context);
     }
 
-    pub fn has_operation(&self, operation: &Location, context: &StaticContext) {
-        self.get_latest_scope().has_operation(operation, context);
+    pub fn has_value_operation(&self, operation: &Location, context: &StaticContext) {
+        self.get_latest_scope()
+            .has_value_operation(operation, context);
+    }
+
+    pub fn add_timeline_operation(&mut self, operation: Location, context: &StaticContext) {
+        self.get_latest_scope_mut()
+            .add_timeline_operation(operation, context);
+    }
+
+    pub fn has_timeline_operation(&self, operation: &Location, context: &StaticContext) {
+        self.get_latest_scope()
+            .has_timeline_operation(operation, context);
     }
 
     // returns all operations who's depedencies have already been satisfied
@@ -243,7 +260,7 @@ impl InState {
         let mut result = Vec::new();
         let scope = self.get_latest_scope();
         for node_id in 0..value_funclet.nodes.len() {
-            if !scope.has_operation(
+            if !scope.has_value_operation(
                 &Location::new(value_funclet_id.clone(), node_id.clone()),
                 context,
             ) {
@@ -251,7 +268,7 @@ impl InState {
                     .get_node_dependencies(value_funclet_id, &node_id)
                     .iter()
                     .map(|dependency| {
-                        scope.has_operation(
+                        scope.has_value_operation(
                             &Location::new(value_funclet_id.clone(), dependency.clone()),
                             context,
                         )
@@ -306,24 +323,9 @@ impl InState {
             .get_node_information(node_id, context)
     }
 
-    pub fn set_timeline_manager(
-        &mut self,
-        schedule_node: &NodeId,
-        timeline_manager: NodeId,
-        context: &StaticContext,
-    ) {
-        self.get_latest_scope_mut()
-            .set_timeline_manager(schedule_node, timeline_manager, context);
-    }
-
-    pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
-        self.get_latest_scope_mut()
-            .clear_timeline_manager(schedule_node, context);
-    }
-
-    pub fn get_managed_by_timeline(
+    pub fn get_nodes_with_timeline_status(
         &self,
-        timeline_manager: NodeId,
+        timeline_status: &expir::Quotient,
         context: &StaticContext,
     ) -> Vec<NodeId> {
         self.get_latest_scope()
@@ -331,8 +333,14 @@ impl InState {
             .storage_node_information
             .iter()
             .filter(|(_, info)| {
-                info.timeline_manager
-                    .map(|o| o == timeline_manager)
+                info.instantiation
+                    .as_ref()
+                    .map(|inst| {
+                        inst.timeline
+                            .as_ref()
+                            .map(|loc| loc.quot == *timeline_status)
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(false)
             })
             .map(|v| v.0.clone())
@@ -377,11 +385,7 @@ impl InState {
 
         for scope in self.scopes.iter().rev() {
             // sort the results so we go top to bottom of the funclet
-            for node_id in scope
-                .storage_of_type(target_type, context)
-                .iter()
-                .sorted()
-            {
+            for node_id in scope.storage_of_type(target_type, context).iter().sorted() {
                 // this is ok because we can just use the phi associated with an input
                 let location = Location::new(scope.funclet_id.clone(), node_id.clone());
                 let info = scope.get_node_information(node_id, context);

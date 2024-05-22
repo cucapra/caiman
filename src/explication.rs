@@ -152,8 +152,6 @@ fn explicate_program(program: expir::Program, debug_info: &DebugInfo) -> ir::Pro
 pub fn explicate(
     definition: crate::frontend::ExplicationDefinition,
 ) -> crate::frontend::Definition {
-    // dbg!(&definition);
-    // todo!();
     match definition {
         crate::frontend::ExplicationDefinition {
             version,

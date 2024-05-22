@@ -15,35 +15,32 @@ fn explicate_phi_node(
     mut state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    let error = format!(
-        "TODO Hole in node {}",
-        context.debug_info.node_expir(
-            state.get_current_funclet_id(),
-            state
-                .get_current_node(context)
-                .as_ref()
-                .opt()
-                .expect("Unreachable")
-        )
-    );
-    let value_spec = state.get_funclet_spec(
+    let (value_spec, timeline_spec, _) = state.get_funclet_spec_triple(
         state.get_current_funclet_id(),
-        &SpecLanguage::Value,
         context,
     );
     let value_funclet_id = value_spec.funclet_id_opt.unwrap();
-    let value_quot = get_expect_box(&value_spec.input_tags, index)
-        .as_ref()
-        .opt()
-        .expect(&error)
-        .quot;
-
-    let operation = Location {
-        funclet_id: value_funclet_id,
-        quot: value_quot,
-    };
-
-    state.add_operation(operation, context);
+    let timeline_funclet_id = timeline_spec.funclet_id_opt.unwrap();
+    match get_expect_box(&value_spec.input_tags, index) {
+        Hole::Empty => {},
+        Hole::Filled(value) => {
+            let operation = Location {
+                funclet_id: value_funclet_id,
+                quot: value.quot.clone(),
+            };
+            state.add_value_operation(operation, context);
+        }
+    }
+    match get_expect_box(&timeline_spec.input_tags, index) {
+        Hole::Empty => {},
+        Hole::Filled(timeline) => {
+            let operation = Location {
+                funclet_id: timeline_funclet_id,
+                quot: timeline.quot.clone(),
+            };
+            state.add_timeline_operation(operation, context);
+        }
+    }
     let node = expir::Node::Phi {
         index: Hole::Filled(index),
     };
@@ -99,7 +96,7 @@ fn explicate_local_do_builtin(
             funclet_id: value_funclet_id,
             quot: operation_to_try.clone(),
         };
-        new_state.add_operation(location, context);
+        new_state.add_value_operation(location, context);
         let node = expir::Node::LocalDoBuiltin {
             operation: Hole::Filled(operation_to_try),
             inputs: inputs.clone(),
@@ -165,9 +162,9 @@ fn explicate_local_do_external(
             .get_node_type_information(&value_funclet_id, &location.node_id(context).unwrap());
         for offset in 0..node_info.output_types.len() {
             let offset_location = Location::new(value_funclet_id, base_node_id + offset + 1);
-            new_state.add_operation(offset_location, context);
+            new_state.add_value_operation(offset_location, context);
         }
-        new_state.add_operation(location, context);
+        new_state.add_value_operation(location, context);
         let node = expir::Node::LocalDoExternal {
             operation: Hole::Filled(operation_to_try),
             inputs: inputs.clone(),
@@ -244,9 +241,9 @@ fn explicate_encode_do(
             .get_node_type_information(&value_funclet_id, &location.node_id(context).unwrap());
         for offset in 0..node_info.output_types.len() {
             let offset_location = Location::new(value_funclet_id, base_node_id + offset + 1);
-            new_state.add_operation(offset_location, context);
+            new_state.add_value_operation(offset_location, context);
         }
-        new_state.add_operation(location, context);
+        new_state.add_value_operation(location, context);
         let node = expir::Node::EncodeDoExternal {
             operation: Hole::Filled(operation_to_try),
             inputs: inputs.clone(),

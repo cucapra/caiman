@@ -355,7 +355,7 @@ where
         context
             .debug_info
             .node(&value_funclet_id, value_node_id.clone()),
-        state.get_node_error(context)
+        state.current_node_error(context)
     );
 
     let input_attempts = enumerate_fill_attempts(
@@ -528,6 +528,7 @@ fn explicate_encode_do(
         .opt()
         .expect(&state.hole_error(context))
         .clone();
+
     let encoder = expir_encoder
         .as_ref()
         .opt()
@@ -808,17 +809,24 @@ fn explicate_local_copy(
     let mut new_state = state.clone();
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
+
     let info = state.get_node_information(&input, context);
-    new_state.set_instantiation(
-        output,
-        info.instantiation.clone().expect(&format!(
-            "Missing instantiation for node {}",
-            context
-                .debug_info
-                .node(&state.get_current_funclet_id(), input)
-        )),
-        context,
-    );
+    let input_instantiation = info.instantiation.as_ref().expect(&format!(
+        "Missing instantiation for node {}",
+        context
+            .debug_info
+            .node(&state.get_current_funclet_id(), input)
+    ));
+    match &input_instantiation.value {
+        Some(_) => {
+            new_state.set_instantiation(
+                output,
+                input_instantiation.clone(),
+                context,
+            );
+        }
+        None => {}
+    }
     let node = ir::Node::LocalCopy { input, output };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -852,17 +860,24 @@ fn explicate_encode_copy(
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
     let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
+
     let info = state.get_node_information(&input, context);
-    new_state.set_instantiation(
-        output,
-        info.instantiation.clone().expect(&format!(
-            "Missing instantiation for node {}",
-            context
-                .debug_info
-                .node(&state.get_current_funclet_id(), input)
-        )),
-        context,
-    );
+    let input_instantiation = info.instantiation.as_ref().expect(&format!(
+        "Missing instantiation for node {}",
+        context
+            .debug_info
+            .node(&state.get_current_funclet_id(), input)
+    ));
+    match &input_instantiation.value {
+        Some(input_value) => {
+            new_state.set_instantiation(
+                output,
+                LocationTriple::new_value(input_value.clone()),
+                context,
+            );
+        }
+        None => {}
+    }
     let node = ir::Node::EncodeCopy {
         encoder,
         input,
@@ -883,7 +898,7 @@ fn explicate_begin_encoding(
     expir_event: &Hole<expir::Quotient>,
     expir_encoded: &Hole<Box<[Hole<NodeId>]>>,
     expir_fences: &Hole<Box<[Hole<NodeId>]>>,
-    state: InState,
+    mut state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
     let error = format!(
@@ -897,25 +912,41 @@ fn explicate_begin_encoding(
                 .expect("Unreachable")
         )
     );
-    let mut new_state = state.clone();
     let place = expir_place.as_ref().opt().expect(&error).clone();
     let event = expir_event.as_ref().opt().expect(&error).clone();
+    // TODO: is this correct?
+    let event_loc = match event {
+        ir::Quotient::Node { node_id } => match place {
+            // get local extract
+            Place::Local => expir::Quotient::Node {
+                node_id: node_id + 1,
+            },
+            // get remote extract
+            _ => expir::Quotient::Node {
+                node_id: node_id + 2,
+            },
+        },
+        _ => event,
+    };
+
     let timeline_loc = state.get_triple_for_spec(
         state.get_current_funclet_id(),
         &SpecLanguage::Timeline,
-        event.clone(),
+        event_loc.clone(),
         context,
     );
+
+    let current_node = state.get_current_node_id().unwrap();
+    let encoder_type = expir::Type::Encoder {
+        queue_place: place.clone(),
+    };
+    state.add_storage_node(current_node, Hole::Filled(encoder_type), context);
+    state.set_instantiation(current_node, timeline_loc.clone(), context);
 
     let mut encoded = Vec::new();
     for node in expir_encoded.as_ref().opt().expect(&error).iter() {
         let schedule_node = node.as_ref().opt().expect(&error);
-        new_state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
-        new_state.set_timeline_manager(
-            schedule_node,
-            state.get_current_node_id().unwrap(),
-            context,
-        );
+        state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
         encoded.push(schedule_node.clone());
     }
     let fences = expir_fences
@@ -932,8 +963,8 @@ fn explicate_begin_encoding(
         encoded: encoded.into_boxed_slice(),
         fences,
     };
-    new_state.next_node();
-    match explicate_node(new_state, context) {
+    state.next_node();
+    match explicate_node(state, context) {
         None => None,
         Some(mut out) => {
             out.add_node(node);
@@ -945,7 +976,7 @@ fn explicate_begin_encoding(
 fn explicate_submit(
     expir_encoder: &Hole<NodeId>,
     expir_event: &Hole<expir::Quotient>,
-    state: InState,
+    mut state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
     let error = format!(
@@ -959,24 +990,63 @@ fn explicate_submit(
                 .expect("Unreachable")
         )
     );
-    let mut new_state = state.clone();
-    let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
+    let encoder = expir_encoder.as_ref().opt().expect(&error);
     let event = expir_event.as_ref().opt().expect(&error).clone();
 
-    let timeline_loc = state.get_triple_for_spec(
+    let place = match &state.get_node_information(encoder, context).typ {
+        Hole::Filled(expir::Type::Encoder { queue_place }) => queue_place.clone(),
+        typ => panic!(
+            "Expected an encoder, got {:?} in node {}",
+            typ,
+            context.debug_info.node(
+                &state.get_current_funclet_id(),
+                state.get_current_node_id().unwrap()
+            )
+        ),
+    };
+
+    let encoder_timeline_status = state
+        .get_node_information(encoder, context)
+        .instantiation
+        .as_ref()
+        .expect(&format!(
+            "missing instantiation {}",
+            state.node_error(encoder.clone(), context)
+        ))
+        .timeline
+        .as_ref()
+        .expect(&format!(
+            "missing timeline instantiation {}",
+            state.node_error(encoder.clone(), context)
+        ))
+        .quot;
+    let new_timeline_status = state.get_triple_for_spec(
         state.get_current_funclet_id(),
         &SpecLanguage::Timeline,
         event.clone(),
         context,
     );
-    for schedule_node in state.get_managed_by_timeline(encoder, context).iter() {
-        new_state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
-        new_state.set_timeline_manager(schedule_node, state.get_current_node_id().unwrap(), context)
+
+    let current_node = state.get_current_node_id().unwrap();
+    let fence_type = expir::Type::Fence {
+        queue_place: place.clone(),
+    };
+    state.add_storage_node(current_node, Hole::Filled(fence_type), context);
+    state.set_instantiation(current_node, new_timeline_status.clone(), context);
+
+    for schedule_node in state
+        .get_nodes_with_timeline_status(&encoder_timeline_status, context)
+        .iter()
+    {
+        state.set_instantiation(schedule_node.clone(), new_timeline_status.clone(), context);
     }
 
-    let node = ir::Node::Submit { encoder, event };
-    new_state.next_node();
-    match explicate_node(new_state, context) {
+    let node = ir::Node::Submit {
+        encoder: encoder.clone(),
+        event,
+    };
+    state.next_node();
+    match explicate_node(state, context) {
         None => None,
         Some(mut out) => {
             out.add_node(node);
@@ -988,7 +1058,7 @@ fn explicate_submit(
 fn explicate_sync_fence(
     expir_fence: &Hole<NodeId>,
     expir_event: &Hole<expir::Quotient>,
-    state: InState,
+    mut state: InState,
     context: &StaticContext,
 ) -> Option<StorageOutState> {
     let error = format!(
@@ -1002,9 +1072,24 @@ fn explicate_sync_fence(
                 .expect("Unreachable")
         )
     );
-    let mut new_state = state.clone();
-    let fence = expir_fence.as_ref().opt().expect(&error).clone();
+    let fence = expir_fence.as_ref().opt().expect(&error);
     let event = expir_event.as_ref().opt().expect(&error).clone();
+
+    let fence_timeline_status = state
+        .get_node_information(fence, context)
+        .instantiation
+        .as_ref()
+        .expect(&format!(
+            "missing instantiation {}",
+            state.node_error(fence.clone(), context)
+        ))
+        .timeline
+        .as_ref()
+        .expect(&format!(
+            "missing timeline instantiation {}",
+            state.node_error(fence.clone(), context)
+        ))
+        .quot;
 
     let timeline_loc = state.get_triple_for_spec(
         state.get_current_funclet_id(),
@@ -1012,14 +1097,16 @@ fn explicate_sync_fence(
         event.clone(),
         context,
     );
-    for schedule_node in state.get_managed_by_timeline(fence, context).iter() {
-        new_state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
-        new_state.clear_timeline_manager(schedule_node, context)
+    for schedule_node in state.get_nodes_with_timeline_status(&fence_timeline_status, context).iter() {
+        state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
     }
 
-    let node = ir::Node::SyncFence { fence, event };
-    new_state.next_node();
-    match explicate_node(new_state, context) {
+    let node = ir::Node::SyncFence {
+        fence: fence.clone(),
+        event,
+    };
+    state.next_node();
+    match explicate_node(state, context) {
         None => None,
         Some(mut out) => {
             out.add_node(node);

@@ -103,7 +103,10 @@ enum PassInformation {
 #[derive(Debug, Clone)]
 struct OperationPassInformation {
     // Which operations we've executed by this level of the recursion
-    operations: HashSet<Location>,
+    // for now, we only care about value and timeline operations
+    //   since spatial operations fall under allocation stuff
+    value_operations: HashSet<Location>,
+    timeline_operations: HashSet<Location>,
 }
 
 // information about storage made while allocating space usage
@@ -123,7 +126,7 @@ struct StoragePassInformation {
 pub struct StorageNodeInformation {
     // Information about a single node storing stuff that we've recorded in our state
 
-    // Which set of remote nodes this node stores data for (if any)
+    // Which set of remote nodes this node stores data for right now (if any)
     // Observe that an empty location is completely valid
     // Also note that the empty option means specifically that we have not added anything
     //   which is distinct from adding something of all types none
@@ -132,11 +135,6 @@ pub struct StorageNodeInformation {
     // The type of this storage
     // is empty when we don't know concretely what type this should take
     pub typ: Hole<expir::Type>,
-
-    // Which node is "managing" our timeline
-    // this could be a fence or an encoder (we don't really care here)
-    // This information is used for updating the timeline when the manager changes
-    pub timeline_manager: Option<NodeId>,
 }
 
 // out state for the operation pass

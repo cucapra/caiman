@@ -7,7 +7,7 @@ use crate::explication::util::*;
 
 impl ScheduleScopeData {
     pub fn new_operation(funclet_id: FuncletId) -> ScheduleScopeData {
-        ScheduleScopeData::new_inner_operation(funclet_id, HashSet::new())
+        ScheduleScopeData::new_inner_operation(funclet_id, HashSet::new(), HashSet::new())
     }
 
     pub fn new_storage(funclet_id: FuncletId) -> ScheduleScopeData {
@@ -16,14 +16,18 @@ impl ScheduleScopeData {
 
     fn new_inner_operation(
         funclet_id: FuncletId,
-        operations: HashSet<Location>,
+        value_operations: HashSet<Location>,
+        timeline_operations: HashSet<Location>,
     ) -> ScheduleScopeData {
         ScheduleScopeData {
             funclet_id,
             node_id: None,
             node_index: 0,
             explication_hole: false,
-            pass_information: PassInformation::Operation(OperationPassInformation { operations }),
+            pass_information: PassInformation::Operation(OperationPassInformation {
+                value_operations,
+                timeline_operations,
+            }),
         }
     }
 
@@ -83,12 +87,20 @@ impl ScheduleScopeData {
         }
     }
 
-    pub fn add_operation(&mut self, operation: Location, context: &StaticContext) {
-        self.as_operation_mut().operations.insert(operation);
+    pub fn add_value_operation(&mut self, operation: Location, context: &StaticContext) {
+        self.as_operation_mut().value_operations.insert(operation);
     }
 
-    pub fn has_operation(&self, operation: &Location, context: &StaticContext) -> bool {
-        self.as_operation().operations.contains(operation)
+    pub fn has_value_operation(&self, operation: &Location, context: &StaticContext) -> bool {
+        self.as_operation().value_operations.contains(operation)
+    }
+
+    pub fn add_timeline_operation(&mut self, operation: Location, context: &StaticContext) {
+        self.as_operation_mut().timeline_operations.insert(operation);
+    }
+
+    pub fn has_timeline_operation(&self, operation: &Location, context: &StaticContext) -> bool {
+        self.as_operation().timeline_operations.contains(operation)
     }
 
     pub fn add_storage_node(
@@ -102,7 +114,6 @@ impl ScheduleScopeData {
             StorageNodeInformation {
                 instantiation: None,
                 typ,
-                timeline_manager: None,
             },
         );
         assert!(
@@ -125,7 +136,8 @@ impl ScheduleScopeData {
             .expect(&format!(
                 "Missing storage node {}",
                 context.debug_info.node(&funclet_id, schedule_node)
-            )).typ = Hole::Filled(typ);
+            ))
+            .typ = Hole::Filled(typ);
     }
 
     pub fn set_instantiation(
@@ -289,35 +301,6 @@ impl ScheduleScopeData {
                 }
             },
         }
-    }
-
-    pub fn set_timeline_manager(
-        &mut self,
-        schedule_node: &NodeId,
-        timeline_manager: NodeId,
-        context: &StaticContext,
-    ) {
-        let funclet_id = self.funclet_id;
-        self.as_storage_mut()
-            .storage_node_information
-            .get_mut(&schedule_node)
-            .expect(&format!(
-                "Attempting to update Node {} without already having an instantiation",
-                context.debug_info.node(&funclet_id, *schedule_node)
-            ))
-            .timeline_manager = Some(timeline_manager);
-    }
-
-    pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
-        let funclet_id = self.funclet_id;
-        self.as_storage_mut()
-            .storage_node_information
-            .get_mut(&schedule_node)
-            .expect(&format!(
-                "Attempting to update Node {} without already having an instantiation",
-                context.debug_info.node(&funclet_id, *schedule_node)
-            ))
-            .timeline_manager = None;
     }
 
     /*
