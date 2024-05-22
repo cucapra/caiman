@@ -75,10 +75,8 @@ fn bar_impl(e: Encoder @ input(tmln.r1),
 {
     @in { input: input(tmln.e), output: node(tmln.out) };
     let f2 = submit @ node(tmln.sub) e;
-    let ye = (await @ node(tmln.snc1) f2).xe_0;
-    // TODO: we rename nodes normally, but currently aren't doing
-    // that for timeline stuff. Hence the `x_0` to "manually" rename
-    let yf = (await @ node(tmln.snc2) f).xf_0;
+    let ye = (await @ node(tmln.snc1) f2).xe;
+    let yf = (await @ node(tmln.snc2) f).xf;
     @out { input: node(tmln.out), output: node(tmln.out) };
     yf + ye
 }

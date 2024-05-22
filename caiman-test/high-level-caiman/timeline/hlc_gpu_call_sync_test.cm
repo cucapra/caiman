@@ -71,9 +71,7 @@ fn bar_impl(f: Fence @ [input(tmln.f), none(val)],
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let f2 = submit @ node(tmln.sub) e;
     let y = (await @ node(tmln.snc1) f2).y_gpu;
-    // TODO: we rename nodes normally, but currently aren't doing
-    // that for timeline stuff. Hence the `x_0` to "manually" rename
-    let x2 = (await @ node(tmln.snc2) f).x_0;
+    let x2 = (await @ node(tmln.snc2) f).x;
     @out { input: node(tmln.out), output: node(tmln.out) };
     x2 + y
 }

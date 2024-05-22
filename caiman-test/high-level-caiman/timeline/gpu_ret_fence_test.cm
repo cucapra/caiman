@@ -56,8 +56,7 @@ fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
         y2_gpu: i32'<storage, map_read> @ [node(tmln.f), none(sptl)-saved] 
         = bar_impl(e, y_gpu) @ node(tmln.(ret, f));
     @in {input: node(tmln.ret), output: node(tmln.out) };
-    // JANKY: "manual" renaming
-    let r = (await @ node(tmln.snc) f).y2_gpu_0;
+    let r = (await @ node(tmln.snc) f).y2_gpu;
     @out {input: node(tmln.out), output: node(tmln.out) };
     r
 }
