@@ -251,6 +251,7 @@ fn handle_return(
             cur_id,
             cur_stmts,
             Terminator::Return {
+                info: end,
                 dests: ast_to_hir_named_tags(ret_names),
                 rets: expr_to_multi_node_id(sched_expr),
                 passthrough: vec![],
@@ -302,6 +303,7 @@ fn handle_select(
             cur_id,
             cur_stmts,
             Terminator::Select {
+                info: end_info,
                 dests: ast_to_hir_named_tags(dests),
                 guard: expr_to_node_id(guard),
                 tag: TripleTag::from_owned_opt(tag),
@@ -342,13 +344,13 @@ fn handle_call(
     cur_stmts: &mut Vec<SchedStmt>,
     lhs: Vec<(String, Option<FullType>)>,
     call: SchedFuncCall,
-    info: Info,
+    end_info: Info,
 ) {
     let info = Info::new_range(
         cur_stmts
             .first()
-            .map_or(&info, |x: &SchedStmt| x.get_info()),
-        &info,
+            .map_or(&end_info, |x: &SchedStmt| x.get_info()),
+        &end_info,
     );
     edges.insert(*cur_id, Edge::Next(*cur_id + 1));
     if call.yield_call {
@@ -357,7 +359,7 @@ fn handle_call(
             make_block(
                 cur_id,
                 cur_stmts,
-                Terminator::Yield(vec![]),
+                Terminator::Yield(end_info, vec![]),
                 Some(*cur_id + 1),
                 info,
             ),
@@ -446,7 +448,7 @@ fn handle_seq(
         // an in edge annotation to the continuation block
         assert!(cur_stmts.is_empty());
         cur_stmts.push(SchedStmt::InEdgeAnnotation {
-            info: Info::default(),
+            info,
             tags: dests
                 .into_iter()
                 .filter_map(|(s, t)| t.map(|t| (s, t)))
@@ -607,7 +609,7 @@ fn make_blocks(
         let info = cur_stmts.last().map_or(last_info, |x| *x.get_info());
         blocks.insert(
             *cur_id,
-            make_block(cur_id, &mut cur_stmts, Terminator::None, None, info),
+            make_block(cur_id, &mut cur_stmts, Terminator::None(info), None, info),
         );
         edges.insert(old_id, join_edge);
     }
@@ -671,12 +673,13 @@ impl Cfg {
                 id: FINAL_BLOCK_ID,
                 stmts: vec![],
                 terminator: Terminator::FinalReturn(
+                    stmts.last().map_or_else(Info::default, |x| *x.get_info()),
                     (0..outputs.len())
                         .map(|id| format!("{RET_VAR}{id}"))
                         .collect(),
                 ),
                 ret_block: None,
-                src_loc: Info::default(),
+                src_loc: stmts.last().map_or_else(Info::default, |x| *x.get_info()),
             },
         );
         let mut edges = HashMap::new();

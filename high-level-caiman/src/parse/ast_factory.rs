@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::unused_self, clippy::option_option)]
+use std::collections::BTreeSet;
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};
@@ -306,13 +307,13 @@ impl ASTFactory {
         // are there a limited set of WGPU flags/setting we should check for?
         Ok(match flags {
             Some(flags) => {
-                let mut args = vec![];
-                let mut settings = vec![];
+                let mut args = BTreeSet::new();
+                let mut settings = BTreeSet::new();
                 for (key, val) in flags {
                     if let Some(val) = val {
-                        settings.push(WGPUSettings::try_from_kv(&key, &val).map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
+                        settings.insert(WGPUSettings::try_from_kv(&key, &val).map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
                     } else {
-                        args.push(key[..].try_into().map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
+                        args.insert(key[..].try_into().map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
                     }
                 }
                 FlaggedType {
@@ -324,10 +325,24 @@ impl ASTFactory {
             None => FlaggedType {
                 info: self.info(l, r),
                 base: t,
-                flags: Vec::new(),
-                settings: Vec::new(),
+                flags: BTreeSet::new(),
+                settings: BTreeSet::new(),
             }
         })
+    }
+
+    /// Constructs a flagged type from a data type and a list of flags/settings
+    /// Flags/settings are optional
+    /// # Errors
+    /// Returns an error if the flags/settings are invalid
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn flagged_template_type(&self, l: usize, t: DataType, p: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
+        match t {
+            DataType::Encoder(None) => self.flagged_type(l, DataType::Encoder(Some(Box::new(p))), flags, r),
+            DataType::Fence(None) => self.flagged_type(l, DataType::Fence(Some(Box::new(p))), flags, r),
+            _ => Err(custom_parse_error!(self.info(l, r), "Invalid template type {p:?} to base type {t:?}"))
+        }
+        
     }
 
     #[must_use]
@@ -388,12 +403,14 @@ impl ASTFactory {
                 args,
                 tag,
                 yield_call: _,
+                ..
             }) if tag.is_none() => {
                 let target = Self::sched_to_spec_expr(*target)?;
                 let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
                 Ok(SpecTerm::Call { info, function: Box::new(target), args, templates })
             },
-            SchedTerm::TimelineOperation { info, .. } => Err(custom_parse_error!(info, "Cannot occur in this context")),
+            SchedTerm::TimelineOperation { info, .. } | SchedTerm::EncodeBegin { info, .. } => 
+                Err(custom_parse_error!(info, "Timeline operation cannot occur in this context")),
             SchedTerm::Call(info, ..) => Err(custom_parse_error!(info, 
                 "Cannot parameterize a function call with non-type template arguments nor specify a tag in this context")),
             SchedTerm::Hole(info) => Err(custom_parse_error!(info, 
@@ -510,33 +527,27 @@ impl ASTFactory {
     struct_variant_factory!(sched_var(name: Name, tag: Option<Tags>) -> SchedTerm:SchedTerm::Var);
     tuple_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole);
     struct_variant_factory!(sched_submit(tag: Option<Tags>, e: SchedExpr) -> 
-        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag, extra_args: vec![] });
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
-        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag, extra_args: vec![] });
-    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, captures: Option<Vec<String>>, device: Name) ->
-        SchedTerm:SchedTerm::TimelineOperation { 
-            op: TimelineOperation::EncodeBegin, 
-            arg: Box::new(SchedExpr::Term(
-                SchedTerm::Var{name: device, info: Info::default(), tag: None})),
-            extra_args: captures.unwrap_or_default(),
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag });
+    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, defs: Option<Vec<MaybeArg<FullType>>>, device: Name) ->
+        SchedTerm:SchedTerm::EncodeBegin { 
+            device: device,
+            defs: defs.unwrap_or_default(),
             tag: tag 
         });
 
 
     // scheduling function calls:
 
-    /// Constructs a scheduling function call
-    #[must_use]
-    pub fn sched_fn_call(&self, target: SchedExpr, templates: Option<TemplateArgs>, args: Vec<SchedExpr>, tag: Option<Tags>) 
-        -> SchedFuncCall {
-        SchedFuncCall {
-            target: Box::new(target),
-            templates: templates,
-            args: args,
-            yield_call: false,
-            tag,
-        }
-    }
+    // Constructs a scheduling function call
+    struct_variant_factory!(sched_fn_call(target: SchedExpr, templates: Option<TemplateArgs>, args: Vec<SchedExpr>, tag: Option<Tags>) -> SchedFuncCall:SchedFuncCall {
+        target: Box::new(target),
+        templates: templates,
+        args: args,
+        yield_call: false,
+        tag: tag
+    });
 
     /// Constructs template value arguments for a scheduling function call
     /// # Errors
@@ -599,7 +610,7 @@ impl ASTFactory {
         });
 
     #[must_use]
-    pub fn encoded_stmt(&self, l: usize, lhs: Vec<(String, Option<FlaggedType>)>, rhs: SchedExpr, r: usize) -> EncodedStmt {
+    pub fn encoded_stmt(&self, l: usize, lhs: Vec<(String, Option<Vec<Tag>>)>, rhs: SchedExpr, r: usize) -> EncodedStmt {
         EncodedStmt {
             info: self.info(l, r),
             lhs,
@@ -608,22 +619,44 @@ impl ASTFactory {
     }
     // TOP-Level:
 
-    struct_variant_factory!(value_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: Option<Vec<NamedOutput<DataType>>>, statements: Vec<SpecStmt>) 
-        -> ClassMembers:ClassMembers::ValueFunclet {
-            name: name,
-            input: input,
-            output: output.unwrap_or_default(),
-            statements: statements
-        });
+    #[must_use] 
+    pub fn value_funclet(&self, l: usize, name: String, input: Vec<Arg<DataType>>, 
+        output: Option<Vec<NamedOutput<DataType>>>, statements: Vec<SpecStmt>, r: usize) 
+        -> ClassMembers {
+            ClassMembers::ValueFunclet(SpecFunclet {
+                info: self.info(l, r),
+                name,
+                input,
+                output: output.unwrap_or_default(),
+                statements,
+            })
+    }
 
-    struct_variant_factory!(space_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: NamedOutput<DataType>, statements: Vec<SpecStmt>) 
-        -> TopLevel:TopLevel::SpatialFunclet);
+    #[must_use] 
+    pub fn space_funclet(&self, l: usize, name: String, input: Vec<Arg<DataType>>, 
+        output: Vec<NamedOutput<DataType>>, statements: Vec<SpecStmt>, r: usize) 
+        -> ClassMembers {
+            ClassMembers::SpatialFunclet(SpecFunclet {
+                info: self.info(l, r),
+                name,
+                input,
+                output,
+                statements,
+            })
+    }
 
-    struct_variant_factory!(time_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: NamedOutput<DataType>, statements: Vec<SpecStmt>) 
-        -> TopLevel:TopLevel::TimelineFunclet);
+    #[must_use] 
+    pub fn time_funclet(&self, l: usize, name: String, input: Vec<Arg<DataType>>, 
+        output: Vec<NamedOutput<DataType>>, statements: Vec<SpecStmt>, r: usize) 
+        -> ClassMembers {
+            ClassMembers::TimelineFunclet(SpecFunclet {
+                info: self.info(l, r),
+                name,
+                input,
+                output,
+                statements,
+            })
+    }
 
     struct_variant_factory!(function_class(name: String, members: Vec<ClassMembers>) 
         -> TopLevel:TopLevel::FunctionClass);

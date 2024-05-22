@@ -2,6 +2,7 @@
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
+use std::collections::BTreeMap;
 
 
 grammar(astf: &ASTFactory);
@@ -19,7 +20,7 @@ match {
   // Keywords (omitting things with symbols in here is ok for some reason)
   "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
   "let", "returns", "return", "var", "if", "else",
-  "i32", "i64", "bool", "Event", "BufferSpace",
+  "i32", "i64", "bool", "Event", "BufferSpace", "Encoder", "Fence",
   "true", "false", "import",
   "pure",
   "node","none","input","output","usable","saved","need","dead",
@@ -48,20 +49,6 @@ TopLevel: TopLevel = {
     <@L> 
     "feq" <Id> "{" <ClassMembers+> "}" 
     <@R> => astf.function_class(<>),
-
-    <@L>
-    "tmln" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MaybeNamed<BaseType>>
-    "{"
-        <SpecStmt*>
-    "}"
-    <@R> => astf.time_funclet(<>),
-
-    <@L>
-    "sptl" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MaybeNamed<BaseType>>
-    "{"
-        <SpecStmt*>
-    "}"
-    <@R> => astf.space_funclet(<>),
 
     <l: @L>
     "const" <n: Id> "=" <e: SchedExpr> <u: (";")?>
@@ -92,6 +79,20 @@ ClassMembers: ClassMembers = {
         <SpecStmt*>
     "}"
     <@R> => astf.value_funclet(<>),
+
+    <@L>
+    "tmln" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MultiNamedBaseType>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.time_funclet(<>),
+
+    <@L>
+    "sptl" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MultiNamedBaseType>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.space_funclet(<>),
 
     <@L>
     "extern" "(" <Id> ")" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
@@ -137,11 +138,20 @@ BaseType: DataType = {
     "bool" => DataType::Bool,
     "Event" => DataType::Event,
     "BufferSpace" => DataType::BufferSpace,
+    "Encoder" => DataType::Encoder(None),
+    "Fence" => DataType::Fence(None),
     <n: Id> => DataType::UserDefined(String::from(n)),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
     "&" <BaseType> => DataType::Ref(Box::new(<>)),
+    "{" <v: CommaList<Arg<FlaggedType>>> "}" => {
+        let mut map = BTreeMap::new();
+        for (k, v) in v {
+            map.insert(k, v);
+        }
+        DataType::Record(map)
+    },
 }
 
 MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
@@ -175,6 +185,11 @@ MaybeArgFullType: (String, Option<FullType>) = {
         base: None,
         tags: t,
     })),
+    <i: Id> => (String::from(i), None),
+}
+
+MaybeArgTaggedType: (String, Option<Vec<Tag>>) = { 
+    <i: Id> <t: TagOp> => (String::from(i), Some(t)),
     <i: Id> => (String::from(i), None),
 }
 
@@ -247,7 +262,8 @@ QuotRef: QuotientReference = {
 
 // Flagged type: base type with flags and settings
 FlaggedType: FlaggedType = {
-    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_type(<>)
+    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_type(<>),
+    <@L> <BaseType> "'" <BaseType> <("<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_template_type(<>),
 }
 
 // Flag or setting. A flag is a name with no value. A setting is a name with a value
@@ -347,17 +363,16 @@ MatchedIf: SchedStmt = {
 // Scheduling specific expressions
 
 #[inline]
-SchedTerm: SchedTerm = {
-    <@L> <SchedCall> <@R> => astf.sched_call_expr(<>),
-    <@L> "submit" <TagOp?> <Atom<Literal>> <@R> => astf.sched_submit(<>),
-    <@L> "await" <TagOp?> <Atom<Literal>> <@R> => astf.sched_await(<>),
-    <@L> "encode-begin" <TagOp?> <("{" <CommaList<Id>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
+TimelineTerm: SchedTerm = {
+    <@L> "submit" <TagOp?> <UpperTerm> <@R> => astf.sched_submit(<>),
+    <@L> "await" <TagOp?> <UpperTerm> <@R> => astf.sched_await(<>),
+    <@L> "encode-begin" <TagOp?> <("{" <CommaList<MaybeArgFullType>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
 }
 
 #[inline]
 SchedCall: SchedFuncCall = {
-    <Term> <TemplateArgs?> 
-        "(" <CommaList<SchedExpr>> ")" <TagOp?> => astf.sched_fn_call(<>),
+    <@L> <Term> <TemplateArgs?> 
+        "(" <CommaList<SchedExpr>> ")" <TagOp?> <@R> => astf.sched_fn_call(<>),
 }
 
 SchedCallStmt: SchedFuncCall = {
@@ -390,7 +405,7 @@ TemplateArgs: TemplateArgs = {
 
 // Encoded scheduling statements which are sent to a device
 EncodedStmt: EncodedStmt = {
-    <@L> <CommaList<MaybeArg<FlaggedType>>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
+    <@L> <CommaList<MaybeArgTaggedType>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
 } 
 
 
@@ -529,11 +544,16 @@ Factor: SchedExpr = {
 
 Unary: SchedExpr = {
     <@L> <UnOp> <Unary> <@R> => astf.uop(<>),
+    UpperTerm,
+}
+
+UpperTerm: SchedExpr = {
+    <TimelineTerm> => NestedExpr::Term(<>),
     Term,
 }
 
 Term: SchedExpr = {
-    <SchedTerm> => NestedExpr::Term(<>),
+    <@L> <SchedCall> <@R> => NestedExpr::Term(astf.sched_call_expr(<>)),
     <l: @L> <lhs: Term> "[" <rhs: Range> "]" <r: @R> => astf.binop(l, lhs, Binop::Index, rhs, r),
     <@L> <Term> <DotOp> <Atom<LiteralNoNumber>> <@R> => astf.binop(<>),
     Atom<Literal>,

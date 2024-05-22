@@ -2,10 +2,13 @@ Error: At "bad_single_tuple.cm" 2:10,
   Parsing Error: Unrecognized token: '(', expected one of [
     "\"&\"",
     "\"BufferSpace\"",
+    "\"Encoder\"",
     "\"Event\"",
+    "\"Fence\"",
     "\"[\"",
     "\"bool\"",
     "\"i32\"",
     "\"i64\"",
+    "\"{\"",
     "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
 ]

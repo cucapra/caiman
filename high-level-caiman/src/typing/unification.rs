@@ -51,7 +51,32 @@ where
     Atom(A),
 }
 
+/// A newtype for `String` to print strings without quotes.
+struct FString(String);
+
+impl std::fmt::Debug for FString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for FString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl<T: Kind, A: Kind> std::fmt::Debug for Node<T, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if f.alternate() {
+            write!(f, "{self:#}")
+        } else {
+            write!(f, "{self}")
+        }
+    }
+}
+
+impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Var {
@@ -59,32 +84,45 @@ impl<T: Kind, A: Kind> std::fmt::Debug for Node<T, A> {
                 id,
                 class_id,
             } => {
-                write!(f, "({id}")?;
-                if let Some(id) = class_id {
-                    write!(f, ":{id}, ")?;
-                } else {
-                    write!(f, ", ")?;
+                let id = class_id.as_ref().map_or_else(
+                    || FString(id.to_string()),
+                    |class_id| FString(format!("{id}:{class_id}")),
+                );
+                let alt = f.alternate();
+                let mut t = f.debug_tuple("Var");
+                t.field(&id);
+                if parent.is_some() {
+                    let p = parent.as_ref().unwrap().borrow();
+                    if alt {
+                        t.field(&FString(format!("parent: {p:#}",)));
+                    } else {
+                        t.field(&FString(format!("parent: {p}",)));
+                    }
                 }
-                write!(f, "parent: {parent:?}")
+                t.finish()
             }
             Self::Term {
-                parent,
-                op,
-                args,
-                class_id,
+                op, args, class_id, ..
             } => {
-                write!(f, "({op:?}")?;
-                if let Some(id) = class_id {
-                    write!(f, ":{id}, ")?;
-                } else {
-                    write!(f, ", ")?;
-                }
+                let id = class_id.as_ref().map_or_else(
+                    || format!("{op:?}"),
+                    |class_id| format!("{op:?}:{class_id}"),
+                );
+                let mut t = f.debug_tuple(&id);
                 for a in args {
-                    write!(f, "{:?}, ", a.borrow())?;
+                    t.field(&a.borrow());
                 }
-                write!(f, "parent: {parent:?})")
+                // if parent.is_some() {
+                //     let p = parent.as_ref().unwrap().borrow();
+                //     if alt {
+                //         t.field(&FString(format!("parent: {p:#}",)));
+                //     } else {
+                //         t.field(&FString(format!("parent: {p}",)));
+                //     }
+                // }
+                t.finish()
             }
-            Self::Atom(a) => write!(f, "{a:?}"),
+            Self::Atom(a) => write!(f, "{a:#?}"),
         }
     }
 }
@@ -290,13 +328,15 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                 //panic!("Unification failed");
                 return false;
             }
+            let mut success = true;
             for (a, b) in a_args.iter().zip(b_args.iter()) {
                 if !unify(a, b) {
-                    //panic!("Unification failed");
-                    return false;
+                    // continue trying in case we can deduce more information
+                    // ex: we have a hole
+                    success = false;
                 }
             }
-            true
+            success
         }
         (Node::Var { .. }, _) | (_, Node::Var { .. }) => true,
         _ => false,
@@ -320,6 +360,25 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
     /// Checks if a constraint is a variable.
     pub const fn is_var(&self) -> bool {
         matches!(self, Self::Var(_))
+    }
+
+    /// Returns true if the constraints are equal, up to alpha equivalence.
+    pub fn alpha_equiv(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Atom(a), Self::Atom(b)) => a == b,
+            (Self::Term(op_a, args_a), Self::Term(op_b, args_b)) => {
+                op_a == op_b && args_a.len() == args_b.len() && {
+                    for (a, b) in args_a.iter().zip(args_b.iter()) {
+                        if !a.alpha_equiv(b) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+            }
+            (Self::Var(_), Self::Var(_)) => true,
+            _ => false,
+        }
     }
 }
 
@@ -430,7 +489,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
             Ok(())
         } else {
             Err(format!(
-                "variable {:#?} != constraint {:#?}",
+                "{:#?}\n\t!=\n{:#?}",
                 *representative(var).borrow(),
                 *c.borrow()
             ))

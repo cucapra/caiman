@@ -61,40 +61,73 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, Edge, START_BLOCK_ID},
+            cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
             HirBody, HirFuncCall, HirOp, OpType, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{Binop, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag},
-    typing::{Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
+    parse::ast::{
+        Binop, DataType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag,
+    },
+    typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
-use super::continuations::compute_pretinuations;
+use super::{continuations::compute_pretinuations, ssa};
 
 /// Deduces the quotients for the value specification. Returns an error
 /// if unification fails, otherwise, writes the deduced quotients to the tags
 /// of the instructions in the cfg.
+#[allow(clippy::too_many_arguments)]
 pub fn deduce_val_quots(
     inputs: &mut [(String, TripleTag)],
     outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
     cfg: &mut Cfg,
     spec_info: &SpecInfo,
     ctx: &Context,
+    dtypes: &HashMap<String, DataType>,
+    info: Info,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
-    let (env, selects) = unify_nodes(
-        inputs.iter().map(|(name, _)| name),
-        cfg,
-        ctx,
-        Info::default(),
-        env,
-    )?;
+    let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes, info)?;
+    let (env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
     fill_type_info(&env, cfg, &selects);
-    fill_io_type_info(inputs, outputs, &env);
+    fill_io_type_info(inputs, outputs, output_dtypes, &env);
     Ok(())
 }
 
+/// Adds constraints to the environment based on input and output annotations.
+/// Any unspecified annotations are going to be assumed to match up with the
+/// spec. Requires that the input and output variables of a given dimension
+/// (timeline, value, etc.) are kept in the same relative order as the spec.
+fn add_io_constraints(
+    mut env: NodeEnv,
+    inputs: &mut [(String, TripleTag)],
+    outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
+    dtypes: &HashMap<String, DataType>,
+    info: Info,
+) -> Result<NodeEnv, LocalError> {
+    env.override_output_classes(output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)));
+    for (idx, (arg_name, fn_in_tag)) in inputs
+        .iter()
+        .filter(|(arg, _)| is_value_dtype(&dtypes[&ssa::original_name(arg)]))
+        .enumerate()
+    {
+        let class_name = if let Some(annoted_quot) = &fn_in_tag.value.quot_var.spec_var {
+            annoted_quot.clone()
+        } else {
+            let spec_classes = env.get_input_classes();
+            if idx < spec_classes.len() {
+                spec_classes[idx].clone()
+            } else {
+                continue;
+            }
+        };
+        env = add_node_eq(arg_name, &class_name, info, env)?;
+    }
+    Ok(env)
+}
 /// Adds a type constraint to the environment
 /// # Arguments
 /// * `lhs` - The name of the variable to constrain
@@ -110,15 +143,43 @@ fn add_constraint(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_constraint(lhs, rhs)
-        .map_err(|e| {
-            type_error(
-                info,
-                &format!("Failed to unify node constraints of {lhs}: {e}"),
-            )
-        })
-        .unwrap();
+    env.add_constraint(lhs, rhs).map_err(|e| {
+        type_error(
+            info,
+            &format!("Failed to unify node constraints of {lhs}:\n {e}"),
+        )
+    })?;
     Ok(env)
+}
+
+/// Adds a type constraint to the environment, allowing value
+/// information from `TripleTag` to override the constraint.
+/// # Arguments
+/// * `lhs` - The name of the variable to constrain
+/// * `rhs` - The constraint to apply to the type variable
+/// * `info` - The source info for the constraint
+/// * `env` - The current environment
+/// # Returns
+/// The updated environment
+#[allow(clippy::unnecessary_wraps)]
+fn add_overrideable_constraint(
+    lhs: &str,
+    lhs_tag: &TripleTag,
+    rhs: &ValQuot,
+    info: Info,
+    env: NodeEnv,
+) -> Result<NodeEnv, LocalError> {
+    if matches!(lhs_tag.value.quot, Some(Quotient::None)) {
+        return Ok(env);
+    }
+    if let Some(annot) = &lhs_tag.value.quot_var.spec_var {
+        if let Some(class_constraint) = env.get_spec_node(annot) {
+            if !class_constraint.alpha_equiv(&From::from(rhs)) {
+                return Ok(env);
+            }
+        }
+    }
+    add_constraint(lhs, rhs, info, env)
 }
 
 /// Constrains two type variables to be equal
@@ -137,8 +198,7 @@ fn add_var_constraint(
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     env.add_var_eq(lhs, var)
-        .map_err(|e| type_error(info, &format!("Failed to unify {lhs} with {var}: {e}")))
-        .unwrap();
+        .map_err(|e| type_error(info, &format!("Failed to unify {lhs} with {var}:\n {e}")))?;
     Ok(env)
 }
 
@@ -157,14 +217,12 @@ fn add_node_eq(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_node_eq(name, class_name)
-        .map_err(|e| {
-            type_error(
-                info,
-                &format!("Failed to unify {name} with node {class_name}: {e}"),
-            )
-        })
-        .unwrap();
+    env.add_node_eq(name, class_name).map_err(|e| {
+        type_error(
+            info,
+            &format!("Failed to unify {name} with node {class_name}:\n {e}"),
+        )
+    })?;
     Ok(env)
 }
 
@@ -176,9 +234,14 @@ fn add_node_eq(
 /// * `env` - The current environment
 /// # Returns
 /// The updated environment
-fn add_type_annot(name: &str, annot: &TripleTag, env: NodeEnv) -> Result<NodeEnv, LocalError> {
+fn add_type_annot(
+    name: &str,
+    annot: &TripleTag,
+    info: Info,
+    env: NodeEnv,
+) -> Result<NodeEnv, LocalError> {
     if let Some(class_name) = &annot.value.quot_var.spec_var {
-        add_node_eq(name, class_name, Info::default(), env)
+        add_node_eq(name, class_name, info, env)
     } else {
         Ok(env)
     }
@@ -198,6 +261,7 @@ fn unify_decl(
     lhs: &str,
     lhs_tag: &TripleTag,
     rhs: &SchedTerm,
+    decl_info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     match rhs {
@@ -206,7 +270,7 @@ fn unify_decl(
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
             env = add_constraint(lhs, &ValQuot::Int(i.clone()), *info, env)?;
         }
         SchedTerm::Lit {
@@ -214,7 +278,7 @@ fn unify_decl(
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
             env = add_constraint(lhs, &ValQuot::Bool(*b), *info, env)?;
         }
         SchedTerm::Lit {
@@ -222,16 +286,16 @@ fn unify_decl(
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
             env = add_constraint(lhs, &ValQuot::Float(f.clone()), *info, env)?;
         }
         SchedTerm::Var { name, info, tag } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
             env = add_var_constraint(lhs, name, *info, env)?;
         }
         x => todo!("{x:#?}"),
     }
-    add_type_annot(lhs, lhs_tag, env)
+    add_type_annot(lhs, lhs_tag, decl_info, env)
 }
 
 /// Converts an `HirOp` to a `Binop`
@@ -292,8 +356,8 @@ fn unify_op(
     let mut arg_names = vec![];
     for arg in args {
         match arg {
-            SchedTerm::Var { name, tag, .. } => {
-                env = add_type_annot(name, &TripleTag::from_opt(tag), env)?;
+            SchedTerm::Var { name, tag, info } => {
+                env = add_type_annot(name, &TripleTag::from_opt(tag), *info, env)?;
                 arg_names.push(name.clone());
             }
             _ => unreachable!(),
@@ -344,7 +408,7 @@ fn unify_op(
         _ => unreachable!(),
     }
     for (dest, dest_tag) in dests {
-        env = add_type_annot(dest, dest_tag, env)?;
+        env = add_type_annot(dest, dest_tag, info, env)?;
     }
     Ok(env)
 }
@@ -371,7 +435,7 @@ fn unify_phi(
 ) -> Result<NodeEnv, LocalError> {
     let split_point = pretinuations[&block];
     let split_block = &cfg.blocks[&split_point];
-    if let Terminator::Select { guard, .. } = &split_block.terminator {
+    if let Terminator::Select { guard, info, .. } = &split_block.terminator {
         if let Edge::Select {
             true_branch,
             false_branch,
@@ -389,7 +453,7 @@ fn unify_phi(
                         true_id: MetaVar::new_var_name(incoming_edges[0].1),
                         false_id: MetaVar::new_var_name(incoming_edges[1].1),
                     },
-                    Info::default(),
+                    *info,
                     env,
                 )?;
             } else {
@@ -402,7 +466,7 @@ fn unify_phi(
                         true_id: MetaVar::new_var_name(incoming_edges[1].1),
                         false_id: MetaVar::new_var_name(incoming_edges[0].1),
                     },
-                    Info::default(),
+                    *info,
                     env,
                 )?;
             }
@@ -436,9 +500,10 @@ fn unify_call(
     dests: &[(String, TripleTag)],
     call: &HirFuncCall,
     ctx: &Context,
+    dtypes: &HashMap<String, DataType>,
+    info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    // TODO: info
     let val_spec = value_name(&call.target, ctx);
     let f_class = ctx.specs[&val_spec].feq.clone().unwrap();
     let tuple_name = tuple_id(
@@ -447,31 +512,56 @@ fn unify_call(
             .map(|(name, _)| name.clone())
             .collect::<Vec<_>>(),
     );
-    env = add_type_annot(&tuple_name, &call.tag, env)?;
-    env = add_constraint(
+    env = add_type_annot(&tuple_name, &call.tag, info, env)?;
+    env = add_overrideable_constraint(
         &tuple_name,
+        &call.tag,
         &ValQuot::Call(
             f_class,
-            call.args.iter().map(MetaVar::new_var_name).collect(),
+            call.args
+                .iter()
+                .filter_map(|arg| {
+                    let t = dtypes.get(&ssa::original_name(arg)).unwrap_or_else(|| {
+                        panic!("Missing type info for {}", ssa::original_name(arg))
+                    });
+                    if is_value_dtype(t) {
+                        Some(MetaVar::new_var_name(arg))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
         ),
-        Info::default(),
+        info,
         env,
     )?;
-    for (idx, (dest, tag)) in dests.iter().enumerate() {
-        env = add_type_annot(dest, tag, env)?;
-        env = add_constraint(
+    for (idx, (dest, tag)) in dests
+        .iter()
+        .filter(|(x, _)| {
+            is_value_dtype(
+                dtypes
+                    .get(&ssa::original_name(x))
+                    .unwrap_or_else(|| panic!("Missing type info for {}", ssa::original_name(x))),
+            )
+        })
+        .enumerate()
+    {
+        env = add_type_annot(dest, tag, info, env)?;
+        env = add_overrideable_constraint(
             dest,
+            tag,
             &ValQuot::Extract(MetaVar::new_var_name(&tuple_name), idx),
-            Info::default(),
+            info,
             env,
         )?;
     }
     Ok(env)
 }
 
-/// Unifies nodes of a schedule with that of the value specification
+/// Unifies nodes of a schedule with that of the value specification. Also
+/// unifies the output classes of the schedule based on the arguments to the
+/// final return statement.
 /// # Arguments
-/// * `inputs` - The names of the input variables
 /// * `cfg` - The cfg
 /// * `specs` - The specs
 /// * `ctx` - The context
@@ -480,42 +570,39 @@ fn unify_call(
 /// # Returns
 /// The updated environment and a map from block id to select node name if the block contains
 /// a deduced select statement, or an error if the unification fails
-fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
-    inputs: T,
+fn unify_nodes(
     cfg: &Cfg,
     ctx: &Context,
-    info: Info,
+    fn_info: Info,
+    dtypes: &HashMap<String, DataType>,
     mut env: NodeEnv,
 ) -> Result<(NodeEnv, HashMap<usize, String>), LocalError> {
     let pretinuations = compute_pretinuations(cfg);
     let mut selects = HashMap::new();
-    for (in_name, class_name) in inputs.zip(env.get_input_classes().to_vec()) {
-        env = add_node_eq(in_name, &class_name, info, env)?;
-    }
     for block in cfg.blocks.values() {
         for stmt in &block.stmts {
             env = match stmt {
                 HirBody::ConstDecl {
-                    lhs, lhs_tag, rhs, ..
-                } => unify_decl(lhs, lhs_tag, rhs, env)?,
+                    lhs, lhs_tag, rhs, info, ..
+                } => unify_decl(lhs, lhs_tag, rhs, *info, env)?,
                 HirBody::VarDecl {
-                    lhs, lhs_tag, rhs, ..
+                    lhs, lhs_tag, rhs, info, ..
                 } => {
                     if let Some(rhs) = rhs {
-                        unify_decl(lhs, lhs_tag, rhs, env)?
+                        unify_decl(lhs, lhs_tag, rhs, *info, env)?
                     } else {
                         env
                     }
                 }
                 HirBody::RefStore {
-                    lhs, lhs_tags, rhs, ..
-                } => unify_decl(lhs, lhs_tags, rhs, env)?,
-                HirBody::RefLoad { dest, src, .. } => {
-                    add_var_constraint(dest, src, Info::default(), env)?
+                    lhs, lhs_tags, rhs, info, ..
+                } => unify_decl(lhs, lhs_tags, rhs, *info, env)?,
+                HirBody::RefLoad { dest, src, info, .. } => {
+                    add_var_constraint(dest, src, *info, env)?
                 }
-                HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
+                HirBody::InAnnotation(info, tags) | HirBody::OutAnnotation(info, tags) => {
                     for (name, tag) in tags {
-                        env = add_type_annot(name, tag, env)?;
+                        env = add_type_annot(name, tag, *info, env)?;
                     }
                     env
                 }
@@ -525,55 +612,110 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     op,
                     args,
                 } => unify_op(dests, op, args, *info, ctx, env)?,
-                HirBody::Phi { dest, inputs, .. } => unify_phi(
+                HirBody::Phi { dest, inputs, .. }
+                    if !matches!(
+                        dtypes.get(&ssa::original_name(dest)),
+                        Some(DataType::Fence(_) | DataType::Encoder(_) | DataType::Event),
+                    ) =>
+                {
+                    unify_phi(
+                        dest,
+                        inputs,
+                        &pretinuations,
+                        cfg,
+                        block.id,
+                        &mut selects,
+                        env,
+                    )?
+                }
+                HirBody::DeviceCopy {
                     dest,
-                    inputs,
-                    &pretinuations,
-                    cfg,
-                    block.id,
-                    &mut selects,
+                    src,
+                    info,
+                    dest_tag,
+                    ..
+                } => unify_decl(
+                    dest,
+                    dest_tag,
+                    &SchedTerm::Var {
+                        info: *info,
+                        name: src.clone(),
+                        tag: None,
+                    },
+                    *info,
                     env,
                 )?,
-                // TODO
+                HirBody::EncodeDo { dests, func, info, .. } => unify_call(dests, func, ctx, dtypes, *info, env)?,
                 HirBody::BeginEncoding { .. }
-                | HirBody::DeviceCopy { .. }
-                | HirBody::EncodeDo { .. }
                 | HirBody::FenceOp { .. }
-                | HirBody::Hole(..) => env,
+                | HirBody::Hole(..)
+                // ignore PHIs for non-value types
+                | HirBody::Phi { .. } => env,
             }
         }
-        env = match &block.terminator {
-            Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, env)?,
-            Terminator::Call(..) => unreachable!(),
-            Terminator::Return { dests, rets, .. } => {
-                // pass through is ignored (like next)
-                // the destination tag is the tag for the merged node, we handle this
-                for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
-                    env = add_var_constraint(dest, ret, Info::default(), env)?;
-                }
-                env
-            }
-            Terminator::FinalReturn(ret_names) => {
-                let output_classes: Vec<_> = env.get_output_classes().to_vec();
-                assert_eq!(ret_names.len(), output_classes.len());
-                for (ret_name, class) in ret_names.iter().zip(output_classes.into_iter()) {
-                    env = add_constraint(
-                        &format!("{ret_name}!"),
-                        &ValQuot::Output(MetaVar::new_var_name(ret_name)),
-                        info,
-                        env,
-                    )?;
-                    env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
-                }
-                env
-            }
-            Terminator::Select { .. }
-            | Terminator::None
-            | Terminator::Next(..)
-            | Terminator::Yield(_) => env,
-        }
+        env = unify_terminator(block, ctx, fn_info, dtypes, env)?;
     }
     Ok((env, selects))
+}
+
+/// Unifies the terminator of a basic block with the value specification
+fn unify_terminator(
+    block: &BasicBlock,
+    ctx: &Context,
+    fn_info: Info,
+    dtypes: &HashMap<String, DataType>,
+    mut env: NodeEnv,
+) -> Result<NodeEnv, LocalError> {
+    match &block.terminator {
+        Terminator::CaptureCall { dests, call, .. } => {
+            unify_call(dests, call, ctx, dtypes, fn_info, env)
+        }
+        Terminator::Call(..) => unreachable!(),
+        Terminator::Return {
+            dests, rets, info, ..
+        } => {
+            // pass through is ignored (like next)
+            // the destination tag is the tag for the merged node, we handle this
+            for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
+                env = add_var_constraint(dest, ret, *info, env)?;
+            }
+            Ok(env)
+        }
+        Terminator::FinalReturn(info, ret_names) => {
+            let output_classes: Vec<_> = env.get_function_output_classes().to_vec();
+            for (idx, (ret_name, class)) in ret_names
+                .iter()
+                .filter(|rname| {
+                    is_value_dtype(dtypes.get(&ssa::original_name(rname)).unwrap_or_else(|| {
+                        panic!("Missing dtype for {}", ssa::original_name(rname))
+                    }))
+                })
+                .zip(output_classes.into_iter())
+                .enumerate()
+            {
+                if let Some(func_class) = class {
+                    if idx < env.get_spec_output_classes().len()
+                        && env.get_spec_output_classes()[idx] == func_class
+                    {
+                        env = add_constraint(
+                            &format!("{ret_name}!"),
+                            &ValQuot::Output(MetaVar::new_var_name(ret_name)),
+                            fn_info,
+                            env,
+                        )?;
+                        env = add_node_eq(&format!("{ret_name}!"), &func_class, *info, env)?;
+                    } else {
+                        env = add_node_eq(ret_name, &func_class, fn_info, env)?;
+                    }
+                }
+            }
+            Ok(env)
+        }
+        Terminator::Select { .. }
+        | Terminator::None(..)
+        | Terminator::Next(..)
+        | Terminator::Yield(..) => Ok(env),
+    }
 }
 
 /// Fills the value quotient spec node id in `tag` for `name`. If the quotient is unspecified,
@@ -596,7 +738,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: u
         let old_spec_var = tag.value.quot_var.spec_var.as_ref();
         assert!(
             old_spec_var.is_none() || old_spec_var.unwrap() == &node,
-            "Cannot unify output class {name} with unequal nodes {node} and {}",
+            "Cannot unify class {name} with unequal nodes {node} and {}",
             old_spec_var.unwrap()
         );
         tag.value = Tag {
@@ -652,6 +794,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
 /// * `selects` - A map from each block with a select node to the name of the spec variable
 /// which maps to the select node.
 fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>) {
+    // eprintln!("{env:#?}");
     for block in cfg.blocks.values_mut() {
         let mut insertions = vec![];
         for (idx, stmt) in block.stmts.iter_mut().enumerate() {
@@ -675,18 +818,29 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                         fill_val_quotient(name, tag, env, block.id);
                     }
                 }
-                // TODO: typing for encodings
+                HirBody::EncodeDo { dests, func, .. } => {
+                    fill_val_quotient(
+                        &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                        &mut func.tag,
+                        env,
+                        block.id,
+                    );
+                    for (dest, tag) in dests {
+                        fill_val_quotient(dest, tag, env, block.id);
+                    }
+                }
+                HirBody::DeviceCopy { dest, dest_tag, .. } => {
+                    fill_val_quotient(dest, dest_tag, env, block.id);
+                }
                 HirBody::Hole(_)
                 | HirBody::RefLoad { .. }
                 | HirBody::BeginEncoding { .. }
-                | HirBody::DeviceCopy { .. }
-                | HirBody::EncodeDo { .. }
                 | HirBody::FenceOp { .. } => {}
-                HirBody::Phi { dest, .. } => {
+                HirBody::Phi { dest, info, .. } => {
                     insertions.push((
                         idx,
                         HirBody::InAnnotation(
-                            Info::default(),
+                            *info,
                             vec![(dest.clone(), construct_new_tag(dest, env, block.id))],
                         ),
                     ));
@@ -711,13 +865,13 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 }
                 fill_val_quotient(&selects[&block.id], tag, env, block.id);
             }
-            Terminator::Call(..) | Terminator::None => unreachable!(),
+            Terminator::Call(..) | Terminator::None(..) => unreachable!(),
             // TODO: check the return, I think this is right bc returns should be handled
             // by Phi nodes
             Terminator::Next(..)
             | Terminator::FinalReturn(..)
             | Terminator::Return { .. }
-            | Terminator::Yield(_) => {}
+            | Terminator::Yield(..) => {}
         }
         while let Some((idx, stmt)) = insertions.pop() {
             block.stmts.insert(idx, stmt);
@@ -731,19 +885,32 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
 /// * `inputs` - The names of the input variables
 /// * `outputs` - The type information for the outputs
 /// * `env` - The current environment
-fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTag], env: &NodeEnv) {
+fn fill_io_type_info(
+    inputs: &mut [(String, TripleTag)],
+    outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
+    env: &NodeEnv,
+) {
     for (name, tag) in inputs.iter_mut() {
         fill_val_quotient(name, tag, env, START_BLOCK_ID);
     }
-    let output_classes = env.get_output_classes().to_vec();
-    assert_eq!(output_classes.len(), outputs.len());
-    for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
-        tag.value.quot = Some(Quotient::Node);
-        fill_val_quotient(
-            &MetaVar::new_class_name(&output_class).into_string(),
-            tag,
-            env,
-            START_BLOCK_ID,
-        );
+    let output_classes = env.get_function_output_classes().to_vec();
+    for (tag, output_class) in outputs
+        .iter_mut()
+        .zip(output_dtypes.iter())
+        .filter_map(|(t, dt)| if is_value_dtype(dt) { Some(t) } else { None })
+        .zip(output_classes)
+    {
+        if tag.value.quot.is_none() {
+            tag.value.quot = Some(Quotient::Node);
+        }
+        if let Some(output_class) = output_class {
+            fill_val_quotient(
+                &MetaVar::new_class_name(&output_class).into_string(),
+                tag,
+                env,
+                START_BLOCK_ID,
+            );
+        }
     }
 }

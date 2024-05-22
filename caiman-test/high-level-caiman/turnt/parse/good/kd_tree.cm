@@ -134,12 +134,16 @@ fn find_closest(p: f32, pts: [f32; N], start: i64,
     end: i64, idx: i64) -> f32 impls find_closest, tm, sp
 {
     let r = if end - start <= LN {
-        let e: foo = create_gpu_encoder();
-        encode e.copy[slice: gbuf <- pts[start .. end]];
+        let e: foo = encode-begin { 
+            slice: gpuf, 
+            p_gpu: f32'<storage, copy_src> @ node(tmln.x),
+            r
+        } gpu;
+        encode e.copy[slice <- pts[start .. end]];
         encode e.copy[p_gpu <- p];
         encode e.call[r <- closest_point_gpu'<8, 8>(p_gpu, slice)];
 
-        (await (submit e)).r
+        (await submit e).r
     } else {
         let mdpt = (start + end) / 2;
 

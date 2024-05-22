@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
-use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_local_type};
-use crate::parse::ast::FullType;
-use crate::typing::LOCAL_TEMP_FLAGS;
+use crate::lower::binop_to_str;
+use crate::parse::ast::{FlaggedType, FullType, SpecFunclet};
+use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, LOCAL_TEMP_FLAGS};
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -15,13 +15,14 @@ use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
 use super::types::DTypeConstraint;
 use super::{
-    sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo, SchedOrExtern, Signature,
-    SpecInfo, SpecType, TypedBinop,
+    is_value_fulltype, sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo,
+    SchedOrExtern, Signature, SpecInfo, SpecType, TypedBinop,
 };
 
 /// Gets a list of type declarations for the base types used in the program.
+#[allow(clippy::too_many_lines)]
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
-    // collect used types
+    // TODO: collect used types
     vec![
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("BufferSpace"),
@@ -30,6 +31,18 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("Event"),
             data: asm::LocalTypeInfo::Event,
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("Encoder"),
+            data: asm::LocalTypeInfo::Encoder {
+                queue_place: ir::Place::Gpu,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("Fence"),
+            data: asm::LocalTypeInfo::Fence {
+                queue_place: ir::Place::Gpu,
+            },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(asm::FFIType::I64)),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(BOOL_FFI_TYPE)),
@@ -62,6 +75,22 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i64::gs"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I64,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_SRC_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i64::gd"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I64,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_DST_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("i32"),
             data: asm::LocalTypeInfo::NativeValue {
                 storage_type: asm::FFIType::I32,
@@ -73,6 +102,31 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Local,
                 buffer_flags: LOCAL_TEMP_FLAGS,
+            },
+        })),
+        // TODO: type names
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&i32::gs"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_SRC_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i32::gs"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_SRC_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i32::gd"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_DST_FLAGS,
             },
         })),
     ]
@@ -118,26 +172,18 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
     for decl in tl {
         if let TopLevel::FunctionClass { members, .. } = decl {
             for m in members {
-                if let ClassMembers::ValueFunclet {
-                    statements,
-                    input,
-                    name,
-                    ..
-                } = m
+                if let ClassMembers::ValueFunclet(funclet)
+                | ClassMembers::TimelineFunclet(funclet) = m
                 {
-                    let spec = ctx.specs.get_mut(name).unwrap();
-                    for (name, typ) in input {
+                    let spec = ctx.specs.get_mut(&funclet.name).unwrap();
+                    for (name, typ) in &funclet.input {
                         spec.types.insert(name.clone(), typ.clone());
                     }
-                    // for (name, _) in input.iter() {
-                    //     spec.nodes
-                    //         .insert(name.clone(), SpecNode::Input(name.clone()));
-                    // }
-                    // for name in output.iter().filter_map(|x| x.0.as_ref()) {
-                    //     spec.nodes
-                    //         .insert(name.clone(), SpecNode::Output(name.clone()));
-                    // }
-                    existing_externs.extend(collect_spec(statements, spec, &ctx.signatures)?);
+                    existing_externs.extend(collect_spec(
+                        &funclet.statements,
+                        spec,
+                        &ctx.signatures,
+                    )?);
                 }
             }
         }
@@ -206,15 +252,24 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             let mut env = DTypeEnv::new();
             let spec_name = &ctx.scheds[name].unwrap_sched().value;
             let val_sig = &ctx.specs[spec_name].sig;
-            if input.len() != val_sig.input.len() {
+            if input
+                .iter()
+                .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
+                .count()
+                != val_sig.input.len()
+            {
                 return Err(type_error(
                     *info,
                     &format!("Function inputs of {name} do not match the spec {spec_name}"),
                 ));
             }
-            for ((decl_name, decl_typ), (_, spec_typ)) in input.iter().zip(val_sig.input.iter()) {
+            for ((decl_name, decl_typ), (_, spec_typ)) in input
+                .iter()
+                .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
+                .zip(val_sig.input.iter())
+            {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {
-                    if !dt.base.refines(spec_typ) {
+                    if !dt.base.refines(&spec_typ.base) {
                         return Err(type_error(
                             *info,
                             &format!(
@@ -227,9 +282,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     panic!("All input data types should be specified for now");
                 }
             }
-            let outs = val_sig.output.clone();
-            let must_be_mut =
-                collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
+            let must_be_mut = collect_schedule(&ctx, &mut env, statements, output, input, *info)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
                 sched_info
@@ -266,10 +319,7 @@ fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
     } in externs
     {
         let op_name = binop_to_str(*op, &format!("{op_l:#}"), &format!("{op_r:#}")).to_string();
-        let sig = Signature {
-            input: vec![op_l.clone(), op_r.clone()],
-            output: vec![ret.clone()],
-        };
+        let sig = Signature::new(vec![op_l.clone(), op_r.clone()], vec![ret.clone()]);
         ctx.signatures.insert(op_name.clone(), sig.clone());
         ctx.scheds.insert(op_name, SchedOrExtern::Extern(sig));
     }
@@ -291,8 +341,8 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
             [
                 asm::Declaration::FunctionClass(asm::FunctionClass {
                     name: asm::FunctionClassId(op_name.clone()),
-                    input_types: vec![data_type_to_local_type(op_l), data_type_to_local_type(op_r)],
-                    output_types: vec![data_type_to_local_type(ret)],
+                    input_types: vec![op_l.asm_type(), op_r.asm_type()],
+                    output_types: vec![ret.asm_type()],
                 }),
                 asm::Declaration::ExternalFunction(asm::ExternalFunction {
                     name: op_name.clone(),
@@ -304,16 +354,16 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
                     input_args: vec![
                         asm::ExternalArgument {
                             name: None,
-                            ffi_type: data_type_to_ffi(op_l).unwrap(),
+                            ffi_type: op_l.ffi().unwrap(),
                         },
                         asm::ExternalArgument {
                             name: None,
-                            ffi_type: data_type_to_ffi(op_r).unwrap(),
+                            ffi_type: op_r.ffi().unwrap(),
                         },
                     ],
                     output_types: vec![asm::ExternalArgument {
                         name: None,
-                        ffi_type: data_type_to_ffi(ret).unwrap(),
+                        ffi_type: ret.ffi().unwrap(),
                     }],
                 }),
             ]
@@ -321,6 +371,36 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
         );
     }
     res
+}
+
+/// Collects spec info for a given spec funclet. Returns the updated context and
+/// member signature.
+fn collect_spec_sig(
+    mut member_sig: Option<Signature>,
+    class_name: &str,
+    spec: &SpecFunclet,
+    spec_type: SpecType,
+    mut ctx: Context,
+) -> Result<(Context, Option<Signature>), LocalError> {
+    let sig = NamedSignature::new(&spec.input, spec.output.iter());
+    if let Some(member_sig) = &member_sig {
+        if !sig_match(member_sig, &sig) {
+            return Err(type_error(
+                spec.info,
+                &format!(
+                    "Function class {class_name} has inconsistent signatures for member {}",
+                    spec.name,
+                ),
+            ));
+        }
+    } else {
+        member_sig = Some(From::from(&sig));
+    }
+    ctx.specs.insert(
+        spec.name.to_string(),
+        SpecInfo::new(spec_type, sig, spec.info, Some(class_name)),
+    );
+    Ok((ctx, member_sig))
 }
 
 fn collect_class_signatures(
@@ -331,42 +411,23 @@ fn collect_class_signatures(
     let mut member_sig = None;
     for m in members {
         match m {
-            ClassMembers::ValueFunclet {
-                name,
-                input,
-                output,
-                info,
-                ..
-            } => {
-                let sig = NamedSignature {
-                    input: input.clone(),
-                    output: output
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, (name, typ))| {
-                            (
-                                name.clone().unwrap_or_else(|| format!("_out{idx}")),
-                                typ.clone(),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                };
-                if let Some(member_sig) = &member_sig {
-                    if !sig_match(member_sig, &sig) {
-                        return Err(type_error(
-                            *info,
-                            &format!(
-                                "Function class {class_name} has inconsistent signatures for member {name}",
-                            ),
-                        ));
-                    }
-                } else {
-                    member_sig = Some(From::from(&sig));
-                }
-                ctx.specs.insert(
-                    name.to_string(),
-                    SpecInfo::new(SpecType::Value, sig, *info, Some(class_name)),
-                );
+            ClassMembers::TimelineFunclet(spec) => {
+                let (new_ctx, new_sig) =
+                    collect_spec_sig(member_sig, class_name, spec, SpecType::Timeline, ctx)?;
+                ctx = new_ctx;
+                member_sig = new_sig;
+            }
+            ClassMembers::SpatialFunclet(spec) => {
+                let (new_ctx, new_sig) =
+                    collect_spec_sig(member_sig, class_name, spec, SpecType::Spatial, ctx)?;
+                ctx = new_ctx;
+                member_sig = new_sig;
+            }
+            ClassMembers::ValueFunclet(spec) => {
+                let (new_ctx, new_sig) =
+                    collect_spec_sig(member_sig, class_name, spec, SpecType::Value, ctx)?;
+                ctx = new_ctx;
+                member_sig = new_sig;
             }
             ClassMembers::Extern {
                 name,
@@ -375,16 +436,13 @@ fn collect_class_signatures(
                 info,
                 ..
             } => {
-                let sig = NamedSignature {
-                    input: input
+                let sig = NamedSignature::new(
+                    &input
                         .iter()
                         .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
                         .collect::<Vec<_>>(),
-                    output: output
-                        .iter()
-                        .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
-                        .collect::<Vec<_>>(),
-                };
+                    output.iter(),
+                );
                 let unnamed_sig = Signature::from(&sig);
                 if let Some(member_sig) = &member_sig {
                     if member_sig != &unnamed_sig {
@@ -420,43 +478,13 @@ fn collect_class_signatures(
 
 fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     for decl in tl {
-        match decl {
-            TopLevel::SpatialFunclet { name, info, .. } => {
-                ctx.specs.insert(
-                    name.to_string(),
-                    super::SpecInfo::new(
-                        SpecType::Spatial,
-                        NamedSignature {
-                            input: vec![(String::from("bs"), DataType::BufferSpace)],
-                            output: vec![(String::from("_out0"), DataType::BufferSpace)],
-                        },
-                        *info,
-                        None,
-                    ),
-                );
-            }
-            TopLevel::TimelineFunclet { name, info, .. } => {
-                ctx.specs.insert(
-                    name.to_string(),
-                    super::SpecInfo::new(
-                        SpecType::Timeline,
-                        NamedSignature {
-                            input: vec![(String::from("e"), DataType::Event)],
-                            output: vec![(String::from("_out0"), DataType::Event)],
-                        },
-                        *info,
-                        None,
-                    ),
-                );
-            }
-            TopLevel::FunctionClass {
-                name: class_name,
-                members,
-                ..
-            } => {
-                ctx = collect_class_signatures(members, ctx, class_name)?;
-            }
-            _ => (),
+        if let TopLevel::FunctionClass {
+            name: class_name,
+            members,
+            ..
+        } = decl
+        {
+            ctx = collect_class_signatures(members, ctx, class_name)?;
         }
     }
     Ok(ctx)
@@ -480,7 +508,6 @@ fn make_signature(
                     .base
                     .as_ref()
                     .ok_or_else(|| type_error(info, "Schedule inputs require a type"))?
-                    .base
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -490,7 +517,6 @@ fn make_signature(
                 Ok(x.base
                     .as_ref()
                     .ok_or_else(|| type_error(info, "Function outputs require a data type"))?
-                    .base
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -531,6 +557,16 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
     Ok(ctx)
 }
 
+fn collect_user_defined_types(tl: &[TopLevel]) -> HashMap<String, FlaggedType> {
+    let mut res = HashMap::new();
+    for decl in tl {
+        if let TopLevel::Typedef { name, typ, .. } = decl {
+            res.insert(name.clone(), typ.clone());
+        }
+    }
+    res
+}
+
 impl Context {
     /// Creates a global context from a list of top-level declarations.
     /// # Errors
@@ -545,6 +581,7 @@ impl Context {
             signatures: HashMap::new(),
             scheds: HashMap::new(),
             externs: HashSet::new(),
+            user_types: collect_user_defined_types(tl),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;

@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+};
 
 use caiman::ir;
 
@@ -37,11 +40,17 @@ pub enum DataType {
     Float(FloatSize),
     Bool,
     BufferSpace,
+    /// A local event
     Event,
+    /// A remote event, specifically an encoder
+    Encoder(Option<Box<DataType>>),
+    /// A remote event, specifically a fence
+    Fence(Option<Box<DataType>>),
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
     UserDefined(String),
     Ref(Box<DataType>),
+    Record(BTreeMap<String, FlaggedType>),
 }
 
 impl PartialEq for DataType {
@@ -91,6 +100,8 @@ impl Display for DataType {
             Self::Bool => write!(f, "bool"),
             Self::BufferSpace => write!(f, "BufferSpace"),
             Self::Event => write!(f, "Event"),
+            Self::Encoder(None) => write!(f, "Encoder"),
+            Self::Fence(None) => write!(f, "Fence"),
             Self::Array(..) => todo!(),
             Self::Slice(typ) => {
                 if f.alternate() {
@@ -107,6 +118,15 @@ impl Display for DataType {
                     write!(f, "&{typ}")
                 }
             }
+            Self::Record(fields) => {
+                write!(f, "{{ ")?;
+                for (name, typ) in fields {
+                    write!(f, "{name}: {typ}, ")?;
+                }
+                write!(f, "}}")
+            }
+            Self::Encoder(Some(typ)) => write!(f, "Encoder'{typ}"),
+            Self::Fence(Some(typ)) => write!(f, "Fence'{typ}"),
         }
     }
 }
@@ -305,6 +325,19 @@ impl Tag {
         }
     }
 
+    /// Creates a new tag with none quotient and usable flow
+    #[must_use]
+    pub const fn new_none_usable(spec_type: SpecType) -> Self {
+        Self {
+            quot: Some(Quotient::None),
+            quot_var: QuotientReference {
+                spec_type,
+                spec_var: None,
+            },
+            flow: Some(Flow::Usable),
+        }
+    }
+
     /// Updates the tag so that all non-null parts of `other` are copied to `self`
     pub fn set_specified_info(&mut self, other: Self) {
         if other.quot.is_some() {
@@ -341,7 +374,7 @@ impl PartialEq for Tag {
 impl Eq for Tag {}
 
 /// WGPU flags that can be applied to a buffer
-#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
 pub enum WGPUFlags {
     Storage,
     MapWrite,
@@ -349,6 +382,19 @@ pub enum WGPUFlags {
     CopySrc,
     CopyDst,
     Uniform,
+}
+
+impl std::fmt::Display for WGPUFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Storage => write!(f, "storage"),
+            Self::MapWrite => write!(f, "map_write"),
+            Self::MapRead => write!(f, "map_read"),
+            Self::CopySrc => write!(f, "copy_src"),
+            Self::CopyDst => write!(f, "copy_dst"),
+            Self::Uniform => write!(f, "uniform"),
+        }
+    }
 }
 
 impl TryFrom<&str> for WGPUFlags {
@@ -383,10 +429,19 @@ impl WGPUFlags {
 
 /// WGPU settings that can be applied to a buffer. Settings
 /// are flags that can have values, such as `alignment_bits`
-#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
 pub enum WGPUSettings {
     AlignmentBits(usize),
     ByteSize(usize),
+}
+
+impl std::fmt::Display for WGPUSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AlignmentBits(val) => write!(f, "alignment_bits={val}"),
+            Self::ByteSize(val) => write!(f, "byte_size={val}"),
+        }
+    }
 }
 
 impl WGPUSettings {
@@ -410,15 +465,43 @@ impl WGPUSettings {
 /// A flagged type is a base type parameterized by an optional set of WGPU
 /// flags and settings
 /// Ex. `i64<storage, map_write, alignment_bits=8>`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FlaggedType {
     pub info: Info,
     pub base: DataType,
     /// WGPU flags, can be empty
-    pub flags: Vec<WGPUFlags>,
+    pub flags: BTreeSet<WGPUFlags>,
     /// WGPU settings, (flags that can have values, such as `alignment_bits`)
     /// can be empty
-    pub settings: Vec<WGPUSettings>,
+    pub settings: BTreeSet<WGPUSettings>,
+}
+
+impl std::fmt::Display for FlaggedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.base)?;
+        if !self.flags.is_empty() || !self.settings.is_empty() {
+            write!(f, "'<")?;
+            for flag in &self.flags {
+                write!(f, "{flag}, ")?;
+            }
+            for setting in &self.settings {
+                write!(f, "{setting}, ")?;
+            }
+            write!(f, ">")?;
+        }
+        Ok(())
+    }
+}
+
+impl From<DataType> for FlaggedType {
+    fn from(base: DataType) -> Self {
+        Self {
+            info: Info::default(),
+            base,
+            flags: BTreeSet::new(),
+            settings: BTreeSet::new(),
+        }
+    }
 }
 
 /// A full scheduling type:
@@ -446,6 +529,7 @@ pub type Tags = Vec<Tag>;
 /// Can be an encoded statement or have a list of arguments.
 #[derive(Clone, Debug)]
 pub struct SchedFuncCall {
+    pub info: Info,
     pub target: Box<SchedExpr>,
     pub templates: Option<TemplateArgs>,
     pub args: Vec<SchedExpr>,
@@ -456,7 +540,6 @@ pub struct SchedFuncCall {
 /// A timeline operation that is also an expression
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Copy)]
 pub enum TimelineOperation {
-    EncodeBegin,
     Submit,
     Await,
 }
@@ -481,7 +564,12 @@ pub enum SchedTerm {
         op: TimelineOperation,
         arg: Box<SchedExpr>,
         tag: Option<Tags>,
-        extra_args: Vec<String>,
+    },
+    EncodeBegin {
+        info: Info,
+        device: Name,
+        tag: Option<Tags>,
+        defs: Vec<MaybeArg<FullType>>,
     },
 }
 
@@ -489,9 +577,10 @@ impl SchedTerm {
     #[must_use]
     pub const fn get_tags(&self) -> Option<&Tags> {
         match self {
-            Self::Lit { tag, .. } | Self::Var { tag, .. } | Self::TimelineOperation { tag, .. } => {
-                tag.as_ref()
-            }
+            Self::Lit { tag, .. }
+            | Self::Var { tag, .. }
+            | Self::TimelineOperation { tag, .. }
+            | Self::EncodeBegin { tag, .. } => tag.as_ref(),
             Self::Call(_, call) => call.tag.as_ref(),
             Self::Hole(_) => None,
         }
@@ -506,7 +595,7 @@ pub type SchedExpr = NestedExpr<SchedTerm>;
 #[derive(Clone, Debug)]
 pub struct EncodedStmt {
     pub info: Info,
-    pub lhs: Vec<(Name, Option<FlaggedType>)>,
+    pub lhs: Vec<MaybeArg<Vec<Tag>>>,
     pub rhs: SchedExpr,
 }
 
@@ -676,16 +765,19 @@ impl std::fmt::Display for ExternDefMembers {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct SpecFunclet {
+    pub info: Info,
+    pub name: String,
+    pub input: Vec<Arg<DataType>>,
+    pub output: Vec<(Option<String>, DataType)>,
+    pub statements: Vec<SpecStmt>,
+}
+
 /// Function class members. Either an extern function or a value functlet
 #[derive(Clone, Debug)]
 pub enum ClassMembers {
-    ValueFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Arg<DataType>>,
-        output: Vec<(Option<String>, DataType)>,
-        statements: Vec<SpecStmt>,
-    },
+    ValueFunclet(SpecFunclet),
     Extern {
         info: Info,
         name: String,
@@ -695,6 +787,8 @@ pub enum ClassMembers {
         output: Vec<(Option<String>, DataType)>,
         def: Option<ExternDef>,
     },
+    TimelineFunclet(SpecFunclet),
+    SpatialFunclet(SpecFunclet),
 }
 
 impl ClassMembers {
@@ -702,7 +796,10 @@ impl ClassMembers {
     #[must_use]
     pub fn get_name(&self) -> String {
         match self {
-            Self::ValueFunclet { name, .. } | Self::Extern { name, .. } => name.clone(),
+            Self::ValueFunclet(SpecFunclet { name, .. })
+            | Self::Extern { name, .. }
+            | Self::TimelineFunclet(SpecFunclet { name, .. })
+            | Self::SpatialFunclet(SpecFunclet { name, .. }) => name.clone(),
         }
     }
 
@@ -710,7 +807,10 @@ impl ClassMembers {
     #[must_use]
     pub const fn get_info(&self) -> Info {
         match self {
-            Self::ValueFunclet { info, .. } | Self::Extern { info, .. } => *info,
+            Self::ValueFunclet(SpecFunclet { info, .. })
+            | Self::Extern { info, .. }
+            | Self::TimelineFunclet(SpecFunclet { info, .. })
+            | Self::SpatialFunclet(SpecFunclet { info, .. }) => *info,
         }
     }
 
@@ -722,7 +822,9 @@ impl ClassMembers {
                 input.iter().map(|(_, typ)| typ.clone()).collect(),
                 output.iter().map(|(_, typ)| typ.clone()).collect(),
             ),
-            Self::ValueFunclet { input, output, .. } => (
+            Self::SpatialFunclet(SpecFunclet { input, output, .. })
+            | Self::TimelineFunclet(SpecFunclet { input, output, .. })
+            | Self::ValueFunclet(SpecFunclet { input, output, .. }) => (
                 input.iter().map(|(_, typ)| typ.clone()).collect(),
                 output.iter().map(|(_, typ)| typ.clone()).collect(),
             ),
@@ -743,20 +845,6 @@ pub enum TopLevel {
         info: Info,
         name: String,
         members: Vec<ClassMembers>,
-    },
-    TimelineFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Arg<DataType>>,
-        output: NamedOutput<DataType>,
-        statements: Vec<SpecStmt>,
-    },
-    SpatialFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Arg<DataType>>,
-        output: NamedOutput<DataType>,
-        statements: Vec<SpecStmt>,
     },
     SchedulingFunc {
         info: Info,
