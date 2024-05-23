@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::binop_to_str;
 use crate::parse::ast::{FlaggedType, FullType, SpecFunclet};
-use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, LOCAL_TEMP_FLAGS};
+use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS, LOCAL_TEMP_FLAGS};
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -91,6 +91,14 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i64::g"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I64,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_STORAGE_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("i32"),
             data: asm::LocalTypeInfo::NativeValue {
                 storage_type: asm::FFIType::I32,
@@ -127,6 +135,14 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Gpu,
                 buffer_flags: ENCODE_DST_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i32::g"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_STORAGE_FLAGS,
             },
         })),
     ]
@@ -210,6 +226,7 @@ fn resolve_types(
     env: &DTypeEnv,
     types: &mut HashMap<String, DataType>,
     names: &HashMap<String, Mutability>,
+    flags: &mut HashMap<String, ir::BufferFlags>,
 ) -> Result<(), LocalError> {
     for name in names.keys() {
         if let Some(dt) = env.env.get_type(name) {
@@ -226,6 +243,33 @@ fn resolve_types(
                         ));
                     }
 
+                    if let DataType::RemoteObj { all, read, write } = &dt {
+                        use std::collections::hash_map::Entry;
+                        for k in all.keys() {
+                            match flags.entry(k.clone()) {
+                                Entry::Occupied(mut e) => {
+                                    e.get_mut().storage = true;
+                                    if read.contains(k) {
+                                        e.get_mut().map_read = true;
+                                    }
+                                    if write.contains(k) {
+                                        e.get_mut().copy_dst = true;
+                                    }
+                                }
+                                Entry::Vacant(e) => {
+                                    let mut f = ir::BufferFlags::new();
+                                    f.storage = true;
+                                    if read.contains(k) {
+                                        f.map_read = true;
+                                    }
+                                    if write.contains(k) {
+                                        f.copy_dst = true;
+                                    }
+                                    e.insert(f);
+                                }
+                            }
+                        }
+                    }
                     types.insert(name.clone(), dt);
                 }
             }
@@ -250,33 +294,11 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
         } = decl
         {
             let mut env = DTypeEnv::new();
-            let spec_name = &ctx.scheds[name].unwrap_sched().value;
-            let val_sig = &ctx.specs[spec_name].sig;
-            if input
+            for (decl_name, decl_typ) in input
                 .iter()
                 .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
-                .count()
-                != val_sig.input.len()
-            {
-                return Err(type_error(
-                    *info,
-                    &format!("Function inputs of {name} do not match the spec {spec_name}"),
-                ));
-            }
-            for ((decl_name, decl_typ), (_, spec_typ)) in input
-                .iter()
-                .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
-                .zip(val_sig.input.iter())
             {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {
-                    if !dt.base.refines(&spec_typ.base) {
-                        return Err(type_error(
-                            *info,
-                            &format!(
-                                "Function input {decl_name} of {name} does not match the spec {spec_typ}",
-                            ),
-                        ));
-                    }
                     env.add_dtype_constraint(decl_name, dt.base.clone(), *info)?;
                 } else {
                     panic!("All input data types should be specified for now");
@@ -290,7 +312,12 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     .insert(in_name.clone(), Mutability::Const);
             }
             collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
-            resolve_types(&env, &mut sched_info.types, &sched_info.defined_names)?;
+            resolve_types(
+                &env,
+                &mut sched_info.types,
+                &sched_info.defined_names,
+                &mut sched_info.flags,
+            )?;
             for (var, info) in must_be_mut {
                 if !matches!(sched_info.types.get(&var), Some(DataType::Ref(_)))
                     && !matches!(sched_info.defined_names.get(&var), Some(Mutability::Mut))

@@ -3,7 +3,7 @@ pub mod cfg;
 mod hir;
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{hash_map::Entry, BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -13,7 +13,9 @@ use crate::{
     error::LocalError,
     lower::IN_STEM,
     parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
-    typing::{Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS},
+    typing::{
+        Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS,
+    },
 };
 use caiman::assembly::ast::{self as asm};
 use caiman::explication::Hole;
@@ -405,6 +407,8 @@ impl<'a> Funclet<'a> {
                 "::gs"
             } else if *flags == ENCODE_DST_FLAGS {
                 "::gd"
+            } else if *flags == ENCODE_STORAGE_FLAGS {
+                "::g"
             } else {
                 return Err(format!("{}: Invalid flags for {var}", self.block.src_loc));
             };
@@ -553,7 +557,7 @@ impl Funclets {
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
+            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags),
         );
         let _ = analyze(
             &mut cfg,
@@ -616,16 +620,18 @@ impl Funclets {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
             }
-        }
-        for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
-            let out_name = format!("{RET_VAR}{id}");
-            data_types.insert(out_name.clone(), out_ty.base.clone());
-            if !out_ty.flags.is_empty() {
-                let mut flag = flags.get(&out_name).copied().unwrap_or_default();
-                for f in &out_ty.flags {
-                    f.apply_flag(&mut flag);
+            collect_record_fields(&mut flags, &mut data_types, typ);
+            for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
+                let out_name = format!("{RET_VAR}{id}");
+                data_types.insert(out_name.clone(), out_ty.base.clone());
+                if !out_ty.flags.is_empty() {
+                    let mut flag = flags.get(&out_name).copied().unwrap_or_default();
+                    for f in &out_ty.flags {
+                        f.apply_flag(&mut flag);
+                    }
+                    flags.insert(out_name, flag);
                 }
-                flags.insert(out_name, flag);
+                collect_record_fields(&mut flags, &mut data_types, &out_ty.base);
             }
         }
         (data_types, variables, flags)
@@ -711,5 +717,36 @@ impl Funclets {
     /// Get's a map of device variables to their buffer flags
     pub const fn get_flags(&self) -> &HashMap<String, ir::BufferFlags> {
         &self.flags
+    }
+}
+
+/// Inserts flags for record fields.
+fn collect_record_fields(
+    flags: &mut HashMap<String, ir::BufferFlags>,
+    data_types: &mut HashMap<String, DataType>,
+    typ: &DataType,
+) {
+    if let DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) = typ {
+        if let DataType::RemoteObj { all, read, write } = &**t {
+            for (field, typ) in all {
+                data_types.insert(field.clone(), typ.clone());
+                match flags.entry(field.clone()) {
+                    Entry::Occupied(mut e) => {
+                        let f = e.get_mut();
+                        f.storage = true;
+                        f.map_read = read.contains(field);
+                        f.copy_dst = write.contains(field);
+                    }
+                    Entry::Vacant(e) => {
+                        e.insert(ir::BufferFlags {
+                            storage: true,
+                            map_read: read.contains(field),
+                            copy_dst: write.contains(field),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
     }
 }

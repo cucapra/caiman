@@ -51,6 +51,11 @@ struct Arguments {
     /// except for errors.
     #[clap(long, short)]
     quiet: bool,
+
+    /// When this flag is enabled, the compiler will print the final AST after
+    /// all transformations but before lowering.
+    #[clap(long, alias = "ast")]
+    final_ast: bool,
 }
 
 fn main() -> Result<(), error::Error> {
@@ -92,7 +97,14 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         }
         return Ok(());
     }
-    let lowered = lower(ast, &ctx).map_err(|e| error::Error {
+    let final_ast = normalize::normalize_pass2(ast, &ctx);
+    if args.final_ast {
+        if !args.quiet {
+            println!("{final_ast:#?}");
+        }
+        return Ok(());
+    }
+    let lowered = lower(final_ast, &ctx).map_err(|e| error::Error {
         error: e,
         filename: args.filename.clone(),
     })?;

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use caiman::ir;
+
 use crate::lower::{
     sched_hir::{HirBody, HirFuncCall, HirInstr, Terminator, TripleTag},
     IN_STEM,
@@ -24,10 +26,14 @@ const fn none_tag(spec_type: SpecType, flow: Flow) -> Tag {
 /// Overrides the unknown information in `tag` with `none()-usable` unless
 /// the specified `dtype` is a reference. Then overrrides the spatial information
 /// with `none()-save`
-fn override_none_usable(mut tag: TripleTag, dtype: &DataType) -> TripleTag {
+fn override_none_usable(
+    mut tag: TripleTag,
+    dtype: &DataType,
+    flags: Option<&ir::BufferFlags>,
+) -> TripleTag {
     tag.spatial.override_unknown_info(none_tag(
         SpecType::Spatial,
-        if matches!(dtype, DataType::Ref(_)) {
+        if matches!(dtype, DataType::Ref(_)) || matches!(flags, Some(f) if f.storage) {
             Flow::Save
         } else {
             Flow::Usable
@@ -62,6 +68,7 @@ pub struct TagAnalysis {
     /// For an output fact, thse are the input tags to be overridden
     input_overrides: HashMap<String, TripleTag>,
     data_types: Rc<HashMap<String, DataType>>,
+    flags: Rc<HashMap<String, ir::BufferFlags>>,
 }
 
 impl PartialEq for TagAnalysis {
@@ -78,6 +85,7 @@ impl TagAnalysis {
         input: &[(String, TripleTag)],
         out: &[TripleTag],
         data_types: &HashMap<String, DataType>,
+        flags: &HashMap<String, ir::BufferFlags>,
     ) -> Self {
         let mut tags = HashMap::new();
         for (out_idx, out_type) in out.iter().enumerate() {
@@ -86,6 +94,7 @@ impl TagAnalysis {
                 override_none_usable(
                     out_type.clone(),
                     &data_types[&format!("{RET_VAR}{out_idx}")],
+                    flags.get(&format!("{RET_VAR}{out_idx}")),
                 ),
             );
         }
@@ -104,7 +113,7 @@ impl TagAnalysis {
                     );
                 }
             }
-            let mut in_tg = override_none_usable(tg, &data_types[arg_name]);
+            let mut in_tg = override_none_usable(tg, &data_types[arg_name], flags.get(arg_name));
             let mut node_tg = in_tg.clone();
             if in_tg.value.quot.is_none() {
                 in_tg.value.quot = Some(Quotient::Input);
@@ -119,6 +128,7 @@ impl TagAnalysis {
             tags,
             input_overrides: HashMap::new(),
             data_types: Rc::new(data_types.clone()),
+            flags: Rc::new(flags.clone()),
         }
     }
 
@@ -144,7 +154,11 @@ impl TagAnalysis {
             HirBody::ConstDecl { lhs, lhs_tag, .. } => {
                 self.tags.insert(
                     lhs.clone(),
-                    override_none_usable(lhs_tag.clone(), &self.data_types[lhs]),
+                    override_none_usable(
+                        lhs_tag.clone(),
+                        &self.data_types[lhs],
+                        self.flags.get(lhs),
+                    ),
                 );
             }
             HirBody::VarDecl {
@@ -165,7 +179,7 @@ impl TagAnalysis {
                 if info.spatial.quot.is_none() {
                     info.spatial.quot = Some(Quotient::None);
                 }
-                info = override_none_usable(info, &self.data_types[lhs]);
+                info = override_none_usable(info, &self.data_types[lhs], self.flags.get(lhs));
                 self.tags.insert(lhs.clone(), info);
             }
             HirBody::RefStore {
@@ -206,7 +220,7 @@ impl TagAnalysis {
                 }
                 self.tags.insert(
                     dest.clone(),
-                    override_none_usable(tag, &self.data_types[dest]),
+                    override_none_usable(tag, &self.data_types[dest], self.flags.get(dest)),
                 );
             }
             HirBody::Hole(_) => todo!(),
@@ -214,7 +228,11 @@ impl TagAnalysis {
                 for (dest, dest_tag) in dests {
                     self.tags.insert(
                         dest.clone(),
-                        override_none_usable(dest_tag.clone(), &self.data_types[dest]),
+                        override_none_usable(
+                            dest_tag.clone(),
+                            &self.data_types[dest],
+                            self.flags.get(dest),
+                        ),
                     );
                 }
             }
@@ -252,7 +270,7 @@ impl TagAnalysis {
             } => {
                 self.tags.insert(
                     encoder.clone(),
-                    override_none_usable(tags.clone(), &DataType::Encoder(None)),
+                    override_none_usable(tags.clone(), &DataType::Encoder(None), None),
                 );
                 for (var, tag) in device_vars {
                     self.tags
@@ -262,7 +280,7 @@ impl TagAnalysis {
             HirBody::FenceOp { dest, tags, .. } => {
                 self.tags.insert(
                     dest.clone().unwrap(),
-                    override_none_usable(tags.clone(), &DataType::Fence(None)),
+                    override_none_usable(tags.clone(), &DataType::Fence(None), None),
                 );
             }
             HirBody::EncodeDo { dests, .. } => {
@@ -330,7 +348,11 @@ impl Fact for TagAnalysis {
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
-                        override_none_usable(dest_tags.clone(), &self.data_types[dest]),
+                        override_none_usable(
+                            dest_tags.clone(),
+                            &self.data_types[dest],
+                            self.flags.get(dest),
+                        ),
                     );
                 }
             }
@@ -344,7 +366,11 @@ impl Fact for TagAnalysis {
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
-                        override_none_usable(dest_tags.clone(), &self.data_types[dest]),
+                        override_none_usable(
+                            dest_tags.clone(),
+                            &self.data_types[dest],
+                            self.flags.get(dest),
+                        ),
                     );
                 }
                 for cap in captures.iter() {
@@ -360,7 +386,7 @@ impl Fact for TagAnalysis {
                     let tag = self.tags.get(out).cloned().unwrap();
                     self.tags.insert(
                         idx.clone(),
-                        override_none_usable(tag, &self.data_types[idx]),
+                        override_none_usable(tag, &self.data_types[idx], self.flags.get(out)),
                     );
                 }
             }

@@ -4,7 +4,7 @@ use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
 
 
-grammar(astf: &ASTFactory);
+grammar(astf: &mut ASTFactory);
 
 extern {
     type Error = CustomParsingError;
@@ -19,7 +19,7 @@ match {
   // Keywords (omitting things with symbols in here is ok for some reason)
   "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
   "let", "returns", "return", "var", "if", "else",
-  "i32", "i64", "bool", "Event", "BufferSpace", "Encoder", "Fence",
+  "i32", "i64", "bool", "Event", "BufferSpace", "Encoder", "Fence", "Future",
   "true", "false", "import",
   "pure",
   "node","none","input","output","usable","saved","need","dead",
@@ -139,7 +139,10 @@ BaseType: DataType = {
     "BufferSpace" => DataType::BufferSpace,
     "Encoder" => DataType::Encoder(None),
     "Fence" => DataType::Fence(None),
-    <n: Id> => DataType::UserDefined(String::from(n)),
+    // TODO separate this so the future and fence cannot be interchanged
+    "Future" => DataType::Fence(None),
+    // TODO: user defined flagged types
+    <n: Id> =>? astf.user_defined_type(&n),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),

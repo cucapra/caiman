@@ -58,8 +58,10 @@ where
         args: BTreeMap<String, NodePtr<T, A>>,
         class_id: Option<String>,
         /// If the constraint is the lowest in the subtype lattice
-        /// and unification which such cannot meet to a lower type
-        is_lowest: bool,
+        /// and unification which such cannot meet to a lower type.
+        /// In other words, if the constraint is contravariant and accepts
+        /// supertypes but not subtypes.
+        is_contravariant: bool,
     },
     /// A concrete base type
     Atom(A),
@@ -250,7 +252,7 @@ fn deep_clone<T: Kind, A: Kind>(
             op,
             args,
             class_id,
-            is_lowest,
+            is_contravariant,
         } => {
             let r = Rc::new(RefCell::new(Node::DynamicTerm {
                 parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
@@ -260,7 +262,7 @@ fn deep_clone<T: Kind, A: Kind>(
                     .map(|(k, v)| (k.clone(), deep_clone(v, cloned_ptrs)))
                     .collect(),
                 class_id: class_id.clone(),
-                is_lowest: *is_lowest,
+                is_contravariant: *is_contravariant,
             }));
             cloned_ptrs.insert(key, r.clone());
             r
@@ -362,13 +364,13 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
         (
             Node::DynamicTerm {
                 op: op_a,
-                is_lowest: is_lowest_a,
+                is_contravariant: is_lowest_a,
                 args: args_a,
                 ..
             },
             Node::DynamicTerm {
                 op: op_b,
-                is_lowest: is_lowest_b,
+                is_contravariant: is_lowest_b,
                 args: args_b,
                 ..
             },
@@ -426,13 +428,13 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                 Node::DynamicTerm {
                     op: op_a,
                     args: args_a,
-                    is_lowest: is_lowest_a,
+                    is_contravariant: is_lowest_a,
                     ..
                 },
                 Node::DynamicTerm {
                     op: op_b,
                     args: args_b,
-                    is_lowest: is_lowest_b,
+                    is_contravariant: is_lowest_b,
                     ..
                 },
             ) => {
@@ -465,7 +467,8 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
     match (&mut *a.borrow_mut(), &mut *b.borrow_mut()) {
         (
             Node::DynamicTerm {
-                is_lowest: true, ..
+                is_contravariant: true,
+                ..
             },
             Node::DynamicTerm { parent, .. },
         ) => {
@@ -474,7 +477,8 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
         (
             Node::DynamicTerm { parent, .. },
             Node::DynamicTerm {
-                is_lowest: true, ..
+                is_contravariant: true,
+                ..
             },
         ) => {
             parent.replace(b.clone());
@@ -504,12 +508,12 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
                 op,
                 class_id,
                 args: args_a,
-                is_lowest: is_lowest_a,
+                is_contravariant: is_lowest_a,
                 parent,
             },
             Node::DynamicTerm {
                 args: args_b,
-                is_lowest: is_lowest_b,
+                is_contravariant: is_lowest_b,
                 parent: parent_b,
                 ..
             },
@@ -526,7 +530,7 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
                 op: op.clone(),
                 args: arg_union,
                 class_id: class_id.clone(),
-                is_lowest: *is_lowest_a || *is_lowest_b,
+                is_contravariant: *is_lowest_a || *is_lowest_b,
             }));
             parent.replace(new_parent.clone());
             parent_b.replace(new_parent);
@@ -734,7 +738,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
                         .map(|(k, v)| (k.clone(), self.contraint_to_node(v)))
                         .collect(),
                     class_id: None,
-                    is_lowest: *is_lowest,
+                    is_contravariant: *is_lowest,
                 }))
             }
         }
@@ -756,7 +760,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
             Node::DynamicTerm {
                 op,
                 args,
-                is_lowest,
+                is_contravariant: is_lowest,
                 ..
             } => Constraint::DynamicTerm(
                 op.clone(),

@@ -50,19 +50,22 @@ sptl foo_space(bs: BufferSpace) -> BufferSpace {
 fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
     @in {input: input(tmln.e), output: node(tmln.out) };
     let a = baz();
+    // TODO: allow making ouputs of functions mutable
+    var a = a;
     let b = bar();
-    let e = encode-begin @ node(tmln.(loc, rem)) { a_gpu, b_gpu, y_gpu } gpu;
-    encode e.copy[a_gpu <- a];
+    var b = b;
+    let e = encode-begin @ node(tmln.(loc, rem)) gpu;
+    encode e.copy[a_gpu <- &a];
     if c {
         @in { input: node(tmln.loc), output: node(tmln.loc),
             a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem),
             a_gpu: node(tmln.rem), b_gpu: node(tmln.rem), y_gpu: node(tmln.rem) };
-        encode e.copy[b_gpu <- a];
+        encode e.copy[b_gpu <- &a];
     } else {
         @in { input: node(tmln.loc), output: node(tmln.loc),
             a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem),
             a_gpu: node(tmln.rem), b_gpu: node(tmln.rem), y_gpu: node(tmln.rem) };
-        encode e.copy[b_gpu <- b];
+        encode e.copy[b_gpu <- &b];
     }
     @in { input: node(tmln.loc), output: node(tmln.out),
         e: node(tmln.rem),

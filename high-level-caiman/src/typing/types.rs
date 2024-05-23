@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, vec};
+use std::{
+    collections::{BTreeMap, HashSet},
+    vec,
+};
 
 use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
 
@@ -13,7 +16,7 @@ pub enum CDataType {
     Record,
     Encoder,
     Fence,
-    Class,
+    RemoteObj,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +33,15 @@ pub enum ADataType {
 
 impl Kind for CDataType {}
 impl Kind for ADataType {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordConstraint {
+    pub fields: BTreeMap<String, DTypeConstraint>,
+    /// whether or not the constraint is contravariant. If true, then
+    /// something that adheres to this constraint cannot be a subtype,
+    /// but can be a supertype.
+    pub is_contravariant: bool,
+}
 
 /// A high-level data type constraint. Holes in a data type
 /// constraint are universally quantified. To get multiple
@@ -53,21 +65,80 @@ pub enum DTypeConstraint {
     /// A reference constraint which contains a dtype constraint
     /// that will be instantiated to a new inner data type constraint.
     RefN(Box<DTypeConstraint>),
-    Encoder(Constraint<CDataType, ADataType>),
-    Fence(Constraint<CDataType, ADataType>),
-    EncoderN(Box<DTypeConstraint>),
-    FenceN(Box<DTypeConstraint>),
-    Record(BTreeMap<String, DTypeConstraint>, bool),
-    Class {
-        public: Constraint<CDataType, ADataType>,
-        private: Constraint<CDataType, ADataType>,
-    },
-    ClassN {
-        public: Box<DTypeConstraint>,
-        private: Box<DTypeConstraint>,
+    // Encoder(Constraint<CDataType, ADataType>),
+    //Fence(Constraint<CDataType, ADataType>),
+    Encoder(Box<DTypeConstraint>),
+    Fence(Box<DTypeConstraint>),
+    Record(RecordConstraint),
+    RemoteObj {
+        /// record of all remote variables (have the storage flag)
+        all: RecordConstraint,
+        /// record of all readable variables (map_read)
+        read: RecordConstraint,
+        /// record of all writable variables (copy_dst)
+        write: RecordConstraint,
     },
     SpecEncoder,
     SpecFence,
+    Var(String),
+}
+
+impl DTypeConstraint {
+    /// Converts the constraint into one which allows subtypes.
+    /// Used when we generate a constraint from a data type but we want to allow
+    /// subtypes of the data type.
+    pub fn into_subtypeable(self) -> Self {
+        match self {
+            Self::Int(_)
+            | Self::Float(_)
+            | Self::Bool
+            | Self::BufferSpace
+            | Self::Event
+            | Self::Num
+            | Self::Any
+            | Self::Ref(_)
+            | Self::Var(_)
+            | Self::SpecEncoder
+            | Self::SpecFence => self,
+            Self::RefN(x) => Self::RefN(Box::new(x.into_subtypeable())),
+            Self::Encoder(x) => Self::Encoder(Box::new(x.into_subtypeable())),
+            Self::Fence(x) => Self::Fence(Box::new(x.into_subtypeable())),
+            Self::Record(r) => Self::Record(RecordConstraint {
+                fields: r
+                    .fields
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into_subtypeable()))
+                    .collect(),
+                is_contravariant: r.is_contravariant,
+            }),
+            Self::RemoteObj { all, read, write } => Self::RemoteObj {
+                all: RecordConstraint {
+                    fields: all
+                        .fields
+                        .into_iter()
+                        .map(|(k, v)| (k, v.into_subtypeable()))
+                        .collect(),
+                    is_contravariant: false,
+                },
+                read: RecordConstraint {
+                    fields: read
+                        .fields
+                        .into_iter()
+                        .map(|(k, v)| (k, v.into_subtypeable()))
+                        .collect(),
+                    is_contravariant: false,
+                },
+                write: RecordConstraint {
+                    fields: write
+                        .fields
+                        .into_iter()
+                        .map(|(k, v)| (k, v.into_subtypeable()))
+                        .collect(),
+                    is_contravariant: false,
+                },
+            },
+        }
+    }
 }
 
 impl From<IntSize> for ADataType {
@@ -109,6 +180,16 @@ impl TryFrom<ADataType> for FloatSize {
 }
 
 impl DTypeConstraint {
+    fn instantiate_record(
+        r: RecordConstraint,
+        env: &mut Env<CDataType, ADataType>,
+    ) -> Constraint<CDataType, ADataType> {
+        let mut mp = BTreeMap::new();
+        for (k, v) in r.fields {
+            mp.insert(k, v.instantiate(env));
+        }
+        Constraint::DynamicTerm(CDataType::Record, mp, r.is_contravariant)
+    }
     /// Instantiates a high-level type constraint into a unification-level
     /// constraint.
     pub fn instantiate(
@@ -157,28 +238,26 @@ impl DTypeConstraint {
             Self::Event => Constraint::Atom(ADataType::Event),
             Self::Ref(x) => Constraint::Term(CDataType::Ref, vec![x]),
             Self::RefN(x) => Constraint::Term(CDataType::Ref, vec![x.instantiate(env)]),
-            Self::Encoder(typ) => Constraint::Term(CDataType::Encoder, vec![typ]),
-            Self::Fence(public) => Constraint::Term(CDataType::Fence, vec![public]),
-            Self::Record(fields, is_lowest) => {
-                let mut mp = BTreeMap::new();
-                for (k, v) in fields {
-                    mp.insert(k, v.instantiate(env));
-                }
-                Constraint::DynamicTerm(CDataType::Record, mp, is_lowest)
-            }
-            Self::Class { public, private } => {
-                Constraint::Term(CDataType::Class, vec![public, private])
-            }
-            Self::EncoderN(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
-            Self::FenceN(public) => {
+            Self::Encoder(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
+            Self::Fence(public) => {
                 Constraint::Term(CDataType::Fence, vec![public.instantiate(env)])
             }
-            Self::ClassN { public, private } => Constraint::Term(
-                CDataType::Class,
-                vec![public.instantiate(env), private.instantiate(env)],
+            Self::Record(r) => Self::instantiate_record(r, env),
+            Self::RemoteObj { all, read, write } => Constraint::Term(
+                CDataType::RemoteObj,
+                vec![
+                    Self::instantiate_record(all, env),
+                    Self::instantiate_record(read, env),
+                    Self::instantiate_record(write, env),
+                ],
             ),
+            // Self::EncoderN(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
+            // Self::FenceN(public) => {
+            //     Constraint::Term(CDataType::Fence, vec![public.instantiate(env)])
+            // }
             Self::SpecEncoder => Constraint::Atom(ADataType::SpecEncoder),
             Self::SpecFence => Constraint::Atom(ADataType::SpecFence),
+            Self::Var(s) => Constraint::Var(s),
         }
     }
 }
@@ -202,43 +281,42 @@ impl TryFrom<DTypeConstraint> for DataType {
             DTypeConstraint::Bool => Ok(Self::Bool),
             DTypeConstraint::BufferSpace => Ok(Self::BufferSpace),
             DTypeConstraint::Event => Ok(Self::Event),
-            DTypeConstraint::Any => Err(()),
+            DTypeConstraint::Any | DTypeConstraint::Var(_) => Err(()),
             DTypeConstraint::Ref(x) => Ok(Self::Ref(Box::new(Self::try_from(
                 DTypeConstraint::try_from(x).map_err(|_| ())?,
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
             // allow abstract encoders and fences
-            DTypeConstraint::Encoder(typ) => Ok(Self::Encoder(Some(Box::new(Self::try_from(
-                DTypeConstraint::try_from(typ).map_err(|_| ())?,
-            )?)))),
-            DTypeConstraint::Fence(vars) => Ok(Self::Fence(Some(Box::new(Self::try_from(
-                DTypeConstraint::try_from(vars).map_err(|_| ())?,
-            )?)))),
-            DTypeConstraint::Record(fields, _) => {
+            // DTypeConstraint::Encoder(typ) => Ok(Self::Encoder(Some(Box::new(Self::try_from(
+            //     DTypeConstraint::try_from(typ).map_err(|_| ())?,
+            // )?)))),
+            // DTypeConstraint::Fence(vars) => Ok(Self::Fence(Some(Box::new(Self::try_from(
+            //     DTypeConstraint::try_from(vars).map_err(|_| ())?,
+            // )?)))),
+            DTypeConstraint::Record(r) => {
                 let mut mp = BTreeMap::new();
-                for (k, v) in fields {
+                for (k, v) in r.fields {
                     mp.insert(k, Self::try_from(v)?);
                 }
                 Ok(Self::Record(mp))
             }
-            DTypeConstraint::Class { public, private } => Ok(Self::Class {
-                public: Box::new(Self::try_from(
-                    DTypeConstraint::try_from(public).map_err(|_| ())?,
-                )?),
-                private: Box::new(Self::try_from(
-                    DTypeConstraint::try_from(private).map_err(|_| ())?,
-                )?),
-            }),
-            DTypeConstraint::ClassN { public, private } => Ok(Self::Class {
-                public: Box::new(Self::try_from(*public)?),
-                private: Box::new(Self::try_from(*private)?),
-            }),
-            DTypeConstraint::EncoderN(typ) => {
+            DTypeConstraint::RemoteObj { all, read, write } => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in all.fields {
+                    mp.insert(k, Self::try_from(v)?);
+                }
+                let read = read.fields.into_keys().collect();
+                let write = write.fields.into_keys().collect();
+                Ok(Self::RemoteObj {
+                    all: mp,
+                    read,
+                    write,
+                })
+            }
+            DTypeConstraint::Encoder(typ) => {
                 Ok(Self::Encoder(Some(Box::new(Self::try_from(*typ)?))))
             }
-            DTypeConstraint::FenceN(vars) => {
-                Ok(Self::Fence(Some(Box::new(Self::try_from(*vars)?))))
-            }
+            DTypeConstraint::Fence(vars) => Ok(Self::Fence(Some(Box::new(Self::try_from(*vars)?)))),
             DTypeConstraint::SpecEncoder => Ok(Self::Encoder(None)),
             DTypeConstraint::SpecFence => Ok(Self::Fence(None)),
         }
@@ -288,35 +366,65 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                     "Encoder constraint should have exactly one child"
                 );
                 let d = v.swap_remove(0);
-                Ok(Self::Encoder(d))
+                Ok(Self::Encoder(Box::new(d.try_into()?)))
             }
             Constraint::Term(CDataType::Fence, mut v) => {
                 assert_eq!(v.len(), 1, "Fence constraint should have exactly one child");
                 let d = v.swap_remove(0);
-                Ok(Self::Fence(d))
+                Ok(Self::Fence(Box::new(d.try_into()?)))
             }
-            Constraint::DynamicTerm(CDataType::Record, fields, lowest) => {
+            Constraint::DynamicTerm(CDataType::Record, fields, is_contravariant) => {
                 let mut mp = BTreeMap::new();
                 for (k, v) in fields {
                     mp.insert(k, Self::try_from(v)?);
                 }
-                Ok(Self::Record(mp, lowest))
+                Ok(Self::Record(RecordConstraint {
+                    fields: mp,
+                    is_contravariant,
+                }))
             }
-            Constraint::Term(CDataType::Class, mut v) => {
+            Constraint::Term(CDataType::RemoteObj, mut v) => {
                 assert_eq!(
                     v.len(),
-                    2,
-                    "Class constraint should have exactly two children"
+                    3,
+                    "Remote obj constraint should have exactly two children"
                 );
-                let public = v.swap_remove(0);
-                let private = v.swap_remove(0);
-                Ok(Self::Class { public, private })
+                let write = Self::try_from(v.pop().unwrap())?;
+                let read = Self::try_from(v.pop().unwrap())?;
+                let all = Self::try_from(v.pop().unwrap())?;
+                if let (Self::Record(all), Self::Record(read), Self::Record(write)) =
+                    (all, read, write)
+                {
+                    Ok(Self::RemoteObj { all, read, write })
+                } else {
+                    Err("RemoteObj constraint should have record children".to_string())
+                }
             }
             Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
             Constraint::Atom(ADataType::SpecFence) => Ok(Self::SpecFence),
             _ => todo!(),
         }
     }
+}
+
+/// Converts a map of string to data types to a map of string to data type constraints
+fn record_dtypes_to_constraints(
+    fields: BTreeMap<String, DataType>,
+) -> BTreeMap<String, DTypeConstraint> {
+    let mut mp = BTreeMap::new();
+    for (k, v) in fields {
+        mp.insert(k, DTypeConstraint::from(v));
+    }
+    mp
+}
+
+/// Converts a set of strings to a map of string to the Any data type constraint
+fn set_dtypes_to_constraints(set: HashSet<String>) -> BTreeMap<String, DTypeConstraint> {
+    let mut mp = BTreeMap::new();
+    for k in set {
+        mp.insert(k, DTypeConstraint::Any);
+    }
+    mp
 }
 
 impl From<DataType> for DTypeConstraint {
@@ -331,20 +439,28 @@ impl From<DataType> for DTypeConstraint {
             DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
             DataType::Encoder(None) => Self::SpecEncoder,
             DataType::Fence(None) => Self::SpecFence,
-            DataType::Encoder(Some(x)) => Self::EncoderN(Box::new(Self::from(*x))),
-            DataType::Fence(Some(x)) => Self::FenceN(Box::new(Self::from(*x))),
-            DataType::Record(fields) => {
-                let mut mp = BTreeMap::new();
-                for (k, v) in fields {
-                    mp.insert(k, Self::from(v));
-                }
-                Self::Record(mp, false)
-            }
-            DataType::Class { public, private } => Self::ClassN {
-                public: Box::new(Self::from(*public)),
-                private: Box::new(Self::from(*private)),
+            DataType::Encoder(Some(x)) => Self::Encoder(Box::new(Self::from(*x))),
+            DataType::Fence(Some(x)) => Self::Fence(Box::new(Self::from(*x))),
+            DataType::Record(fields) => Self::Record(RecordConstraint {
+                fields: record_dtypes_to_constraints(fields),
+                // when annotated, we cannot deduce a subtype of the annotation
+                is_contravariant: true,
+            }),
+            DataType::RemoteObj { all, read, write } => Self::RemoteObj {
+                // annotations cannot be deduced to be lower types in the lattice then the annotation
+                all: RecordConstraint {
+                    fields: record_dtypes_to_constraints(all),
+                    is_contravariant: true,
+                },
+                read: RecordConstraint {
+                    fields: set_dtypes_to_constraints(read),
+                    is_contravariant: true,
+                },
+                write: RecordConstraint {
+                    fields: set_dtypes_to_constraints(write),
+                    is_contravariant: true,
+                },
             },
-
             _ => todo!(),
         }
     }

@@ -1,9 +1,9 @@
 use crate::{
     enum_cast,
-    error::Info,
+    error::{HasInfo, Info},
     parse::ast::{
-        EncodedStmt, NestedExpr, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm,
-        SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TemplateArgs,
+        EncodedCommand, EncodedStmt, NestedExpr, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt,
+        SchedTerm, SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TemplateArgs,
     },
 };
 
@@ -23,7 +23,7 @@ use crate::{
 ///     * The new number of temporary variables
 ///     * The new spec term
 pub fn flatten_top_level<
-    T,
+    T: HasInfo,
     F: Fn(&str) -> T,
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
@@ -113,7 +113,7 @@ pub fn flatten_top_level<
 ///    * The new number of temporary variables
 ///    * The new spec term
 pub fn flatten_rec<
-    T,
+    T: HasInfo,
     F: Fn(&str) -> T,
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
@@ -226,7 +226,7 @@ fn build_spec_decl_factory(info: Info) -> impl Fn(&str, NestedExpr<SpecTerm>) ->
 ///     * The new number of temporary variables
 ///     * The flattened arguments
 fn flatten_call_args<
-    T,
+    T: HasInfo,
     F: Fn(&str) -> T,
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
@@ -933,8 +933,21 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                 cmd,
                 tag,
             } => {
-                let (instrs, new_temp_num, new_stmt) =
-                    flatten_sched_term_children(stmt.rhs, temp_num);
+                let (instrs, new_temp_num, new_stmt) = if cmd == EncodedCommand::Invoke {
+                    assert!(
+                        matches!(stmt.rhs, NestedExpr::Term(SchedTerm::Call { .. }),),
+                        "{info}: Encode call expected a function call"
+                    );
+                    flatten_sched_term_children(stmt.rhs, temp_num)
+                } else {
+                    flatten_rec(
+                        stmt.rhs,
+                        &build_sched_var_factory(info),
+                        &build_sched_decl_factory(info, true),
+                        temp_num,
+                        &flatten_sched_term,
+                    )
+                };
                 temp_num = new_temp_num;
                 res.extend(instrs);
                 res.push(SchedStmt::Encode {

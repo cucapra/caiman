@@ -87,8 +87,8 @@ impl DataType {
             Self::BufferSpace => TypeId(String::from("BufferSpace")),
             Self::Event => TypeId(String::from("Event")),
             Self::UserDefined(name) => TypeId(name.clone()),
-            Self::Encoder(None) => TypeId(String::from("Encoder")),
-            Self::Fence(None) => TypeId(String::from("Fence")),
+            Self::Encoder(_) => TypeId(String::from("Encoder")),
+            Self::Fence(_) => TypeId(String::from("Fence")),
             Self::Ref(t) => TypeId(format!(
                 "&{}",
                 t.asm_type()
@@ -202,6 +202,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                 asm.declarations
                     .extend(res.into_iter().map(asm::Declaration::Funclet));
             }
+            TopLevel::Typedef { .. } => (), // TODO: more than just records
             _ => todo!(),
         }
     }

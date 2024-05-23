@@ -6,17 +6,21 @@ use crate::{
         binop_to_str,
         sched_hir::{
             cfg::{BasicBlock, Cfg},
-            HirBody, HirOp, OpType,
+            HirBody, HirOp, OpType, TripleTag,
         },
         uop_to_str,
     },
     parse::ast::{DataType, SchedTerm, Uop},
 };
 
+/// General datatype-based transformation pass.
+///
 /// Transforms binary and unary operations into external FFI calls.
 /// Also replaces dereferences with `ref_load` instructions.
 /// After this pass, all binary and unary operators, except referenceS
 /// will be replaced with external FFI calls or loads.
+///
+/// Also inserts the device variables into the `BeginEncoding` operator.
 #[allow(clippy::module_name_repetitions)]
 pub fn op_transform_pass(cfg: &mut Cfg, data_types: &HashMap<String, DataType>) {
     for bb in cfg.blocks.values_mut() {
@@ -88,6 +92,23 @@ fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType
             HirOp::Unary(Uop::Deref) => panic!("Unexpected deref op"),
             HirOp::FFI(_, _) => panic!("Unexpected transformed op"),
         },
+        HirBody::BeginEncoding {
+            encoder,
+            device_vars,
+            ..
+        } => {
+            if let DataType::Encoder(Some(dt)) = &data_types
+                .get(encoder)
+                .unwrap_or_else(|| panic!("Missing type for {encoder}"))
+            {
+                if let DataType::RemoteObj { all, .. } = &**dt {
+                    device_vars.clear();
+                    for var in all.keys() {
+                        device_vars.push((var.clone(), TripleTag::new_unspecified()));
+                    }
+                }
+            }
+        }
         _ => {}
     }
 }

@@ -30,7 +30,8 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_src: true,
 };
 
-/// WGPU flags for sources to encoded GPU calls
+/// WGPU flags for destinations for encoded GPU copies. Input variables
+/// so to speak.
 pub const ENCODE_SRC_FLAGS: ir::BufferFlags = ir::BufferFlags {
     map_read: false,
     map_write: false,
@@ -39,9 +40,20 @@ pub const ENCODE_SRC_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_dst: true,
     copy_src: false,
 };
-/// WGPU flags for destinations of encoded GPU calls
+/// WGPU flags for variables copied back from the GPU. Output variables
+/// of an encoding so to speak.
 pub const ENCODE_DST_FLAGS: ir::BufferFlags = ir::BufferFlags {
     map_read: true,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: false,
+    copy_src: false,
+};
+
+/// WGPU flags for regular encoded variables that are neither input nor output.
+pub const ENCODE_STORAGE_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: false,
     map_write: false,
     storage: true,
     uniform: false,

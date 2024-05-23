@@ -1,11 +1,11 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fmt::Display,
 };
 
 use caiman::ir;
 
-use crate::error::Info;
+use crate::error::{HasInfo, Info};
 
 pub type Name = String;
 
@@ -51,9 +51,13 @@ pub enum DataType {
     UserDefined(String),
     Ref(Box<DataType>),
     Record(BTreeMap<String, DataType>),
-    Class {
-        public: Box<DataType>,
-        private: Box<DataType>,
+    RemoteObj {
+        /// set of all remote variables in the remote object
+        all: BTreeMap<String, DataType>,
+        /// set of all remote variables readable by the public interface
+        read: HashSet<String>,
+        /// set of all remote variables writable by encoded copies
+        write: HashSet<String>,
     },
 }
 
@@ -131,8 +135,11 @@ impl Display for DataType {
             }
             Self::Encoder(Some(typ)) => write!(f, "Encoder'{typ}"),
             Self::Fence(Some(typ)) => write!(f, "Fence'{typ}"),
-            Self::Class { public, private } => {
-                write!(f, "Class{{public: {public}, private: {private}}}",)
+            Self::RemoteObj { all, write, read } => {
+                write!(
+                    f,
+                    "Class{{all: {all:#?}, write: {write:#?}, read: {read:#?}}}",
+                )
             }
         }
     }
@@ -220,10 +227,18 @@ pub enum SpecTerm {
     },
 }
 
+impl HasInfo for SpecTerm {
+    fn info(&self) -> Info {
+        match self {
+            Self::Var { info, .. } | Self::Lit { info, .. } | Self::Call { info, .. } => *info,
+        }
+    }
+}
+
 /// A nested expression is the top level of an expression tree which is agnostic
 /// to the type of expression (spec or scheduling)
 #[derive(Clone, Debug)]
-pub enum NestedExpr<T> {
+pub enum NestedExpr<T: HasInfo> {
     Binop {
         info: Info,
         op: Binop,
@@ -242,6 +257,17 @@ pub enum NestedExpr<T> {
         if_false: Box<NestedExpr<T>>,
     },
     Term(T),
+}
+
+impl<T: HasInfo> HasInfo for NestedExpr<T> {
+    fn info(&self) -> Info {
+        match self {
+            Self::Binop { info, .. } | Self::Uop { info, .. } | Self::Conditional { info, .. } => {
+                *info
+            }
+            Self::Term(t) => t.info(),
+        }
+    }
 }
 
 /// A statement in a specification function
@@ -578,6 +604,19 @@ pub enum SchedTerm {
         tag: Option<Tags>,
         defs: Vec<MaybeArg<FullType>>,
     },
+}
+
+impl HasInfo for SchedTerm {
+    fn info(&self) -> Info {
+        match self {
+            Self::Call(info, _)
+            | Self::Lit { info, .. }
+            | Self::Var { info, .. }
+            | Self::TimelineOperation { info, .. }
+            | Self::EncodeBegin { info, .. }
+            | Self::Hole(info) => *info,
+        }
+    }
 }
 
 impl SchedTerm {
