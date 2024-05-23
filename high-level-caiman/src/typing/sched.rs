@@ -4,8 +4,8 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     parse::ast::{
-        Binop, DataType, EncodedCommand, EncodedStmt, FullType, SchedExpr, SchedFuncCall,
-        SchedLiteral, SchedStmt, SchedTerm, Uop, WGPUFlags,
+        Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType, FullType, SchedExpr,
+        SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, TimelineOperation, Uop, WGPUFlags,
     },
 };
 use std::iter::once;
@@ -369,14 +369,14 @@ fn collect_assign_call(
         ));
     }
     for (arg, arg_type) in arg_names.iter().zip(sig.input.iter()) {
-        env.add_dtype_constraint(arg, arg_type.clone(), info)?;
+        env.add_dtype_constraint(arg, arg_type.base.clone(), info)?;
     }
     for ((dest_name, dest_annot), typ) in dest.iter().zip(sig.output.iter()) {
         if let Some(FullType {
             base: Some(anot), ..
         }) = &dest_annot
         {
-            if &anot.base != typ {
+            if anot.base != typ.base {
                 return Err(type_error(
                     info,
                     &format!(
@@ -385,7 +385,7 @@ fn collect_assign_call(
                 ));
             }
         }
-        env.add_dtype_constraint(dest_name, typ.clone(), info)?;
+        env.add_dtype_constraint(dest_name, typ.base.clone(), info)?;
     }
     Ok(())
 }
@@ -438,6 +438,71 @@ fn collect_dot(
     }
     env.add_var_equiv(dest_name, rhs_name, info)?;
     env.add_usage(rhs_name, WGPUFlags::MapRead);
+    Ok(())
+}
+
+/// Collects constraints for a timeline operation (submit or await).
+fn collect_timeline_op(
+    env: &mut DTypeEnv,
+    op: TimelineOperation,
+    dest: &[(String, Option<FullType>)],
+    arg: &SchedExpr,
+    info: Info,
+) -> Result<(), LocalError> {
+    let arg_name = enum_cast!(
+        SchedTerm::Var { name, .. },
+        name,
+        enum_cast!(SchedExpr::Term, arg)
+    );
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Timeline operation has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let dest_name = &dest[0].0;
+    match op {
+        TimelineOperation::Submit => {
+            env.add_dtype_constraint(dest_name, DataType::Fence(None), info)?;
+            env.add_dtype_constraint(arg_name, DataType::Encoder(None), info)
+        }
+        TimelineOperation::Await => {
+            // TODO
+            env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
+            env.add_dtype_constraint(arg_name, DataType::Fence(None), info)
+        }
+    }
+}
+
+/// Collects constraints for an encode begin operation.
+fn collect_begin_encode(
+    env: &mut DTypeEnv,
+    dest: &[(String, Option<FullType>)],
+    defs: &[(String, Option<FullType>)],
+    info: Info,
+) -> Result<(), LocalError> {
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: EncodeBegin has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let dest_name = &dest[0].0;
+    env.add_dtype_constraint(dest_name, DataType::Encoder(None), info)?;
+    for (def_name, def_annot) in defs {
+        if let Some(FullType {
+            base: Some(anot), ..
+        }) = def_annot
+        {
+            env.add_dtype_constraint(def_name, anot.base.clone(), info)?;
+        }
+    }
     Ok(())
 }
 
@@ -533,10 +598,20 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
             // TODO: implement timeline operations
             SchedStmt::Decl {
-                expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { .. })),
+                lhs,
+                expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { op, arg, info, .. })),
                 ..
+            } => {
+                collect_timeline_op(env, *op, lhs, arg, *info)?;
             }
-            | SchedStmt::InEdgeAnnotation { .. }
+            SchedStmt::Decl {
+                lhs,
+                expr: Some(SchedExpr::Term(SchedTerm::EncodeBegin { info, defs, .. })),
+                ..
+            } => {
+                collect_begin_encode(env, lhs, defs, *info)?;
+            }
+            SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
             SchedStmt::Call(info, call_info) => {
@@ -595,7 +670,7 @@ fn collect_encode(
             Ok(())
         }
         EncodedCommand::Invoke => {
-            // TODO: typing encode-do
+            // TODO: typing encode-do (should GPU args be refs or values?)
             // if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
             //     collect_assign_call(
             //         ctx,
@@ -611,6 +686,7 @@ fn collect_encode(
             // } else {
             //     unreachable!();
             // }
+            env.add_usage(&stmt.lhs[0].0, WGPUFlags::MapRead);
             Ok(())
         }
     }
@@ -628,25 +704,15 @@ fn collect_encode(
 /// * `fn_name` - The name of the function.
 /// # Returns
 /// A mapping of mutable names to their info.
+#[allow(clippy::too_many_arguments)]
 pub fn collect_schedule(
     ctx: &Context,
     env: &mut DTypeEnv,
     stmts: &[SchedStmt],
     fn_out: &[FullType],
-    sig_outs: &[(String, DataType)],
+    fn_in: &[(String, Option<FullType>)],
     info: Info,
-    fn_name: &str,
 ) -> Result<HashMap<String, Info>, LocalError> {
-    if fn_out.len() != sig_outs.len() {
-        return Err(type_error(
-            info,
-            &format!(
-                "{info}: Spec has {} outputs, function has {}",
-                sig_outs.len(),
-                fn_out.len()
-            ),
-        ));
-    }
     let mut mutables = HashMap::new();
     let rets = collect_sched_helper(ctx, env, stmts.iter(), stmts.len(), &mut mutables)?;
     if rets.len() != fn_out.len() {
@@ -659,22 +725,29 @@ pub fn collect_schedule(
             ),
         ));
     }
-    for ((ret_name, fn_t), sig_t) in rets.iter().zip(fn_out.iter()).zip(sig_outs.iter()) {
+    for (ret_name, fn_t) in rets.iter().zip(fn_out.iter()) {
         if let FullType {
-            base: Some(anot), ..
+            base: Some(FlaggedType { base, flags, .. }),
+            ..
         } = fn_t
         {
-            if !anot.base.refines(&sig_t.1) {
-                return Err(type_error(
-                    info,
-                    &format!(
-                        "{info}: Declared function returns of {fn_name} are incompatible with value specification",
-                    ),
-                ));
+            env.add_dtype_constraint(ret_name, base.clone(), info)?;
+            for flag in flags {
+                env.add_usage(ret_name, *flag);
             }
-            env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
         } else {
             panic!("Function return type has no base type");
+        }
+    }
+    for (var, typ) in fn_in {
+        if let Some(FullType {
+            base: Some(FlaggedType { flags, .. }),
+            ..
+        }) = &typ
+        {
+            for flag in flags {
+                env.add_usage(var, *flag);
+            }
         }
     }
     Ok(mutables)

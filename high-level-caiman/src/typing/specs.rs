@@ -4,7 +4,9 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     lower::tuple_id,
-    parse::ast::{Binop, DataType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm},
+    parse::ast::{
+        Binop, DataType, FlaggedType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TemplateArgs,
+    },
 };
 
 use super::{
@@ -41,11 +43,116 @@ fn collect_spec_names(
     Ok(res)
 }
 
+/// Gets the input and output types of a given function class.
+/// # Arguments
+/// * `callee` - the name of the function class
+/// * `signatures` - a map from function names to their signatures
+/// * `args` - the arguments to the function
+/// * `num_dests` - the number of return values from the function
+/// * `info` - the location of the function call in the source code
+/// # Returns
+/// A tuple containing the input and output types of the function class.
+/// # Errors
+/// Returns an error if the function class is not found in `signatures`, if the
+/// number of arguments to the function class does not match the number of arguments
+fn get_target_signature(
+    callee: &str,
+    signatures: &HashMap<String, Signature>,
+    args: &[SpecExpr],
+    num_dests: usize,
+    info: Info,
+) -> Result<(Vec<FlaggedType>, Vec<FlaggedType>), LocalError> {
+    let (input_types, output_types) = match callee {
+        // (event, fence ...) -> (event, encoder)
+        "encode_event" => (
+            std::iter::once(DataType::Event)
+                .chain(std::iter::repeat(DataType::Fence(None)).take(args.len().max(1) - 1))
+                .map(FlaggedType::from)
+                .collect(),
+            vec![
+                FlaggedType::from(DataType::Event),
+                FlaggedType::from(DataType::Encoder(None)),
+            ],
+        ),
+        // encoder -> fence
+        "submit_event" => (
+            vec![FlaggedType::from(DataType::Encoder(None))],
+            vec![FlaggedType::from(DataType::Fence(None))],
+        ),
+        // (event, fence) -> event
+        "sync_event" => (
+            vec![
+                FlaggedType::from(DataType::Event),
+                FlaggedType::from(DataType::Fence(None)),
+            ],
+            vec![FlaggedType::from(DataType::Event)],
+        ),
+        _ => (
+            signatures
+                .get(callee)
+                .ok_or_else(|| type_error(info, &format!("Unknown spec `{callee}` invoked")))?
+                .input
+                .clone(),
+            signatures.get(callee).unwrap().output.clone(),
+        ),
+    };
+    if args.len() != input_types.len() {
+        return Err(type_error(
+            info,
+            &format!(
+                "Wrong number of arguments to function {callee}: expected {}, got {}",
+                input_types.len(),
+                args.len(),
+            ),
+        ));
+    }
+    if num_dests != output_types.len() {
+        return Err(type_error(
+            info,
+            &format!(
+                "Wrong number of return values from function {callee}: expected {}, got {}",
+                output_types.len(),
+                num_dests,
+            ),
+        ));
+    }
+    Ok((input_types, output_types))
+}
+
+/// Gets a list of arguments (regular arguments + non-type template args)
+/// to a function call.
+/// # Panics
+/// Panics if the arguments are not lowered to variables
+fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Vec<String> {
+    let mut arg_nodes: Vec<_> = args
+        .iter()
+        .map(|arg| {
+            let t = enum_cast!(SpecExpr::Term, arg);
+            let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+            name.to_string()
+        })
+        .collect();
+    if let Some(TemplateArgs::Vals(vs)) = templates {
+        let mut res: Vec<_> = vs
+            .iter()
+            .map(|arg| {
+                let t = enum_cast!(SpecExpr::Term, arg);
+                let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+                name.to_string()
+            })
+            .collect();
+        res.extend(arg_nodes);
+        arg_nodes = res;
+    }
+    arg_nodes
+}
+
 /// Collects types and nodes for a given assignment `lhs :- function(args)`.
 fn collect_spec_assign_call(
     lhs: &[(String, Option<DataType>)],
     function: &SpecExpr,
     args: &[SpecExpr],
+    templates: &Option<TemplateArgs>,
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
     info: Info,
@@ -54,42 +161,9 @@ fn collect_spec_assign_call(
         name: func_name, ..
     }) = function
     {
-        let input_types = signatures
-            .get(func_name)
-            .ok_or_else(|| type_error(info, &format!("Unknown spec `{func_name}` invoked")))?
-            .input
-            .clone();
-        let output_types = signatures.get(func_name).unwrap().output.clone();
-        #[allow(clippy::needless_collect)]
-        let arg_nodes: Vec<_> = args
-            .iter()
-            .map(|arg| {
-                let t = enum_cast!(SpecExpr::Term, arg);
-                let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-                name.to_string()
-            })
-            .collect();
-        if arg_nodes.len() != input_types.len() {
-            return Err(type_error(
-                info,
-                &format!(
-                    "Wrong number of arguments to function {func_name}: expected {}, got {}",
-                    input_types.len(),
-                    arg_nodes.len(),
-                ),
-            ));
-        }
-        if lhs.len() != output_types.len() {
-            return Err(type_error(
-                info,
-                &format!(
-                    "Wrong number of return values from function {func_name}: expected {}, got {}",
-                    output_types.len(),
-                    lhs.len(),
-                ),
-            ));
-        }
-
+        let (input_types, output_types) =
+            get_target_signature(func_name, signatures, args, lhs.len(), info)?;
+        let arg_nodes = get_call_arguments(args, templates);
         let tuple_name = tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>());
         ctx.nodes.add_quotient(
             &tuple_name,
@@ -100,14 +174,15 @@ fn collect_spec_assign_call(
         );
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
-                if a != typ {
+                if a != &typ.base {
                     return Err(type_error(
                         info,
                         &format!("Annotation of {name} conflicts with return type of {func_name}",),
                     ));
                 }
             }
-            ctx.types.add_dtype_constraint(name, typ.clone(), info)?;
+            ctx.types
+                .add_dtype_constraint(name, typ.base.clone(), info)?;
             ctx.nodes.add_quotient(
                 name,
                 ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
@@ -115,7 +190,7 @@ fn collect_spec_assign_call(
         }
         for (arg_name, arg_type) in arg_nodes.iter().zip(input_types.iter()) {
             ctx.types
-                .add_dtype_constraint(arg_name, arg_type.clone(), info)?;
+                .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
         }
         Ok(())
     } else {
@@ -164,9 +239,10 @@ fn collect_spec_assign_term(
         SpecTerm::Call {
             function,
             args,
+            templates,
             info,
             ..
-        } => collect_spec_assign_call(lhs, function, args, ctx, signatures, *info),
+        } => collect_spec_assign_call(lhs, function, args, templates, ctx, signatures, *info),
     }
 }
 
@@ -309,7 +385,7 @@ fn resolve_types(
 fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError> {
     let info = ctx.info;
     for (arg, typ) in ctx.sig.input.clone() {
-        env.types.add_dtype_constraint(&arg, typ, info)?;
+        env.types.add_dtype_constraint(&arg, typ.base, info)?;
         env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
     }
     Ok(())
@@ -335,7 +411,7 @@ fn collect_spec_returns(
                 ));
             }
             env.types
-                .add_dtype_constraint(name, ctx.sig.output[0].1.clone(), info)?;
+                .add_dtype_constraint(name, ctx.sig.output[0].1.base.clone(), info)?;
             env.nodes.add_quotient(
                 &ctx.sig.output[0].0,
                 ValQuot::Output(MetaVar::new_class_name(name)),
@@ -368,7 +444,7 @@ fn collect_spec_returns(
                 }
             }
             for (name, (class, typ)) in constraints {
-                env.types.add_dtype_constraint(name, typ, info)?;
+                env.types.add_dtype_constraint(name, typ.base, info)?;
                 env.nodes
                     .add_quotient(&class, ValQuot::Output(MetaVar::new_class_name(name)));
             }

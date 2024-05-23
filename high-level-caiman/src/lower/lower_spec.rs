@@ -2,8 +2,8 @@ use crate::{
     enum_cast,
     lower::IN_STEM,
     parse::ast::{
-        Binop, ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
-        TemplateArgs, TopLevel,
+        Binop, ClassMembers, NestedExpr, SpecExpr, SpecFunclet, SpecLiteral, SpecStmt, SpecTerm,
+        TemplateArgs,
     },
     typing::{Context, SpecInfo},
 };
@@ -13,7 +13,7 @@ use caiman::{
     ir,
 };
 
-use super::{binop_to_str, data_type_to_local_type, tuple_id};
+use super::{binop_to_str, tuple_id};
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -357,14 +357,12 @@ fn lower_spec_stmts(
 ///    for a non-value spec funclet
 /// * `ctx` - The global context
 fn lower_spec_funclet(
-    name: &str,
-    input: Vec<(String, DataType)>,
-    output: Vec<(Option<String>, DataType)>,
-    statements: Vec<SpecStmt>,
+    spec: SpecFunclet,
     class_name: Option<&str>,
     ctx: &Context,
 ) -> (asm::FuncletHeader, Vec<Hole<asm::Command>>) {
-    let phi_nodes: Vec<_> = input
+    let phi_nodes: Vec<_> = spec
+        .input
         .iter()
         .enumerate()
         .map(|(idx, (name, _))| {
@@ -378,24 +376,26 @@ fn lower_spec_funclet(
         .collect();
     (
         asm::FuncletHeader {
-            name: asm::FuncletId(name.to_string()),
-            args: input
+            name: asm::FuncletId(spec.name.clone()),
+            args: spec
+                .input
                 .into_iter()
                 .map(|x| {
                     let (name, dt) = x;
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(format!("{IN_STEM}{name}"))),
-                        typ: data_type_to_local_type(&dt),
+                        typ: dt.asm_type(),
                         tags: Vec::new(),
                     }
                 })
                 .collect(),
-            ret: output
+            ret: spec
+                .output
                 .into_iter()
                 .enumerate()
                 .map(|(id, (name, dt))| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.unwrap_or_else(|| format!("_out{id}")))),
-                    typ: data_type_to_local_type(&dt),
+                    typ: dt.asm_type(),
                     tags: Vec::new(),
                 })
                 .collect(),
@@ -406,76 +406,39 @@ fn lower_spec_funclet(
                 })
             }),
         },
-        lower_spec_stmts(statements, ctx, name, phi_nodes),
+        lower_spec_stmts(spec.statements, ctx, &spec.name, phi_nodes),
     )
 }
 
-/// Lower an external value function
+/// Lower a specification function
 /// # Panics
-/// Panics if the function is not a value funclet
-pub fn lower_val_funclet(f: ClassMembers, class_name: &str, ctx: &Context) -> asm::Funclet {
-    if let ClassMembers::ValueFunclet {
-        name,
-        input,
-        output,
-        statements,
-        ..
-    } = f
-    {
-        let (header, commands) =
-            lower_spec_funclet(&name, input, output, statements, Some(class_name), ctx);
-        asm::Funclet {
-            kind: ir::FuncletKind::Value,
-            header,
-            commands,
+/// Panics if the function is an extern function
+pub fn lower_spec(f: ClassMembers, class_name: &str, ctx: &Context) -> asm::Funclet {
+    match f {
+        ClassMembers::ValueFunclet(spec) => {
+            let (header, commands) = lower_spec_funclet(spec, Some(class_name), ctx);
+            asm::Funclet {
+                kind: ir::FuncletKind::Value,
+                header,
+                commands,
+            }
         }
-    } else {
-        panic!("Expected value functlet")
-    }
-}
-
-/// Lower a timeline funclet into a caiman assembly funclet.
-/// # Panics
-/// Panics if the function is not a timeline funclet
-pub fn lower_timeline_funclet(f: TopLevel, ctx: &Context) -> asm::Funclet {
-    let (name, input, output, statements) = enum_cast!(
-        TopLevel::TimelineFunclet {
-            name,
-            input,
-            output,
-            statements,
-            ..
-        },
-        (name, input, output, statements),
-        f
-    );
-    let (header, commands) = lower_spec_funclet(&name, input, vec![output], statements, None, ctx);
-    asm::Funclet {
-        kind: ir::FuncletKind::Timeline,
-        header,
-        commands,
-    }
-}
-
-/// Lower a spatial funclet into a caiman assembly funclet.
-/// # Panics
-/// Panics if the function is not a spatial funclet
-pub fn lower_spatial_funclet(f: TopLevel, ctx: &Context) -> asm::Funclet {
-    let (name, input, output, statements) = enum_cast!(
-        TopLevel::SpatialFunclet {
-            name,
-            input,
-            output,
-            statements,
-            ..
-        },
-        (name, input, output, statements),
-        f
-    );
-    let (header, commands) = lower_spec_funclet(&name, input, vec![output], statements, None, ctx);
-    asm::Funclet {
-        kind: ir::FuncletKind::Spatial,
-        header,
-        commands,
+        ClassMembers::SpatialFunclet(spec) => {
+            let (header, commands) = lower_spec_funclet(spec, Some(class_name), ctx);
+            asm::Funclet {
+                kind: ir::FuncletKind::Spatial,
+                header,
+                commands,
+            }
+        }
+        ClassMembers::TimelineFunclet(spec) => {
+            let (header, commands) = lower_spec_funclet(spec, Some(class_name), ctx);
+            asm::Funclet {
+                kind: ir::FuncletKind::Timeline,
+                header,
+                commands,
+            }
+        }
+        ClassMembers::Extern { .. } => panic!("Unexpected extern"),
     }
 }

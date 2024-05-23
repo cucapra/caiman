@@ -5,7 +5,7 @@ mod yields;
 
 use crate::{
     error::LocalError,
-    parse::ast::{ClassMembers, Program, TopLevel},
+    parse::ast::{ClassMembers, Program, SpecFunclet, TopLevel},
 };
 
 use self::{
@@ -14,7 +14,6 @@ use self::{
     sched_rename::rename_vars,
     yields::CallGraph,
 };
-pub use sched_rename::original_name;
 
 /// Normalizes the AST by renaming schedule variables, flattening nested
 /// expressions, converting conditional returns to sequences, and inserting
@@ -34,7 +33,7 @@ pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
             }
             TopLevel::FunctionClass { members, .. } => {
                 for member in members {
-                    if let ClassMembers::ValueFunclet { statements, .. } = member {
+                    if let ClassMembers::ValueFunclet(SpecFunclet { statements, .. }) = member {
                         let stmts = std::mem::take(statements);
                         *statements = flatten_spec(stmts);
                     }

@@ -613,11 +613,11 @@ impl<'program> CodeGenerator<'program> {
                         .write(format!("command_buffer_{}, ", command_buffer_id.0));
                 }
                 self.code_writer.write("]);\n".to_string());
+                self.submission_queue.last_submission_id_opt = Some(submission_id);
             }
         }
 
         self.submission_queue.next_submission_id.0 += 1;
-        self.submission_queue.last_submission_id_opt = Some(submission_id);
 
         submission_id
     }
@@ -638,7 +638,7 @@ impl<'program> CodeGenerator<'program> {
             .create_fence(Some(self.gpu_fence_type.unwrap()));
         write!(
             self.code_writer,
-            "let {} = Some(submission_index_{});\n",
+            "let {} = Some(submission_index_{}.clone());\n",
             self.get_var_name(recv_var_id),
             self.submission_queue.last_submission_id_opt.unwrap().0
         );

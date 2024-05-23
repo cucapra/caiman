@@ -1,10 +1,10 @@
 pub mod context;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, SpecType, Uop, WGPUFlags},
+    parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Tag, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -30,6 +30,25 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_src: true,
 };
 
+/// WGPU flags for sources to encoded GPU calls
+pub const ENCODE_SRC_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: false,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: true,
+    copy_src: false,
+};
+/// WGPU flags for destinations of encoded GPU calls
+pub const ENCODE_DST_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: true,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: false,
+    copy_src: false,
+};
+
 /// A typing environement for deducing quotients.
 #[derive(Debug, Clone)]
 pub struct NodeEnv {
@@ -37,10 +56,12 @@ pub struct NodeEnv {
     /// Map of quotient type to a map between quotients and their equivalence
     /// class names.
     spec_nodes: HashMap<VQType, HashMap<ValQuot, HashSet<String>>>,
-    /// List of input node class names, without the leading `$` symbol.
+    /// List of spec input node class names, without the leading `$` symbol.
     inputs: Vec<String>,
-    /// List of output node class names, without the leading `$` symbol.
-    outputs: Vec<String>,
+    /// List of function output node class names, without the leading `$` symbol.
+    outputs: Vec<Option<String>>,
+    /// List of spec output node class names, without the leading `$` symbol.
+    spec_outputs: Vec<String>,
 }
 
 impl Default for NodeEnv {
@@ -50,6 +71,7 @@ impl Default for NodeEnv {
             spec_nodes: HashMap::new(),
             inputs: Vec::new(),
             outputs: Vec::new(),
+            spec_outputs: Vec::new(),
         }
     }
 }
@@ -58,6 +80,12 @@ impl NodeEnv {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Gets the class constraint of the spec node.
+    #[must_use]
+    pub fn get_spec_node(&self, class: &str) -> Option<Constraint<VQType, ()>> {
+        self.env.get_type(&format!("${class}"))
     }
 
     /// Adds a quotient class and its constraints to the environment.
@@ -88,13 +116,39 @@ impl NodeEnv {
     /// If any of the class names contain a `$`.
     pub fn set_output_classes(&mut self, sig: &NamedSignature) {
         assert!(sig.output.iter().all(|(x, _)| !x.contains('$')));
-        self.outputs = sig.output.iter().map(|(x, _)| x.clone()).collect();
+        self.spec_outputs = sig.output.iter().map(|(x, _)| x.clone()).collect();
+        self.outputs = self.spec_outputs.iter().cloned().map(Some).collect();
     }
 
-    /// Gets the output classes, without the leading `$` symbol.
+    /// Gets the output classes of the spec,
+    /// without the leading `$` symbol.
     #[must_use]
-    pub fn get_output_classes(&self) -> &[String] {
+    pub fn get_spec_output_classes(&self) -> &[String] {
+        &self.spec_outputs
+    }
+
+    /// Gets the output classes of the function,
+    /// without the leading `$` symbol. A class may be `None` if it is not  
+    /// annotated and does not match up with anything in the spec.
+    #[must_use]
+    pub fn get_function_output_classes(&self) -> &[Option<String>] {
         &self.outputs
+    }
+
+    /// Overrides the output classes with the output classes annotated at the
+    /// scheduling function.
+    pub fn override_output_classes<'a, T: Iterator<Item = (&'a DataType, &'a Tag)>>(
+        &mut self,
+        outputs: T,
+    ) {
+        for (id, (_, tag)) in outputs.filter(|(dt, _)| is_value_dtype(dt)).enumerate() {
+            if id >= self.outputs.len() {
+                self.outputs.push(None);
+            }
+            if let Some(annotated_quot) = &tag.quot_var.spec_var {
+                self.outputs[id] = Some(annotated_quot.clone());
+            }
+        }
     }
 
     /// Returns true if the name is a wildcard name
@@ -102,16 +156,9 @@ impl NodeEnv {
         !name.starts_with('$')
     }
 
-    /// Adds a constraint to the type variable `name`. If the constraint
-    /// uniquely identifies a quotient class, unifies the quotient class with
-    /// the type variable.
-    /// # Errors
-    /// Returns an error if unification fails.
-    /// # Panics
-    /// If the name contains a `$`.
-    pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
-        assert!(!name.contains('$'));
-        self.env.add_constraint(name, &From::from(constraint))?;
+    /// Checks if the constraint uniquely identifies a quotient class and
+    /// unifies the class with the type variable if it does.
+    fn check_for_unique_match(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
         if let Some(matches) = self.spec_nodes.get(&constraint.get_type()) {
             let mut last_match_classes = None;
             for (possible_match, match_classes) in matches {
@@ -132,6 +179,19 @@ impl NodeEnv {
             }
         }
         Ok(())
+    }
+
+    /// Adds a constraint to the type variable `name`. If the constraint
+    /// uniquely identifies a quotient class, unifies the quotient class with
+    /// the type variable.
+    /// # Errors
+    /// Returns an error if unification fails.
+    /// # Panics
+    /// If the name contains a `$`.
+    pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        self.env.add_constraint(name, &From::from(constraint))?;
+        self.check_for_unique_match(name, constraint)
     }
 
     /// Adds a constraint to the type variable `name` with another variable.
@@ -223,10 +283,10 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         let c = constraint.instantiate(&mut self.env);
-        self.env.add_constraint(name, &c).map_err(|_| {
+        self.env.add_constraint(name, &c).map_err(|c| {
             type_error(
                 info,
-                &format!("Failed to unify type constraints of variable {name}"),
+                &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
         })
     }
@@ -266,10 +326,10 @@ impl DTypeEnv {
     pub fn add_var_equiv(&mut self, name: &str, equiv: &str, info: Info) -> Result<(), LocalError> {
         self.env
             .add_constraint(name, &Constraint::Var(equiv.to_string()))
-            .map_err(|_| {
+            .map_err(|c| {
                 type_error(
                     info,
-                    &format!("Failed to unify type constraints of variable {name}"),
+                    &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
                 )
             })
     }
@@ -283,10 +343,10 @@ impl DTypeEnv {
         constraint: &Constraint<CDataType, ADataType>,
         info: Info,
     ) -> Result<(), LocalError> {
-        self.env.add_constraint(name, constraint).map_err(|_| {
+        self.env.add_constraint(name, constraint).map_err(|c| {
             type_error(
                 info,
-                &format!("Failed to unify type constraints of variable {name}"),
+                &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
         })
     }
@@ -468,15 +528,66 @@ impl SchedInfo {
 /// A function type signature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature {
-    pub input: Vec<DataType>,
-    pub output: Vec<DataType>,
+    pub input: Vec<FlaggedType>,
+    pub output: Vec<FlaggedType>,
+}
+
+impl Signature {
+    #[must_use]
+    pub fn new(input: Vec<DataType>, output: Vec<DataType>) -> Self {
+        Self {
+            input: input
+                .into_iter()
+                .map(|x| FlaggedType {
+                    info: Info::default(),
+                    base: x,
+                    flags: BTreeSet::new(),
+                    settings: BTreeSet::new(),
+                })
+                .collect(),
+            output: output
+                .into_iter()
+                .map(|x| FlaggedType {
+                    info: Info::default(),
+                    base: x,
+                    flags: BTreeSet::new(),
+                    settings: BTreeSet::new(),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// A function type signature with named inputs.
 #[derive(Debug, Clone)]
 pub struct NamedSignature {
-    pub input: Vec<(String, DataType)>,
-    pub output: Vec<(String, DataType)>,
+    pub input: Vec<(String, FlaggedType)>,
+    pub output: Vec<(String, FlaggedType)>,
+}
+
+impl NamedSignature {
+    /// Creates a new named signature from a list of input and output types.
+    #[must_use]
+    pub fn new<'a, I: Iterator<Item = &'a (Option<String>, DataType)>>(
+        input: &[(String, DataType)],
+        output: I,
+    ) -> Self {
+        Self {
+            input: input
+                .iter()
+                .map(|(name, typ)| (name.clone(), FlaggedType::from(typ.clone())))
+                .collect(),
+            output: output
+                .enumerate()
+                .map(|(idx, (name, typ))| {
+                    (
+                        name.clone().unwrap_or_else(|| format!("_out{idx}")),
+                        FlaggedType::from(typ.clone()),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        }
+    }
 }
 
 impl From<&NamedSignature> for Signature {
@@ -521,6 +632,8 @@ pub struct Context {
     pub scheds: HashMap<String, SchedOrExtern>,
     /// Set of external function names.
     pub externs: HashSet<String>,
+    /// User defined types. Map from type name to type.
+    pub user_types: HashMap<String, FlaggedType>,
 }
 
 /// A typed binary operation.
@@ -634,5 +747,58 @@ fn uop_to_contraints(
             let a = a.instantiate(env);
             (a.clone(), a)
         }
+    }
+}
+
+/// Returns `true` if the type can be represented in the timeline spec.
+/// If this function returns false, then the argument or return value can be
+/// ignored for the purpose of inferring timeline quotients.
+#[must_use]
+#[allow(unused)]
+pub const fn is_timeline_dtype(t: &DataType) -> bool {
+    matches!(
+        t,
+        DataType::Event | DataType::Fence(_) | DataType::Encoder(_)
+    )
+}
+
+/// Returns `true` if the type can be represented in the timeline spec.
+/// If this function returns false, then the argument or return value can be
+/// ignored for the purpose of inferring timeline quotients.
+#[must_use]
+#[allow(unused)]
+pub const fn is_timeline_fulltype(t: &FullType) -> bool {
+    if let Some(t) = &t.base {
+        is_timeline_dtype(&t.base)
+    } else {
+        false
+    }
+}
+
+/// Returns `true` if the type can be represented in the value spec.
+/// If this function returns false, then the argument or return value can be
+/// ignored for the purpose of inferring value quotients.
+#[must_use]
+pub const fn is_value_dtype(t: &DataType) -> bool {
+    // TODO: Add more types
+    matches!(
+        t,
+        DataType::Int(_)
+            | DataType::Float(_)
+            | DataType::Bool
+            | DataType::Ref(_)
+            | DataType::Array(_, _)
+    )
+}
+
+/// Returns `true` if the type can be represented in the value spec.
+/// If this function returns false, then the argument or return value can be
+/// ignored for the purpose of inferring value quotients.
+#[must_use]
+pub const fn is_value_fulltype(t: &FullType) -> bool {
+    if let Some(t) = &t.base {
+        is_value_dtype(&t.base)
+    } else {
+        false
     }
 }

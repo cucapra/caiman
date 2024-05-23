@@ -1,0 +1,77 @@
+#version 0.1.0
+
+// same as cpu_map_gpu_reduce, but in hlc
+
+extern(cpu) pure baz() -> i32
+extern(cpu) pure bar() -> i32
+extern(gpu) gpu_merge(x : i32, y: i32) -> out: i32
+{
+    path : "gpu_merge.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        input : y
+    },
+    resource {
+        group : 0,
+        binding : 2,
+        output : out
+    }
+}
+
+val foo(c: bool) -> out: i32 {
+    a :- baz()
+    b :- bar()
+
+    snd :- a if c else b
+
+    r :- gpu_merge'<1, 1, 1>(a, snd)
+    returns r
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    sub :- submit_event(rem)
+    snc :- sync_event(loc, sub)
+    returns snc
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
+    @in {input: input(tmln.e), output: node(tmln.out) };
+    let a = baz();
+    let b = bar();
+    let e = encode-begin @ node(tmln.(loc, rem)) { a_gpu, b_gpu, y_gpu } gpu;
+    encode e.copy[a_gpu <- a];
+    if c {
+        @in { input: node(tmln.loc), output: node(tmln.loc),
+            a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem),
+            a_gpu: node(tmln.rem), b_gpu: node(tmln.rem), y_gpu: node(tmln.rem) };
+        encode e.copy[b_gpu <- a];
+    } else {
+        @in { input: node(tmln.loc), output: node(tmln.loc),
+            a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem),
+            a_gpu: node(tmln.rem), b_gpu: node(tmln.rem), y_gpu: node(tmln.rem) };
+        encode e.copy[b_gpu <- b];
+    }
+    @in { input: node(tmln.loc), output: node(tmln.out),
+        e: node(tmln.rem),
+        a_gpu: node(tmln.rem), b_gpu: node(tmln.rem), y_gpu: node(tmln.rem) };
+    encode e.call[y_gpu <- gpu_merge'<1, 1, 1>(a_gpu, b_gpu)];
+    let f = submit @ node(tmln.sub) e;
+    let r = await @ node(tmln.snc) f;
+    @out { input: node(tmln.out), output: node(tmln.out) };
+    r.y_gpu
+}
+
+pipeline main { foo_impl }

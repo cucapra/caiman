@@ -18,6 +18,9 @@ pub enum ADataType {
     Bool,
     BufferSpace,
     Event,
+    // TODO: records for encoders and fences?
+    Encoder,
+    Fence,
 }
 
 impl Kind for CDataType {}
@@ -45,6 +48,8 @@ pub enum DTypeConstraint {
     /// A reference constraint which contains a dtype constraint
     /// that will be instantiated to a new inner data type constraint.
     RefN(Box<DTypeConstraint>),
+    Encoder,
+    Fence,
 }
 
 impl From<IntSize> for ADataType {
@@ -134,6 +139,8 @@ impl DTypeConstraint {
             Self::Event => Constraint::Atom(ADataType::Event),
             Self::Ref(x) => Constraint::Term(CDataType::Ref, vec![x]),
             Self::RefN(x) => Constraint::Term(CDataType::Ref, vec![x.instantiate(env)]),
+            Self::Encoder => Constraint::Atom(ADataType::Encoder),
+            Self::Fence => Constraint::Atom(ADataType::Fence),
         }
     }
 }
@@ -159,6 +166,8 @@ impl TryFrom<DTypeConstraint> for DataType {
                 DTypeConstraint::try_from(x).map_err(|_| ())?,
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
+            DTypeConstraint::Encoder => Ok(Self::Encoder(None)),
+            DTypeConstraint::Fence => Ok(Self::Fence(None)),
         }
     }
 }
@@ -199,6 +208,8 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                 Ok(Self::Ref(d))
             }
             Constraint::Var(_) => Ok(Self::Any),
+            Constraint::Atom(ADataType::Encoder) => Ok(Self::Encoder),
+            Constraint::Atom(ADataType::Fence) => Ok(Self::Fence),
             _ => todo!(),
         }
     }
@@ -214,6 +225,8 @@ impl From<DataType> for DTypeConstraint {
             DataType::BufferSpace => Self::BufferSpace,
             DataType::Event => Self::Event,
             DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
+            DataType::Encoder(None) => Self::Encoder,
+            DataType::Fence(None) => Self::Fence,
             _ => todo!(),
         }
     }

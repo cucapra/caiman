@@ -10,10 +10,10 @@ use std::{
 pub use hir::*;
 
 use crate::{
-    lower::{data_type_to_local_type, IN_STEM},
-    normalize::original_name,
-    parse::ast::{DataType, SchedulingFunc},
-    typing::{Context, Mutability, SchedInfo},
+    error::LocalError,
+    lower::IN_STEM,
+    parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
+    typing::{Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS},
 };
 use caiman::assembly::ast::{self as asm};
 use caiman::explication::Hole;
@@ -22,7 +22,7 @@ use caiman::ir;
 use self::{
     analysis::{
         analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
-        transform_to_ssa, InOutFacts, LiveVars, TagAnalysis,
+        transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
@@ -55,7 +55,7 @@ pub struct Funclets {
     type_info: analysis::InOutFacts<TagAnalysis>,
     /// Mapping from variable names to their local type. The local type of a variable
     /// is a reference
-    types: HashMap<String, asm::TypeId>,
+    // types: HashMap<String, asm::TypeId>,
     /// Mapping from variable names to their data type
     data_types: HashMap<String, DataType>,
     finfo: FuncInfo,
@@ -82,7 +82,7 @@ impl<'a> Funclet<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
     pub fn next_blocks(&self) -> Vec<Hole<asm::FuncletId>> {
         match &self.block.terminator {
-            Terminator::FinalReturn(_) => vec![],
+            Terminator::FinalReturn(..) => vec![],
             Terminator::Select { .. } => {
                 let mut e = self
                     .parent
@@ -100,12 +100,12 @@ impl<'a> Funclet<'a> {
                 assert_eq!(res.len(), 2);
                 res
             }
-            Terminator::None
+            Terminator::None(..)
             | Terminator::Return { .. }
-            | Terminator::Next(_)
+            | Terminator::Next(..)
             | Terminator::Call(..)
             | Terminator::CaptureCall { .. }
-            | Terminator::Yield(_) => {
+            | Terminator::Yield(..) => {
                 let e = self
                     .parent
                     .cfg
@@ -168,7 +168,7 @@ impl<'a> Funclet<'a> {
             Terminator::Call(..)
             | Terminator::CaptureCall { .. }
             | Terminator::Select { .. }
-            | Terminator::Yield(_) => {
+            | Terminator::Yield(..) => {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
@@ -177,9 +177,9 @@ impl<'a> Funclet<'a> {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
-            Terminator::FinalReturn(_)
-            | Terminator::None
-            | Terminator::Next(_)
+            Terminator::FinalReturn(..)
+            | Terminator::None(..)
+            | Terminator::Next(..)
             | Terminator::Return { .. } => self
                 .parent
                 .exiting_vars(&[self.id()])
@@ -214,7 +214,7 @@ impl<'a> Funclet<'a> {
                 .iter()
                 .map(|(name, _)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
-                    typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
+                    typ: self.get_asm_type(name).unwrap(),
                     tags: self
                         .get_input_tag(&format!("{IN_STEM}{name}"))
                         .unwrap()
@@ -232,7 +232,7 @@ impl<'a> Funclet<'a> {
                 .map(|(idx, _)| {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
-                        typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
+                        typ: self.get_asm_type(&name).unwrap(),
                         tags: self.get_input_tag(&name).unwrap().tags_vec(),
                         name: Some(asm::NodeId(name)),
                     }
@@ -243,12 +243,7 @@ impl<'a> Funclet<'a> {
                 .iter()
                 .map(|var| asm::FuncletArgument {
                     name: Some(asm::NodeId(var.clone())),
-                    typ: self
-                        .parent
-                        .types
-                        .get(var)
-                        .unwrap_or_else(|| panic!("{}: Missing type for {var}", self.block.src_loc))
-                        .clone(),
+                    typ: self.get_asm_type(var).unwrap(),
                     tags: self
                         .get_input_tag(var)
                         .unwrap_or_else(|| {
@@ -303,7 +298,7 @@ impl<'a> Funclet<'a> {
                 .map(|(idx, _)| {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
-                        typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
+                        typ: self.get_asm_type(&name).unwrap(),
                         tags: self.get_out_tag(&name).unwrap().tags_vec(),
                         name: Some(asm::NodeId(name)),
                     }
@@ -315,18 +310,7 @@ impl<'a> Funclet<'a> {
                 .into_iter()
                 .map(|(var, tag)| asm::FuncletArgument {
                     name: None,
-                    typ: self
-                        .parent
-                        .types
-                        .get(&var)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "{}: Missing base type for {}",
-                                self.block.src_loc,
-                                original_name(&var)
-                            )
-                        })
-                        .clone(),
+                    typ: self.get_asm_type(&var).unwrap(),
                     tags: tag.tags_vec(),
                 })
                 .collect()
@@ -404,8 +388,36 @@ impl<'a> Funclet<'a> {
     /// the data type of a variable will be the data type of the value,
     /// not a reference data type
     #[inline]
-    pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
+    fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
+    }
+
+    #[inline]
+    pub fn get_storage_type(&self, var: &str) -> Option<asm::FFIType> {
+        self.get_dtype(var).map(DataType::storage_type)
+    }
+
+    /// Gets the assembly type for a variable, considering the place of the
+    /// variable
+    fn get_asm_type(&self, var: &str) -> Result<asm::TypeId, String> {
+        if let Some(flags) = self.parent.flags.get(var) {
+            let suffix = if *flags == ENCODE_SRC_FLAGS {
+                "::gs"
+            } else if *flags == ENCODE_DST_FLAGS {
+                "::gd"
+            } else {
+                return Err(format!("{}: Invalid flags for {var}", self.block.src_loc));
+            };
+            Ok(asm::TypeId(format!(
+                "{}{}",
+                self.get_dtype(var).unwrap().asm_type().0,
+                suffix
+            )))
+        } else if let Some(dt) = self.get_dtype(var) {
+            Ok(dt.asm_type())
+        } else {
+            Err(format!("{}: Missing type for {var}", self.block.src_loc))
+        }
     }
 
     /// Returns true if the specified tag is a literal node in the value specification
@@ -449,13 +461,14 @@ impl Funclets {
     ) -> HashMap<usize, BTreeSet<String>> {
         let mut captured_out = HashMap::new();
         for (id, bb) in &mut cfg.blocks {
-            if matches!(bb.terminator, Terminator::None)
+            if matches!(bb.terminator, Terminator::None(..))
                 && cfg
                     .graph
                     .get(id)
                     .map_or(false, |e| !matches!(e, Edge::None))
             {
                 bb.terminator = Terminator::Next(
+                    bb.terminator.get_info(),
                     live_vars
                         .get_out_fact(*id)
                         .live_set
@@ -493,7 +506,7 @@ impl Funclets {
                         passthrough.push(v.clone());
                     }
                 }
-            } else if let Terminator::Yield(captures) = &mut bb.terminator {
+            } else if let Terminator::Yield(_, captures) = &mut bb.terminator {
                 let lives = live_vars.get_out_fact(*id).live_set();
                 *captures = lives.iter().cloned().collect();
                 captured_out.insert(*id, lives.clone());
@@ -504,13 +517,13 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
+    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Result<Self, LocalError> {
         let mut cfg = Cfg::new(f.statements, &f.output, ctx);
-        let (mut types, mut data_types, variables, flags) =
+        let (mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
+        deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
-        deref_transform_pass(&mut cfg, &mut types, &mut data_types, &variables);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         cfg = transform_to_ssa(cfg, &live_vars);
@@ -521,30 +534,54 @@ impl Funclets {
             .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
             .collect();
         let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
+        let output_dtypes: Vec<_> = f
+            .output
+            .iter()
+            .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
+            .collect();
 
         deduce_val_quots(
             &mut hir_inputs,
             &mut hir_outputs,
+            &output_dtypes,
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,
-        )
-        .unwrap();
+            &data_types,
+            f.info,
+        )?;
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
+        );
+        let _ = analyze(
+            &mut cfg,
+            &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
+                if let Some(FullType {
+                    base:
+                        Some(FlaggedType {
+                            base: DataType::Fence(_),
+                            ..
+                        }),
+                    ..
+                }) = t
+                {
+                    Some(n)
+                } else {
+                    None
+                }
+            })),
         );
         let finfo = FuncInfo {
             name: f.name,
             input: hir_inputs,
             output: hir_outputs,
         };
-        Self {
+        Ok(Self {
             cfg,
             live_vars,
             type_info,
-            types,
             data_types,
             finfo,
             specs: specs_rc,
@@ -552,7 +589,7 @@ impl Funclets {
             literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
             variables,
             flags,
-        }
+        })
     }
 
     /// Collects a map of variable names to their base types as local types,
@@ -567,27 +604,31 @@ impl Funclets {
     fn collect_types(
         f: &SchedInfo,
     ) -> (
-        HashMap<String, asm::TypeId>,
         HashMap<String, DataType>,
         HashSet<String>,
         HashMap<String, ir::BufferFlags>,
     ) {
-        let mut types = HashMap::new();
+        let mut data_types = f.types.clone();
         let mut variables = HashSet::new();
+        let mut flags = f.flags.clone();
         for (var, typ) in &f.types {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
-                types.insert(var.to_string(), make_ref(data_type_to_local_type(typ)));
+                data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
-            } else {
-                types.insert(var.to_string(), data_type_to_local_type(typ));
             }
         }
-        let mut data_types = f.types.clone();
         for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
-            data_types.insert(format!("{RET_VAR}{id}"), out_ty.clone());
-            types.insert(format!("{RET_VAR}{id}"), data_type_to_local_type(out_ty));
+            let out_name = format!("{RET_VAR}{id}");
+            data_types.insert(out_name.clone(), out_ty.base.clone());
+            if !out_ty.flags.is_empty() {
+                let mut flag = flags.get(&out_name).copied().unwrap_or_default();
+                for f in &out_ty.flags {
+                    f.apply_flag(&mut flag);
+                }
+                flags.insert(out_name, flag);
+            }
         }
-        (types, data_types, variables, f.flags.clone())
+        (data_types, variables, flags)
     }
 
     /// Gets the funclet with the given id

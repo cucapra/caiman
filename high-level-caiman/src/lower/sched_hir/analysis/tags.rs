@@ -40,6 +40,18 @@ fn override_none_usable(mut tag: TripleTag, dtype: &DataType) -> TripleTag {
     tag
 }
 
+/// Overrrides unknown info in `tag` with `none()-save` for spatial,
+/// `none()-usable` for timeline, and `none()-dead` for value
+fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
+    tag.spatial
+        .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
+    tag.timeline
+        .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
+    tag.value
+        .override_unknown_info(none_tag(SpecType::Value, Flow::Dead));
+    tag
+}
+
 /// Tag analysis for determining tags
 /// Top: empty set
 /// Meet: union
@@ -125,6 +137,7 @@ impl TagAnalysis {
 
 impl TagAnalysis {
     /// Transfer function for an HIR body statement
+    #[allow(clippy::too_many_lines)]
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
@@ -168,7 +181,20 @@ impl TagAnalysis {
                     }
                 }
             }
-            HirBody::RefLoad { dest, src, .. } | HirBody::DeviceCopy { dest, src, .. } => {
+            HirBody::DeviceCopy {
+                dest,
+                dest_tag,
+                src,
+                ..
+            } => {
+                let t = self.tags.get_mut(dest).unwrap();
+                t.set_specified_info(dest_tag.clone());
+                if let Some(rhs_typ) = self.tags.get(src).cloned() {
+                    let t = self.tags.get_mut(dest).unwrap();
+                    t.value = rhs_typ.value;
+                }
+            }
+            HirBody::RefLoad { dest, src, .. } => {
                 let mut tag = self
                     .tags
                     .get(src)
@@ -218,7 +244,35 @@ impl TagAnalysis {
                 }
             }
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
-            HirBody::BeginEncoding { .. } | HirBody::EncodeDo { .. } | HirBody::FenceOp { .. } => {}
+            HirBody::BeginEncoding {
+                encoder,
+                tags,
+                device_vars,
+                ..
+            } => {
+                self.tags.insert(
+                    encoder.clone(),
+                    override_none_usable(tags.clone(), &DataType::Encoder(None)),
+                );
+                for (var, tag) in device_vars {
+                    self.tags
+                        .insert(var.clone(), override_defaults_ref(tag.clone()));
+                }
+            }
+            HirBody::FenceOp { dest, tags, .. } => {
+                self.tags.insert(
+                    dest.clone().unwrap(),
+                    override_none_usable(tags.clone(), &DataType::Fence(None)),
+                );
+            }
+            HirBody::EncodeDo { dests, .. } => {
+                for (dest, dest_tag) in dests {
+                    let t = self.tags.get_mut(dest).unwrap();
+                    t.set_specified_info(dest_tag.clone());
+                    // TODO: check this
+                    t.value.flow = Some(Flow::Usable);
+                }
+            }
         }
     }
 }
@@ -251,7 +305,11 @@ impl Fact for TagAnalysis {
                             // return value, which might change types in the last
                             // funclet. To avoid overriding the final output type,
                             // we don't do anything when it meets with a different value
-                            assert!(k.starts_with("_out"), "Unexpected tag conflict with {k}");
+                            assert!(
+                                k.starts_with("_out"),
+                                "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
+                                old_v.get(),
+                            );
                         }
                         // TODO: we assume quotient node names are solved and don't worry
                         // about those conflicts
@@ -267,14 +325,8 @@ impl Fact for TagAnalysis {
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         match stmt {
-            HirInstr::Tail(
-                Terminator::Call(dests, HirFuncCall { tag, .. })
-                | Terminator::Select { dests, tag, .. },
-            ) => {
-                // TODO: can a call/select tags be something else?
-                tag.spatial = none_tag(SpecType::Spatial, Flow::Usable);
-                tag.timeline = none_tag(SpecType::Timeline, Flow::Usable);
-                tag.value.flow = Some(Flow::Usable);
+            HirInstr::Tail(Terminator::Select { dests, tag, .. }) => {
+                tag.override_unknown_info(TripleTag::new_none_usable());
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
@@ -288,10 +340,7 @@ impl Fact for TagAnalysis {
                 call: HirFuncCall { tag, .. },
                 ..
             }) => {
-                // TODO: call tags
-                tag.spatial = none_tag(SpecType::Spatial, Flow::Usable);
-                tag.timeline = none_tag(SpecType::Timeline, Flow::Usable);
-                tag.value.flow = Some(Flow::Usable);
+                tag.override_unknown_info(TripleTag::new_none_usable());
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
@@ -316,11 +365,12 @@ impl Fact for TagAnalysis {
                 }
             }
             HirInstr::Tail(
-                Terminator::None
+                Terminator::None(..)
                 | Terminator::Next(..)
-                | Terminator::FinalReturn(_)
-                | Terminator::Yield(_),
+                | Terminator::FinalReturn(..)
+                | Terminator::Yield(..),
             ) => (),
+            HirInstr::Tail(Terminator::Call(..)) => panic!("Call should be eliminated"),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }
