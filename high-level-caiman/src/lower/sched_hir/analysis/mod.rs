@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 mod continuations;
 mod dominators;
@@ -156,6 +156,33 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
     InOutFacts {
         in_facts,
         out_facts,
+    }
+}
+
+/// Performs a breadth first traversal, only performing a dataflow analysis
+/// once per block
+pub fn bft<T: Fact>(cfg: &mut Cfg, top: &T) {
+    let mut in_facts: HashMap<usize, T> = HashMap::new();
+    let mut out_facts: HashMap<usize, T> = HashMap::new();
+    let mut worklist: VecDeque<usize> = VecDeque::new();
+    let mut visited: HashSet<usize> = HashSet::new();
+    let adj_lst = T::Dir::get_adj_list(cfg);
+    in_facts.extend(cfg.graph.keys().map(|k| (*k, top.clone())));
+    worklist.push_back(T::Dir::root_id());
+
+    while let Some(block) = worklist.pop_front() {
+        if !visited.insert(block) {
+            continue;
+        }
+        visited.insert(block);
+        let in_fact = in_facts.get(&block).unwrap();
+        let out_fact = analyze_basic_block(cfg, block, in_fact);
+        let add_neighbors = out_facts.get(&block) != Some(&out_fact);
+        if add_neighbors {
+            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
+            worklist.extend(adj_lst.get(&block).unwrap());
+        }
+        out_facts.insert(block, out_fact);
     }
 }
 

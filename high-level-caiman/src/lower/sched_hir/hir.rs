@@ -732,13 +732,19 @@ impl HirBody {
                     }
                 }
             },
-            SchedExpr::Binop { info, op: Binop::Dot, lhs: _, rhs: op_rhs} => {
+            SchedExpr::Binop { info, op: Binop::Dot, lhs: op_lhs, rhs: op_rhs} => {
                 assert_eq!(lhs.len(), 1);
+                let op_lhs_name = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *op_lhs));
+                let rhs_name = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *op_rhs));
                 Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
                     lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                    rhs: enum_cast!(SchedExpr::Term, *op_rhs),
+                    rhs: SchedTerm::Var {
+                        name: format!("{op_lhs_name}::{rhs_name}"),
+                        tag: None,
+                        info,
+                    }
                 }
             }
             SchedExpr::Binop {

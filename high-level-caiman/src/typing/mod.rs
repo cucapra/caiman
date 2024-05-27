@@ -633,6 +633,7 @@ fn sig_match(sig1: &Signature, sig2: &NamedSignature) -> bool {
 
 /// A global context for a caiman program. This contains information about constants,
 /// type aliases, and function signatures.
+#[derive(Debug, Clone)]
 pub struct Context {
     /// Required type declarations for the program.
     pub type_decls: Vec<asm::Declaration>,

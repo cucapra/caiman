@@ -107,7 +107,7 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         }
         return Ok(());
     }
-    let final_ast = normalize::post_typecheck_norm(ast, &ctx);
+    let final_ast = normalize::post_typecheck_norm(ast);
     if args.final_ast {
         if !args.quiet {
             println!("{final_ast:#?}");
