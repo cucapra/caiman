@@ -123,7 +123,17 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
             SchedStmt::InEdgeAnnotation { tags, .. }
             | SchedStmt::OutEdgeAnnotation { tags, .. } => {
                 for (var, _) in tags {
-                    *var = get_cur_name(var, &cur_names);
+                    if var.contains("::") {
+                        // a name containing an "::" is a reference to a variable in
+                        // a record. Record fields are not renamed, but the record
+                        // itself is. So we need to rename the record name, but not
+                        // the field name.
+                        // TODO: nested records?
+                        let (prefix, suffix) = var.split_at(var.find("::").unwrap());
+                        *var = format!("{}{}", get_cur_name(prefix, &cur_names), suffix);
+                    } else {
+                        *var = get_cur_name(var, &cur_names);
+                    }
                 }
             }
             SchedStmt::Return(_, e) => {

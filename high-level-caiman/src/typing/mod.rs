@@ -802,15 +802,3 @@ pub const fn is_value_dtype(t: &DataType) -> bool {
             | DataType::Array(_, _)
     )
 }
-
-/// Returns `true` if the type can be represented in the value spec.
-/// If this function returns false, then the argument or return value can be
-/// ignored for the purpose of inferring value quotients.
-#[must_use]
-pub const fn is_value_fulltype(t: &FullType) -> bool {
-    if let Some(t) = &t.base {
-        is_value_dtype(&t.base)
-    } else {
-        false
-    }
-}

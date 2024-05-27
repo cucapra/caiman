@@ -415,6 +415,7 @@ Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
 InOutArg<T>: Arg<T> = {
     "input" ":" <t: T> => (String::from("input"), t),
     "output" ":" <t: T> => (String::from("output"), t),
+    <i: Id> "." <d: Id> ":" <t: T> => (format!("{}::{}", i, d), t),
     <i: Id> ":" <t: T> => (i, t),
 }
 

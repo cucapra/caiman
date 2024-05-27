@@ -52,16 +52,23 @@ pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
 /// Performs a second pass of normalization on the AST that require type information.
 #[must_use]
 #[allow(clippy::module_name_repetitions)]
-pub fn normalize_pass2(mut p: Program, ctx: &Context) -> Program {
+pub fn post_typecheck_norm(mut p: Program, ctx: &Context) -> Program {
     for decl in &mut p {
         if let TopLevel::SchedulingFunc {
-            statements,
             input,
             output,
+            statements,
+            name,
             ..
         } = decl
         {
-            record_expansion::expand_records(input, output, statements, ctx);
+            record_expansion::expand_record_io(
+                input,
+                output,
+                statements,
+                &ctx.scheds[name].unwrap_sched().types,
+                ctx,
+            );
         }
     }
     p

@@ -444,11 +444,14 @@ fn collect_dot(
     {
         env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
     }
-    let lhs_constraint = get_singleton_remote_obj_constraint(
-        rhs_name,
-        DTypeConstraint::Var(dest_name.clone()),
-        WGPUFlags::MapRead,
-    );
+    let lhs_constraint = DTypeConstraint::Record(RecordConstraint::Record {
+        fields: {
+            let mut fields = BTreeMap::new();
+            fields.insert(rhs_name.clone(), DTypeConstraint::Var(dest_name.clone()));
+            fields
+        },
+        is_contravariant: false,
+    });
     env.add_constraint(lhs_name, lhs_constraint, info)?;
     Ok(())
 }
@@ -495,7 +498,11 @@ fn collect_timeline_op(
             env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
             env.add_constraint(
                 arg_name,
-                DTypeConstraint::Fence(Box::new(DTypeConstraint::Var(dest_name.to_string()))),
+                DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
+                    all: RecordConstraint::Any,
+                    read: RecordConstraint::Var(dest_name.clone()),
+                    write: RecordConstraint::Any,
+                })),
                 info,
             )
         }
@@ -698,7 +705,7 @@ fn get_singleton_remote_obj_constraint(
     var_constraint: DTypeConstraint,
     flag: WGPUFlags,
 ) -> DTypeConstraint {
-    let populated_record = RecordConstraint {
+    let populated_record = RecordConstraint::Record {
         fields: {
             let mut fields = BTreeMap::new();
             fields.insert(var.to_string(), var_constraint.clone());
@@ -706,7 +713,7 @@ fn get_singleton_remote_obj_constraint(
         },
         is_contravariant: false,
     };
-    let empty_record = RecordConstraint {
+    let empty_record = RecordConstraint::Record {
         fields: BTreeMap::new(),
         is_contravariant: false,
     };
@@ -719,7 +726,7 @@ fn get_singleton_remote_obj_constraint(
         (empty_record.clone(), empty_record)
     };
     DTypeConstraint::RemoteObj {
-        all: RecordConstraint {
+        all: RecordConstraint::Record {
             fields: {
                 let mut fields = BTreeMap::new();
                 fields.insert(var.to_string(), var_constraint);
@@ -789,7 +796,6 @@ fn collect_encode(
             )
         }
         EncodedCommand::Invoke => {
-            // TODO: typing encode-do (should GPU args be refs or values?)
             if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
                 collect_assign_call(
                     ctx,

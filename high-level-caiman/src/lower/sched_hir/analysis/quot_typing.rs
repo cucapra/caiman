@@ -646,8 +646,15 @@ fn unify_nodes(
                     env,
                 )?,
                 HirBody::EncodeDo { dests, func, info, .. } => unify_call(dests, func, ctx, dtypes, *info, env)?,
+                HirBody::Sync { dests, srcs, info, ..} => {
+                    assert_eq!(dests.processed().len() + 1, srcs.processed().len());
+                    for ((dest, dest_tag), src) in dests.processed().iter().zip(srcs.processed().iter().skip(1)) {
+                        env = unify_decl(dest, dest_tag, &SchedTerm::Var { name: src.clone(), info: *info, tag: None }, fn_info, env)?;
+                    }
+                    env
+                }
                 HirBody::BeginEncoding { .. }
-                | HirBody::FenceOp { .. }
+                | HirBody::Submit { .. }
                 | HirBody::Hole(..)
                 // ignore PHIs for non-value types
                 | HirBody::Phi { .. } => env,
@@ -687,7 +694,7 @@ fn unify_terminator(
                 .iter()
                 .filter(|rname| {
                     is_value_dtype(dtypes.get(&ssa::original_name(rname)).unwrap_or_else(|| {
-                        panic!("Missing dtype for {}", ssa::original_name(rname))
+                        panic!("{info}: Missing dtype for {}", ssa::original_name(rname))
                     }))
                 })
                 .zip(output_classes.into_iter())
@@ -835,7 +842,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 HirBody::Hole(_)
                 | HirBody::RefLoad { .. }
                 | HirBody::BeginEncoding { .. }
-                | HirBody::FenceOp { .. } => {}
+                | HirBody::Submit { .. } => {}
                 HirBody::Phi { dest, info, .. } => {
                     insertions.push((
                         idx,
@@ -844,6 +851,11 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                             vec![(dest.clone(), construct_new_tag(dest, env, block.id))],
                         ),
                     ));
+                }
+                HirBody::Sync { dests, .. } => {
+                    for (dest, dest_tag) in dests.processed_mut() {
+                        fill_val_quotient(dest, dest_tag, env, block.id);
+                    }
                 }
             }
         }

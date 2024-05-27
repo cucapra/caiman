@@ -4,21 +4,21 @@ mod continuations;
 mod dominators;
 mod op_transform;
 mod quot_typing;
+mod record_expansion;
 mod refs;
 mod ssa;
 mod tags;
 
-use crate::{enum_cast, parse::ast::SchedTerm};
-
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
     hir::HirInstr,
-    FenceOp, HirBody,
+    HirBody,
 };
 
 pub use continuations::{compute_continuations, Succs};
 pub use op_transform::op_transform_pass;
 pub use quot_typing::deduce_val_quots;
+pub use record_expansion::transform_encode_pass;
 pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;
 pub use ssa::transform_to_ssa;
@@ -372,20 +372,11 @@ impl Fact for ActiveFences {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();
             }
-            HirInstr::Stmt(HirBody::FenceOp {
-                dest: Some(dest),
-                op: FenceOp::Submit,
-                ..
-            }) => {
+            HirInstr::Stmt(HirBody::Submit { dest, .. }) => {
                 self.active_fences.insert((*dest).to_string());
             }
-            HirInstr::Stmt(HirBody::FenceOp {
-                op: FenceOp::Sync,
-                src,
-                ..
-            }) => {
-                self.active_fences
-                    .remove(enum_cast!(SchedTerm::Var { name, .. }, name, src));
+            HirInstr::Stmt(HirBody::Sync { srcs, .. }) => {
+                self.active_fences.remove(&srcs.processed()[0]);
             }
             _ => {}
         }

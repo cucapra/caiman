@@ -110,7 +110,7 @@ fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
 /// Returns an error if the program is not well-typed or flattened.
 /// # Panics
 /// If lowering something with currently unsupported language features.
-pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, error::LocalError> {
+pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
     // 2. Constant fold constants
@@ -198,6 +198,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                         specs,
                         statements,
                     },
+                    no_inference,
                 )?;
                 asm.declarations
                     .extend(res.into_iter().map(asm::Declaration::Funclet));

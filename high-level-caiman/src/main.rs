@@ -56,6 +56,11 @@ struct Arguments {
     /// all transformations but before lowering.
     #[clap(long, alias = "ast")]
     final_ast: bool,
+
+    /// When this flag is enabled, the frontend will not infer the quotients of
+    /// variables.
+    #[clap(long)]
+    no_inference: bool,
 }
 
 fn main() -> Result<(), error::Error> {
@@ -71,6 +76,11 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         })?,
         filename => parse::parse_file(filename)?,
     };
+    let filename = if args.filename == "-" {
+        "stdin".to_string()
+    } else {
+        args.filename
+    };
     if args.parse {
         if !args.quiet {
             println!("{ast:#?}");
@@ -79,7 +89,7 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
     }
     let ast = normalize::normalize_ast(ast).map_err(|e| error::Error {
         error: e,
-        filename: args.filename.clone(),
+        filename: filename.clone(),
     })?;
     if args.normalize {
         if !args.quiet {
@@ -89,7 +99,7 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
     }
     let ctx = typing::Context::new(&ast).map_err(|e| error::Error {
         error: e,
-        filename: args.filename.clone(),
+        filename: filename.clone(),
     })?;
     if args.typecheck {
         if !args.quiet {
@@ -97,16 +107,16 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         }
         return Ok(());
     }
-    let final_ast = normalize::normalize_pass2(ast, &ctx);
+    let final_ast = normalize::post_typecheck_norm(ast, &ctx);
     if args.final_ast {
         if !args.quiet {
             println!("{final_ast:#?}");
         }
         return Ok(());
     }
-    let lowered = lower(final_ast, &ctx).map_err(|e| error::Error {
+    let lowered = lower(final_ast, &ctx, args.no_inference).map_err(|e| error::Error {
         error: e,
-        filename: args.filename.clone(),
+        filename: filename.clone(),
     })?;
     if args.lower {
         if !args.quiet {

@@ -277,11 +277,23 @@ impl TagAnalysis {
                         .insert(var.clone(), override_defaults_ref(tag.clone()));
                 }
             }
-            HirBody::FenceOp { dest, tags, .. } => {
+            HirBody::Submit { dest, tags, .. } => {
                 self.tags.insert(
-                    dest.clone().unwrap(),
+                    dest.clone(),
                     override_none_usable(tags.clone(), &DataType::Fence(None), None),
                 );
+            }
+            HirBody::Sync { dests, .. } => {
+                for (dest, dest_tag) in dests.processed() {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(
+                            dest_tag.clone(),
+                            &self.data_types[dest],
+                            self.flags.get(dest),
+                        ),
+                    );
+                }
             }
             HirBody::EncodeDo { dests, .. } => {
                 for (dest, dest_tag) in dests {

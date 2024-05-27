@@ -39,8 +39,6 @@ fn foo_main(x: &i32) -> i32
     impls foo, foo_time, foo_space
 {
     @in { input: node(tmln.e) };
-    // TODO: Right now we need to declare the type of t_gpu bc we aren't
-    // typing the calls
     let e = encode-begin @ node(tmln.(enc1, enc2)) gpu;
     encode e.copy[x_gpu <- x];
     encode e.call[t_gpu <- simple'<1, 1, 1>(x_gpu)];

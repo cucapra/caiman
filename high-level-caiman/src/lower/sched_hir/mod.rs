@@ -3,7 +3,7 @@ pub mod cfg;
 mod hir;
 
 use std::{
-    collections::{hash_map::Entry, BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -23,8 +23,8 @@ use caiman::ir;
 
 use self::{
     analysis::{
-        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
-        transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
+        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
+        transform_out_ssa, transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
@@ -521,16 +521,21 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Result<Self, LocalError> {
+    pub fn new(
+        f: SchedulingFunc,
+        specs: &Specs,
+        ctx: &Context,
+        no_inference: bool,
+    ) -> Result<Self, LocalError> {
         let mut cfg = Cfg::new(f.statements, &f.output, ctx);
         let (mut data_types, variables, flags) =
-            Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
+            Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
+        transform_encode_pass(&mut cfg, &data_types);
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        cfg = transform_to_ssa(cfg, &live_vars);
         let specs_rc = Rc::new(specs.clone());
         let mut hir_inputs: Vec<_> = f
             .input
@@ -544,17 +549,21 @@ impl Funclets {
             .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
             .collect();
 
-        deduce_val_quots(
-            &mut hir_inputs,
-            &mut hir_outputs,
-            &output_dtypes,
-            &mut cfg,
-            &ctx.specs[&specs.value.0],
-            ctx,
-            &data_types,
-            f.info,
-        )?;
-        cfg = transform_out_ssa(cfg);
+        if !no_inference {
+            cfg = transform_to_ssa(cfg, &live_vars);
+
+            deduce_val_quots(
+                &mut hir_inputs,
+                &mut hir_outputs,
+                &output_dtypes,
+                &mut cfg,
+                &ctx.specs[&specs.value.0],
+                ctx,
+                &data_types,
+                f.info,
+            )?;
+            cfg = transform_out_ssa(cfg);
+        }
         let type_info = analyze(
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags),
@@ -607,6 +616,7 @@ impl Funclets {
     #[allow(clippy::type_complexity)]
     fn collect_types(
         f: &SchedInfo,
+        cur_outputs: &[FullType],
     ) -> (
         HashMap<String, DataType>,
         HashSet<String>,
@@ -620,18 +630,17 @@ impl Funclets {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
             }
-            collect_record_fields(&mut flags, &mut data_types, typ);
-            for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
-                let out_name = format!("{RET_VAR}{id}");
-                data_types.insert(out_name.clone(), out_ty.base.clone());
-                if !out_ty.flags.is_empty() {
-                    let mut flag = flags.get(&out_name).copied().unwrap_or_default();
-                    for f in &out_ty.flags {
-                        f.apply_flag(&mut flag);
-                    }
-                    flags.insert(out_name, flag);
+        }
+        for (id, out_ty) in cur_outputs.iter().enumerate() {
+            let out_ty = out_ty.base.as_ref().unwrap();
+            let out_name = format!("{RET_VAR}{id}");
+            data_types.insert(out_name.clone(), out_ty.base.clone());
+            if !out_ty.flags.is_empty() {
+                let mut flag = flags.get(&out_name).copied().unwrap_or_default();
+                for f in &out_ty.flags {
+                    f.apply_flag(&mut flag);
                 }
-                collect_record_fields(&mut flags, &mut data_types, &out_ty.base);
+                flags.insert(out_name, flag);
             }
         }
         (data_types, variables, flags)
@@ -717,36 +726,5 @@ impl Funclets {
     /// Get's a map of device variables to their buffer flags
     pub const fn get_flags(&self) -> &HashMap<String, ir::BufferFlags> {
         &self.flags
-    }
-}
-
-/// Inserts flags for record fields.
-fn collect_record_fields(
-    flags: &mut HashMap<String, ir::BufferFlags>,
-    data_types: &mut HashMap<String, DataType>,
-    typ: &DataType,
-) {
-    if let DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) = typ {
-        if let DataType::RemoteObj { all, read, write } = &**t {
-            for (field, typ) in all {
-                data_types.insert(field.clone(), typ.clone());
-                match flags.entry(field.clone()) {
-                    Entry::Occupied(mut e) => {
-                        let f = e.get_mut();
-                        f.storage = true;
-                        f.map_read = read.contains(field);
-                        f.copy_dst = write.contains(field);
-                    }
-                    Entry::Vacant(e) => {
-                        e.insert(ir::BufferFlags {
-                            storage: true,
-                            map_read: read.contains(field),
-                            copy_dst: write.contains(field),
-                            ..Default::default()
-                        });
-                    }
-                }
-            }
-        }
     }
 }

@@ -15,8 +15,8 @@ use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
 use super::types::DTypeConstraint;
 use super::{
-    is_value_fulltype, sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo,
-    SchedOrExtern, Signature, SpecInfo, SpecType, TypedBinop,
+    sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo, SchedOrExtern, Signature,
+    SpecInfo, SpecType, TypedBinop,
 };
 
 /// Gets a list of type declarations for the base types used in the program.
@@ -242,33 +242,45 @@ fn resolve_types(
                             ),
                         ));
                     }
-
-                    if let DataType::RemoteObj { all, read, write } = &dt {
-                        use std::collections::hash_map::Entry;
-                        for k in all.keys() {
-                            match flags.entry(k.clone()) {
-                                Entry::Occupied(mut e) => {
-                                    e.get_mut().storage = true;
-                                    if read.contains(k) {
-                                        e.get_mut().map_read = true;
+                    match &dt {
+                        DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) => {
+                            if let DataType::RemoteObj { all, read, write } = &**t {
+                                use std::collections::hash_map::Entry;
+                                for (field, typ) in all {
+                                    let final_name = format!("{name}::{field}");
+                                    types.insert(final_name.clone(), typ.clone());
+                                    match flags.entry(final_name) {
+                                        Entry::Occupied(mut e) => {
+                                            e.get_mut().storage = true;
+                                            if read.contains(field) {
+                                                e.get_mut().map_read = true;
+                                            }
+                                            if write.contains(field) {
+                                                e.get_mut().copy_dst = true;
+                                            }
+                                        }
+                                        Entry::Vacant(e) => {
+                                            let mut f = ir::BufferFlags::new();
+                                            f.storage = true;
+                                            if read.contains(field) {
+                                                f.map_read = true;
+                                            }
+                                            if write.contains(field) {
+                                                f.copy_dst = true;
+                                            }
+                                            e.insert(f);
+                                        }
                                     }
-                                    if write.contains(k) {
-                                        e.get_mut().copy_dst = true;
-                                    }
-                                }
-                                Entry::Vacant(e) => {
-                                    let mut f = ir::BufferFlags::new();
-                                    f.storage = true;
-                                    if read.contains(k) {
-                                        f.map_read = true;
-                                    }
-                                    if write.contains(k) {
-                                        f.copy_dst = true;
-                                    }
-                                    e.insert(f);
                                 }
                             }
                         }
+                        DataType::Record(fields) => {
+                            for (field, typ) in fields {
+                                let final_name = format!("{name}::{field}");
+                                types.insert(final_name.clone(), typ.clone());
+                            }
+                        }
+                        _ => (),
                     }
                     types.insert(name.clone(), dt);
                 }
@@ -294,10 +306,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
         } = decl
         {
             let mut env = DTypeEnv::new();
-            for (decl_name, decl_typ) in input
-                .iter()
-                .filter(|(_, typ)| typ.as_ref().map(is_value_fulltype).unwrap_or_default())
-            {
+            for (decl_name, decl_typ) in input {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {
                     env.add_dtype_constraint(decl_name, dt.base.clone(), *info)?;
                 } else {
