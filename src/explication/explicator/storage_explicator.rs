@@ -10,7 +10,7 @@ use crate::explication::util::Location;
 use crate::explication::util::*;
 use crate::explication::Hole;
 use crate::ir::{BufferFlags, Place};
-use crate::{explication, frontend, ir};
+use crate::{explication, frontend, ir, rust_wgpu_backend};
 
 use crate::rust_wgpu_backend::ffi;
 
@@ -121,6 +121,14 @@ fn explicate_allocate_temporary(
                     match out.take_to_fill(&node_id) {
                         None => {
                             // TODO: is this the correct default behavior?
+                            // it was not
+                            // instead, we need to add any stupid allocation
+                            // Maybe we should warn?
+                            out.add_node(ir::Node::AllocTemporary {
+                                place: ir::Place::Local,
+                                storage_type: rust_wgpu_backend::ffi::TypeId(0),
+                                buffer_flags: BufferFlags::new(),
+                            });
                             Some(out)
                         }
                         Some(node) => {
@@ -179,7 +187,7 @@ fn enumerate_fill_attempts(
                         &target_type,
                         context,
                     ),
-                    None => state.find_all_storage_nodes(&target_type, context),
+                    None => state.find_all_instantiations(&target_type, context),
                 };
 
                 // adds each new attempt to _each_ vector we've built so far
@@ -656,7 +664,7 @@ fn explicate_borrow_ref(
         let sources = match expir_source {
             Hole::Filled(x) => vec![x.clone()],
             Hole::Empty => state
-                .find_all_storage_nodes(
+                .find_all_instantiations(
                     &expir::Type::Ref {
                         storage_type: storage_type.clone(),
                         storage_place: expir::Place::Local,
@@ -676,7 +684,8 @@ fn explicate_borrow_ref(
             let instantiation = match info.instantiation.clone() {
                 Some(inst) => inst,
                 None => {
-                    return None;
+                    // don't give up yet, we might just need to go up in scope
+                    continue;
                 }
             };
 
@@ -740,7 +749,7 @@ fn explicate_read_ref(
         let sources = match expir_source {
             Hole::Filled(x) => vec![x.clone()],
             Hole::Empty => state
-                .find_all_storage_nodes(
+                .find_all_instantiations(
                     &expir::Type::Ref {
                         storage_type: storage_type.clone(),
                         storage_place: expir::Place::Local,
@@ -771,6 +780,7 @@ fn explicate_read_ref(
                 }),
                 context,
             );
+
             new_state.set_instantiation(schedule_node, instantiation, context);
             let node = ir::Node::ReadRef {
                 storage_type: storage_type.clone(),
@@ -819,11 +829,7 @@ fn explicate_local_copy(
     ));
     match &input_instantiation.value {
         Some(_) => {
-            new_state.set_instantiation(
-                output,
-                input_instantiation.clone(),
-                context,
-            );
+            new_state.set_instantiation(output, input_instantiation.clone(), context);
         }
         None => {}
     }
@@ -1097,7 +1103,10 @@ fn explicate_sync_fence(
         event.clone(),
         context,
     );
-    for schedule_node in state.get_nodes_with_timeline_status(&fence_timeline_status, context).iter() {
+    for schedule_node in state
+        .get_nodes_with_timeline_status(&fence_timeline_status, context)
+        .iter()
+    {
         state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
     }
 

@@ -96,7 +96,9 @@ impl ScheduleScopeData {
     }
 
     pub fn add_timeline_operation(&mut self, operation: Location, context: &StaticContext) {
-        self.as_operation_mut().timeline_operations.insert(operation);
+        self.as_operation_mut()
+            .timeline_operations
+            .insert(operation);
     }
 
     pub fn has_timeline_operation(&self, operation: &Location, context: &StaticContext) -> bool {
@@ -318,6 +320,15 @@ impl ScheduleScopeData {
         result = self.intersect_instantiations(result, &triple.timeline, context);
         result = self.intersect_instantiations(result, &triple.spatial, context);
         result.unwrap_or_default()
+    }
+
+    pub fn all_instantiations(&self, context: &StaticContext) -> HashSet<NodeId> {
+        self.as_storage()
+            .storage_node_information
+            .iter()
+            .map(|(k, v)| k)
+            .cloned()
+            .collect()
     }
 
     pub fn add_explication_hole(&mut self) {

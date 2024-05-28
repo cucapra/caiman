@@ -264,8 +264,6 @@ impl InState {
                 &Location::new(value_funclet_id.clone(), node_id.clone()),
                 context,
             ) {
-                dbg!(&context
-                    .get_node_dependencies(value_funclet_id, &node_id));
                 if context
                     .get_node_dependencies(value_funclet_id, &node_id)
                     .iter()
@@ -281,7 +279,6 @@ impl InState {
                 }
             }
         }
-        dbg!(&result);
         result
     }
 
@@ -313,6 +310,8 @@ impl InState {
         instantiation: LocationTriple,
         context: &StaticContext,
     ) {
+        dbg!(&schedule_node);
+        dbg!(&instantiation);
         self.get_latest_scope_mut()
             .set_instantiation(schedule_node, instantiation, context);
     }
@@ -418,15 +417,33 @@ impl InState {
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
+        self.instantiation_search(Some(target_location_triple), target_type, context)
+    }
+
+    // Does the same as the above, but with no "matching instantiaion" requirement
+    pub fn find_all_instantiations(
+        &self,
+        target_type: &expir::Type,
+        context: &StaticContext,
+    ) -> Vec<Location> {
+        self.instantiation_search(None, target_type, context)
+    }
+
+    fn instantiation_search(
+        &self,
+        target_location_triple: Option<&LocationTriple>,
+        target_type: &expir::Type,
+        context: &StaticContext,
+    ) -> Vec<Location> {
         let mut end_result = Vec::new();
         let mut result = Vec::new();
         for scope in self.scopes.iter().rev() {
             // sort the results so we go top to bottom of the funclet
-            for node in scope
-                .match_triple(target_location_triple, context)
-                .iter()
-                .sorted()
-            {
+            let nodes = match target_location_triple {
+                None => scope.all_instantiations(context),
+                Some(triple) => scope.match_triple(triple, context),
+            };
+            for node in nodes.iter().sorted() {
                 let node_info = scope
                     .as_storage()
                     .storage_node_information

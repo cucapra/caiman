@@ -28,15 +28,15 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<$time-usable, $time-usable>() ->
 [%out : $val.%y-usable $time-usable $space-usable %i64] {
-    %_ = alloc-temporary local [] i64;
-    %_ = alloc-temporary local [] i64;
+    %a = alloc-temporary ? [] ?;
+    %_ = alloc-temporary ? [] ?;
     
-    local-do-builtin ? -> ?;
-    %x = read-ref i64 %x_ref;
+    local-do-builtin ? ? -> ?;
+    %_ = read-ref ? ?;
 
-    local-do-external ? ? -> ?;
-    %result = read-ref i64 ?;
-    return %result;
+    local-do-external ? ? ? -> ?;
+    %_ = read-ref ? ?;
+    return ?;
 }
 
 pipeline "main" = %main_head;

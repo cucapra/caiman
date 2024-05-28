@@ -87,8 +87,6 @@ where
         .funclet_id_opt
         .unwrap();
 
-    dbg!(&external_function_id);
-    dbg!("");
     let operations_to_try = match operation {
         Hole::Filled(op) => vec![op.clone()],
         Hole::Empty => state
@@ -104,7 +102,7 @@ where
                         type_id: _,
                     } => external_function_id.is_none(),
                     expir::Node::CallFunctionClass {
-                        function_id,
+                        function_id: function_class_id,
                         arguments: _,
                     } => match external_function_id {
                         // builtin case,
@@ -113,10 +111,8 @@ where
                         Some(Hole::Empty) => true,
                         // external informational case
                         Some(Hole::Filled(external_id)) => {
-                            dbg!(&function_id);
-                            dbg!(&read_external_id(function_id, &value_funclet_id, context));
                             // check to see if this operation implements the external id
-                            read_external_id(function_id, &value_funclet_id, context)
+                            read_external_id(function_class_id, &value_funclet_id, context)
                                 .external_function_ids
                                 .contains(external_id)
                         }
@@ -127,17 +123,13 @@ where
             .collect(),
     };
 
-    dbg!(&state.get_current_node(context));
-    dbg!(&operations_to_try);
-
     for operation_to_try in operations_to_try {
         let mut new_state = state.clone();
         let location = Location {
             funclet_id: value_funclet_id,
             quot: operation_to_try.clone(),
         };
-        dbg!(&context.debug_info.node(&location.funclet_id, location.node_id(context).unwrap()));
-        new_state.add_value_operation(location, context);
+        let base_node_id = location.node_id(context).unwrap();
 
         let external_id = match external_function_id {
             None => None,
@@ -149,24 +141,46 @@ where
                 }) {
                     expir::Node::CallFunctionClass {
                         function_id,
-                        arguments: _,
-                    } => Some(
-                        read_external_id(function_id, &value_funclet_id, context)
-                            .external_function_ids
-                            .first()
-                            .expect(&format!(
-                                "No external function found to implement {}",
-                                context
-                                    .debug_info
-                                    // now safe to unwrap wrt debugging
-                                    .external_function(function_id.as_ref().opt().unwrap())
-                            ))
-                            .clone(),
-                    ),
+                        arguments,
+                    } => {
+                        Some(
+                            read_external_id(function_id, &value_funclet_id, context)
+                                .external_function_ids
+                                .first()
+                                .expect(&format!(
+                                    "No external function found to implement {}",
+                                    context
+                                        .debug_info
+                                        // now safe to unwrap wrt debugging
+                                        .external_function(function_id.as_ref().opt().unwrap())
+                                ))
+                                .clone(),
+                        )
+                    }
                     _ => unreachable!(),
                 }
             }
         };
+        match external_id {
+            None => {}
+            Some(index) => {
+                for offset in 0..context
+                    .program
+                    .native_interface
+                    .external_functions
+                    .get_expect(index.0)
+                    .get_output_types()
+                    .unwrap()
+                    .len()
+                {
+                    let offset_location =
+                        Location::new(value_funclet_id, base_node_id + offset + 1);
+                    new_state.add_value_operation(offset_location, context);
+                }
+            }
+        }
+
+        new_state.add_value_operation(location, context);
         let node = node_builder(operation_to_try, external_id);
         new_state.next_node();
         match explicate_node(new_state, context) {
