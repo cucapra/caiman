@@ -107,6 +107,7 @@ impl EncodeTransform {
         new_args
     }
 
+    /// Expands and rename record fields in terminators
     fn transfer_tail(&mut self, term: &mut Terminator) {
         match term {
             Terminator::Return { dests, rets, .. } => {
@@ -153,6 +154,41 @@ impl EncodeTransform {
             }
             _ => (),
         }
+    }
+
+    /// Renames annatiions to use the canonical name of a fence or an encoder.
+    /// Also copies any timeline annotations to all fields of a record if
+    /// that record is a part of a fence or encoder.
+    fn expand_annotations(&self, annot: &mut Vec<(String, TripleTag)>) {
+        let mut record_fields = Vec::new();
+        for (arg, t) in annot.iter_mut() {
+            if arg.contains("::") {
+                let mut split = arg.split("::");
+                let fence = split.next().unwrap();
+                let var = split.next().unwrap();
+                *arg = format!(
+                    "{}::{var}",
+                    self.fence_map.get(fence).map_or(fence, String::as_str)
+                );
+            }
+            if let Some(DataType::Fence(Some(ty)) | DataType::Encoder(Some(ty))) =
+                self.data_types.borrow().get(arg)
+            {
+                if let DataType::RemoteObj { all, .. } = &**ty {
+                    record_fields.extend(all.keys().map(|x| {
+                        (
+                            format!("{}::{x}", self.fence_map.get(arg).unwrap_or(arg)),
+                            TripleTag {
+                                timeline: t.timeline.clone(),
+                                ..TripleTag::new_unspecified()
+                            },
+                        )
+                    }));
+                }
+            }
+        }
+        record_fields.extend(std::mem::take(&mut *annot).into_iter());
+        *annot = record_fields;
     }
 }
 
@@ -240,17 +276,7 @@ impl Fact for EncodeTransform {
                 });
             }
             HirInstr::Stmt(HirBody::InAnnotation(_, annot) | HirBody::OutAnnotation(_, annot)) => {
-                for (arg, _) in annot {
-                    if arg.contains("::") {
-                        let mut split = arg.split("::");
-                        let fence = split.next().unwrap();
-                        let var = split.next().unwrap();
-                        *arg = format!(
-                            "{}::{var}",
-                            self.fence_map.get(fence).map_or(fence, String::as_str)
-                        );
-                    }
-                }
+                self.expand_annotations(annot);
             }
             HirInstr::Stmt(_) => (),
         }

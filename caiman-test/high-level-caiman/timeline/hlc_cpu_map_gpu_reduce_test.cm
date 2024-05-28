@@ -58,18 +58,15 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
     encode e.copy[a_gpu <- &a];
     if c {
         @in { input: node(tmln.loc), output: node(tmln.loc),
-            a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem),
-            e.a_gpu: node(tmln.rem), e.b_gpu: node(tmln.rem), e.y_gpu: node(tmln.rem) };
+            a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem) };
         encode e.copy[b_gpu <- &a];
     } else {
         @in { input: node(tmln.loc), output: node(tmln.loc),
-            a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem),
-            e.a_gpu: node(tmln.rem), e.b_gpu: node(tmln.rem), e.y_gpu: node(tmln.rem) };
+            a: node(tmln.loc), b: node(tmln.loc), e: node(tmln.rem) };
         encode e.copy[b_gpu <- &b];
     }
     @in { input: node(tmln.loc), output: node(tmln.out),
-        e: node(tmln.rem),
-        e.a_gpu: node(tmln.rem), e.b_gpu: node(tmln.rem), e.y_gpu: node(tmln.rem) };
+        e: node(tmln.rem) };
     encode e.call[y_gpu <- gpu_merge'<1, 1, 1>(a_gpu, b_gpu)];
     let f = submit @ node(tmln.sub) e;
     let r = await @ node(tmln.snc) f;

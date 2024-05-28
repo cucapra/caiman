@@ -1,4 +1,2 @@
-Error: At "hole_in_spec2.cm" 7:18, 
-  Parsing Error: Unrecognized token: '?', expected one of [
-    "r#\"[0-9]+\"#",
-]
+Error: At "hole_in_spec2.cm" 1:0, 
+  Parsing Error: Undefined type f32

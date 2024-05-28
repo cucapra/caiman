@@ -60,22 +60,17 @@ fn foo_impl(x: &i32, b: bool) -> i32 impls space, foo_time, foo {
     let e = encode-begin @ node(tmln.(loc1, rem1)) gpu;
     encode e.copy[x_gpu <- x];
     let f = if b {
-        @in { input: node(tmln.loc1), output: node(tmln.loc1),
-            e.x_gpu: node(tmln.rem1), e.y_gpu: node(tmln.rem1),
-            e: node(tmln.rem1)
-        };
+        @in { input: node(tmln.loc1), output: node(tmln.loc1), 
+            e: node(tmln.rem1) };
         encode e.call[y_gpu @ node(tmln.sub) <- simple'<1, 1, 1>(x_gpu)];
         submit @ node(tmln.sub) e
     } else {
         @in { input: node(tmln.loc1), output: node(tmln.loc1),
-            e.x_gpu: node(tmln.rem1), e.y_gpu: node(tmln.rem1),
-            e: node(tmln.rem1)
-        };
+            e: node(tmln.rem1) };
         encode e.call[y_gpu @ node(tmln.sub) <- simple2'<1, 1, 1>(x_gpu)];
         submit @ node(tmln.sub) e
     };
-    @in { input: node(tmln.loc1), output: node(tmln.out),
-        e.y_gpu: node(tmln.sub), f: node(tmln.sub) };
+    @in { input: node(tmln.loc1), output: node(tmln.out), f: node(tmln.sub) };
     @out {input: node(tmln.out), output: node(tmln.out) };
     (await @ node(tmln.snc) f).y_gpu
 }

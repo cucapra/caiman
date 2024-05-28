@@ -359,7 +359,11 @@ fn test_subtype_lattice() {
     r1.insert(String::from("l2"), Constraint::Atom(String::from("I32")));
     env.add_class_constraint(
         "$r",
-        &Constraint::DynamicTerm(String::from("record"), r1, false),
+        &Constraint::DynamicTerm(
+            String::from("record"),
+            r1,
+            super::unification::SubtypeConstraint::Any,
+        ),
     )
     .unwrap();
     let mut r2 = BTreeMap::new();
@@ -373,7 +377,11 @@ fn test_subtype_lattice() {
     r2.insert(String::from("l3"), Constraint::Atom(String::from("bool")));
     env.add_class_constraint(
         "$r",
-        &Constraint::DynamicTerm(String::from("record"), r2, false),
+        &Constraint::DynamicTerm(
+            String::from("record"),
+            r2,
+            super::unification::SubtypeConstraint::Any,
+        ),
     )
     .unwrap();
     let ty = env.get_type("$r").unwrap();

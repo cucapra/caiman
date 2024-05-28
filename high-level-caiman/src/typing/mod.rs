@@ -9,7 +9,7 @@ use crate::{
 use caiman::{assembly::ast as asm, ir};
 
 use self::{
-    types::{ADataType, CDataType, DTypeConstraint},
+    types::{ADataType, CDataType, DTypeConstraint, RecordConstraint},
     unification::{Constraint, Env},
 };
 mod sched;
@@ -269,6 +269,8 @@ impl NodeEnv {
 pub struct DTypeEnv {
     env: Env<CDataType, ADataType>,
     flags: HashMap<String, ir::BufferFlags>,
+    /// A side condition that `(sub, sup)` must be an element of the subtype relation.
+    side_conditions: HashSet<(String, String)>,
 }
 
 impl Default for DTypeEnv {
@@ -276,6 +278,7 @@ impl Default for DTypeEnv {
         Self {
             env: Env::new(),
             flags: HashMap::new(),
+            side_conditions: HashSet::new(),
         }
     }
 }
@@ -300,7 +303,61 @@ impl DTypeEnv {
                 info,
                 &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
-        })
+        })?;
+        self.check_side_conds(info)
+    }
+
+    /// Adds a side condition that `(subtype, supertype)` must be an element of the subtype relation.
+    pub fn add_var_side_cond(&mut self, subtype: &str, supertype: &str) {
+        self.side_conditions
+            .insert((subtype.to_string(), supertype.to_string()));
+    }
+
+    /// Returns ok if all side conditions are satisfied.
+    /// # Errors
+    /// Returns an error if a side condition is not satisfied.
+    fn check_side_conds(&self, info: Info) -> Result<(), LocalError> {
+        for (subtype, supertype) in &self.side_conditions {
+            if !match (
+                self.env.get_type(subtype).map(DTypeConstraint::try_from),
+                self.env.get_type(supertype).map(DTypeConstraint::try_from),
+            ) {
+                (
+                    Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
+                        fields: sub_fields,
+                        ..
+                    }))),
+                    Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
+                        fields: super_fields,
+                        ..
+                    }))),
+                ) => !super_fields
+                    .iter()
+                    .any(|(n, _)| !sub_fields.contains_key(n)),
+                (
+                    Some(Ok(
+                        DTypeConstraint::Record { .. }
+                        | DTypeConstraint::Any
+                        | DTypeConstraint::Var(_),
+                    )),
+                    Some(Ok(
+                        DTypeConstraint::Record { .. }
+                        | DTypeConstraint::Any
+                        | DTypeConstraint::Var(_),
+                    )),
+                )
+                | (Some(_), None)
+                | (None, Some(_))
+                | (Some(Err(_)), Some(Err(_))) => true,
+                _ => false,
+            } {
+                return Err(type_error(
+                    info,
+                    &format!("Constraint caused violation of condition that {subtype} is a subtype of {supertype}"),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Adds a constraint that a device variable is used in a particular way.
@@ -329,7 +386,8 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         let constraint = DTypeConstraint::from(constraint);
-        self.add_constraint(name, constraint, info)
+        self.add_constraint(name, constraint, info)?;
+        self.check_side_conds(info)
     }
 
     /// Adds a constraint that two variables are equivalent.
@@ -343,7 +401,8 @@ impl DTypeEnv {
                     info,
                     &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
                 )
-            })
+            })?;
+        self.check_side_conds(info)
     }
 
     /// Adds a constraint that a variable must adhere to.
@@ -360,7 +419,8 @@ impl DTypeEnv {
                 info,
                 &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
-        })
+        })?;
+        self.check_side_conds(info)
     }
 }
 

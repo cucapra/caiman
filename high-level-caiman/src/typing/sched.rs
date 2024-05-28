@@ -13,6 +13,7 @@ use std::iter::once;
 use super::{
     binop_to_contraints,
     types::{DTypeConstraint, RecordConstraint},
+    unification::SubtypeConstraint,
     uop_to_contraints, Context, DTypeEnv, Mutability,
 };
 
@@ -450,7 +451,7 @@ fn collect_dot(
             fields.insert(rhs_name.clone(), DTypeConstraint::Var(dest_name.clone()));
             fields
         },
-        is_contravariant: false,
+        constraint_kind: SubtypeConstraint::Any,
     });
     env.add_constraint(lhs_name, lhs_constraint, info)?;
     Ok(())
@@ -496,10 +497,11 @@ fn collect_timeline_op(
         }
         TimelineOperation::Await => {
             env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
+            env.add_var_side_cond(&format!("{dest_name}-defined_fields"), dest_name);
             env.add_constraint(
                 arg_name,
                 DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
-                    all: RecordConstraint::Any,
+                    all: RecordConstraint::Var(format!("{dest_name}-defined_fields")),
                     read: RecordConstraint::Var(dest_name.clone()),
                     write: RecordConstraint::Any,
                 })),
@@ -711,11 +713,11 @@ fn get_singleton_remote_obj_constraint(
             fields.insert(var.to_string(), var_constraint.clone());
             fields
         },
-        is_contravariant: false,
+        constraint_kind: SubtypeConstraint::Any,
     };
     let empty_record = RecordConstraint::Record {
         fields: BTreeMap::new(),
-        is_contravariant: false,
+        constraint_kind: SubtypeConstraint::Any,
     };
     let (read, write) = if flag == WGPUFlags::MapRead {
         (populated_record, empty_record)
@@ -732,7 +734,7 @@ fn get_singleton_remote_obj_constraint(
                 fields.insert(var.to_string(), var_constraint);
                 fields
             },
-            is_contravariant: false,
+            constraint_kind: SubtypeConstraint::Any,
         },
         read,
         write,

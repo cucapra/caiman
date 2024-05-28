@@ -246,6 +246,16 @@ fn resolve_types(
                         DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) => {
                             if let DataType::RemoteObj { all, read, write } = &**t {
                                 use std::collections::hash_map::Entry;
+                                for readable in read {
+                                    if !all.contains_key(readable) {
+                                        return Err(type_error(
+                                            Info::default(),
+                                            &format!(
+                                                "Field {readable} is read from {name}, but {name}.{readable} is not defined",
+                                            ),
+                                        ));
+                                    }
+                                }
                                 for (field, typ) in all {
                                     let final_name = format!("{name}::{field}");
                                     types.insert(final_name.clone(), typ.clone());

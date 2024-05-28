@@ -5,7 +5,7 @@ use std::{
 
 use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
 
-use super::unification::{Constraint, Env, Kind};
+use super::unification::{Constraint, Env, Kind, SubtypeConstraint};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CDataType {
@@ -40,10 +40,7 @@ impl Kind for ADataType {}
 pub enum RecordConstraint {
     Record {
         fields: BTreeMap<String, DTypeConstraint>,
-        /// whether or not the constraint is contravariant. If true, then
-        /// something that adheres to this constraint cannot be a subtype,
-        /// but can be a supertype.
-        is_contravariant: bool,
+        constraint_kind: SubtypeConstraint,
     },
     Var(String),
     Any,
@@ -98,7 +95,7 @@ impl DTypeConstraint {
                     .into_iter()
                     .map(|(k, v)| (k, v.into_subtypeable()))
                     .collect(),
-                is_contravariant: false,
+                constraint_kind: SubtypeConstraint::Any,
             },
         }
     }
@@ -177,13 +174,13 @@ impl DTypeConstraint {
         match r {
             RecordConstraint::Record {
                 fields,
-                is_contravariant,
+                constraint_kind,
             } => {
                 let mut mp = BTreeMap::new();
                 for (k, v) in fields {
                     mp.insert(k, v.instantiate(env));
                 }
-                Constraint::DynamicTerm(CDataType::Record, mp, is_contravariant)
+                Constraint::DynamicTerm(CDataType::Record, mp, constraint_kind)
             }
             RecordConstraint::Var(s) => Constraint::Var(s),
             RecordConstraint::Any => {
@@ -375,14 +372,14 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                 let d = v.swap_remove(0);
                 Ok(Self::Fence(Box::new(d.try_into()?)))
             }
-            Constraint::DynamicTerm(CDataType::Record, fields, is_contravariant) => {
+            Constraint::DynamicTerm(CDataType::Record, fields, constraint_kind) => {
                 let mut mp = BTreeMap::new();
                 for (k, v) in fields {
                     mp.insert(k, Self::try_from(v)?);
                 }
                 Ok(Self::Record(RecordConstraint::Record {
                     fields: mp,
-                    is_contravariant,
+                    constraint_kind,
                 }))
             }
             Constraint::Term(CDataType::RemoteObj, mut v) => {
@@ -446,21 +443,21 @@ impl From<DataType> for DTypeConstraint {
             DataType::Record(fields) => Self::Record(RecordConstraint::Record {
                 fields: record_dtypes_to_constraints(fields),
                 // when annotated, we cannot deduce a subtype of the annotation
-                is_contravariant: true,
+                constraint_kind: SubtypeConstraint::Contravariant,
             }),
             DataType::RemoteObj { all, read, write } => Self::RemoteObj {
                 // annotations cannot be deduced to be lower types in the lattice then the annotation
                 all: RecordConstraint::Record {
                     fields: record_dtypes_to_constraints(all),
-                    is_contravariant: true,
+                    constraint_kind: SubtypeConstraint::Contravariant,
                 },
                 read: RecordConstraint::Record {
                     fields: set_dtypes_to_constraints(read),
-                    is_contravariant: true,
+                    constraint_kind: SubtypeConstraint::Contravariant,
                 },
                 write: RecordConstraint::Record {
                     fields: set_dtypes_to_constraints(write),
-                    is_contravariant: true,
+                    constraint_kind: SubtypeConstraint::Contravariant,
                 },
             },
             _ => todo!(),
