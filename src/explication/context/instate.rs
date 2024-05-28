@@ -264,6 +264,8 @@ impl InState {
                 &Location::new(value_funclet_id.clone(), node_id.clone()),
                 context,
             ) {
+                dbg!(&context
+                    .get_node_dependencies(value_funclet_id, &node_id));
                 if context
                     .get_node_dependencies(value_funclet_id, &node_id)
                     .iter()
@@ -279,6 +281,7 @@ impl InState {
                 }
             }
         }
+        dbg!(&result);
         result
     }
 

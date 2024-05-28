@@ -1,6 +1,6 @@
 use ron::value;
 
-use crate::explication::context::{InState, OperationOutState, StaticContext};
+use crate::explication::context::{staticcontext, InState, OperationOutState, StaticContext};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
 use crate::explication::explicator_macros;
@@ -15,14 +15,12 @@ fn explicate_phi_node(
     mut state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    let (value_spec, timeline_spec, _) = state.get_funclet_spec_triple(
-        state.get_current_funclet_id(),
-        context,
-    );
+    let (value_spec, timeline_spec, _) =
+        state.get_funclet_spec_triple(state.get_current_funclet_id(), context);
     let value_funclet_id = value_spec.funclet_id_opt.unwrap();
     let timeline_funclet_id = timeline_spec.funclet_id_opt.unwrap();
     match get_expect_box(&value_spec.input_tags, index) {
-        Hole::Empty => {},
+        Hole::Empty => {}
         Hole::Filled(value) => {
             let operation = Location {
                 funclet_id: value_funclet_id,
@@ -32,7 +30,7 @@ fn explicate_phi_node(
         }
     }
     match get_expect_box(&timeline_spec.input_tags, index) {
-        Hole::Empty => {},
+        Hole::Empty => {}
         Hole::Filled(timeline) => {
             let operation = Location {
                 funclet_id: timeline_funclet_id,
@@ -54,13 +52,32 @@ fn explicate_phi_node(
     }
 }
 
-fn explicate_local_do_builtin(
+fn build_do_operation<T>(
     operation: &Hole<expir::Quotient>,
-    inputs: &Hole<Box<[Hole<NodeId>]>>,
-    outputs: &Hole<Box<[Hole<NodeId>]>>,
+    external_function_id: Option<&Hole<expir::ExternalFunctionId>>,
+    node_builder: T,
     state: InState,
     context: &StaticContext,
-) -> Option<OperationOutState> {
+) -> Option<OperationOutState>
+where
+    T: Fn(expir::Quotient, Option<expir::ExternalFunctionId>) -> expir::Node,
+{
+    fn read_external_id<'a>(
+        function_class_id: &Hole<usize>,
+        funclet_id: &FuncletId,
+        context: &'a StaticContext,
+    ) -> &'a expir::FunctionClass {
+        context.program.function_classes.get_expect(
+            function_class_id
+                .as_ref()
+                .opt()
+                .expect(&format!(
+                    "Hole found in {}",
+                    context.debug_info.funclet(funclet_id)
+                ))
+                .clone(),
+        )
+    }
     let value_funclet_id = state
         .get_funclet_spec(
             state.get_current_funclet_id(),
@@ -70,6 +87,8 @@ fn explicate_local_do_builtin(
         .funclet_id_opt
         .unwrap();
 
+    dbg!(&external_function_id);
+    dbg!("");
     let operations_to_try = match operation {
         Hole::Filled(op) => vec![op.clone()],
         Hole::Empty => state
@@ -83,12 +102,33 @@ fn explicate_local_do_builtin(
                     expir::Node::Constant {
                         value: _,
                         type_id: _,
-                    } => true,
+                    } => external_function_id.is_none(),
+                    expir::Node::CallFunctionClass {
+                        function_id,
+                        arguments: _,
+                    } => match external_function_id {
+                        // builtin case,
+                        None => false,
+                        // external hole case
+                        Some(Hole::Empty) => true,
+                        // external informational case
+                        Some(Hole::Filled(external_id)) => {
+                            dbg!(&function_id);
+                            dbg!(&read_external_id(function_id, &value_funclet_id, context));
+                            // check to see if this operation implements the external id
+                            read_external_id(function_id, &value_funclet_id, context)
+                                .external_function_ids
+                                .contains(external_id)
+                        }
+                    },
                     _ => false,
                 }
             })
             .collect(),
     };
+
+    dbg!(&state.get_current_node(context));
+    dbg!(&operations_to_try);
 
     for operation_to_try in operations_to_try {
         let mut new_state = state.clone();
@@ -96,12 +136,38 @@ fn explicate_local_do_builtin(
             funclet_id: value_funclet_id,
             quot: operation_to_try.clone(),
         };
+        dbg!(&context.debug_info.node(&location.funclet_id, location.node_id(context).unwrap()));
         new_state.add_value_operation(location, context);
-        let node = expir::Node::LocalDoBuiltin {
-            operation: Hole::Filled(operation_to_try),
-            inputs: inputs.clone(),
-            outputs: outputs.clone(),
+
+        let external_id = match external_function_id {
+            None => None,
+            Some(Hole::Filled(id)) => Some(id.clone()),
+            Some(Hole::Empty) => {
+                match context.get_node(Location {
+                    funclet_id: value_funclet_id,
+                    quot: operation_to_try.clone(),
+                }) {
+                    expir::Node::CallFunctionClass {
+                        function_id,
+                        arguments: _,
+                    } => Some(
+                        read_external_id(function_id, &value_funclet_id, context)
+                            .external_function_ids
+                            .first()
+                            .expect(&format!(
+                                "No external function found to implement {}",
+                                context
+                                    .debug_info
+                                    // now safe to unwrap wrt debugging
+                                    .external_function(function_id.as_ref().opt().unwrap())
+                            ))
+                            .clone(),
+                    ),
+                    _ => unreachable!(),
+                }
+            }
         };
+        let node = node_builder(operation_to_try, external_id);
         new_state.next_node();
         match explicate_node(new_state, context) {
             None => {}
@@ -114,6 +180,29 @@ fn explicate_local_do_builtin(
     None
 }
 
+fn explicate_local_do_builtin(
+    operation: &Hole<expir::Quotient>,
+    inputs: &Hole<Box<[Hole<NodeId>]>>,
+    outputs: &Hole<Box<[Hole<NodeId>]>>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<OperationOutState> {
+    build_do_operation(
+        operation,
+        None,
+        |operation_to_try, external| {
+            assert!(external.is_none());
+            expir::Node::LocalDoBuiltin {
+                operation: Hole::Filled(operation_to_try),
+                inputs: inputs.clone(),
+                outputs: outputs.clone(),
+            }
+        },
+        state,
+        context,
+    )
+}
+
 fn explicate_local_do_external(
     operation: &Hole<expir::Quotient>,
     inputs: &Hole<Box<[Hole<NodeId>]>>,
@@ -122,65 +211,18 @@ fn explicate_local_do_external(
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
-
-    let operations_to_try = match operation {
-        Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => state
-            .find_satisfied_operations(&value_funclet_id, context)
-            .drain(..)
-            .filter(|val_op| {
-                match context.get_node(Location {
-                    funclet_id: value_funclet_id,
-                    quot: val_op.clone(),
-                }) {
-                    expir::Node::CallFunctionClass {
-                        function_id: _,
-                        arguments: _,
-                    } => true,
-                    _ => false,
-                }
-            })
-            .collect(),
-    };
-
-    for operation_to_try in operations_to_try {
-        let mut new_state = state.clone();
-        let location = Location {
-            funclet_id: value_funclet_id,
-            quot: operation_to_try.clone(),
-        };
-        let base_node_id = location.node_id(context).unwrap();
-        let node_info = context
-            .get_node_type_information(&value_funclet_id, &location.node_id(context).unwrap());
-        for offset in 0..node_info.output_types.len() {
-            let offset_location = Location::new(value_funclet_id, base_node_id + offset + 1);
-            new_state.add_value_operation(offset_location, context);
-        }
-        new_state.add_value_operation(location, context);
-        let node = expir::Node::LocalDoExternal {
+    build_do_operation(
+        operation,
+        Some(external_function_id),
+        |operation_to_try, external_to_try| expir::Node::LocalDoExternal {
             operation: Hole::Filled(operation_to_try),
+            external_function_id: Hole::Filled(external_to_try.unwrap()),
             inputs: inputs.clone(),
             outputs: outputs.clone(),
-            external_function_id: external_function_id.clone(),
-        };
-        new_state.next_node();
-        match explicate_node(new_state, context) {
-            None => {}
-            Some(mut out) => {
-                out.add_node(node);
-                return Some(out);
-            }
-        }
-    }
-    None
+        },
+        state,
+        context,
+    )
 }
 
 fn explicate_encode_do(
