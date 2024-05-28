@@ -531,7 +531,7 @@ impl Funclets {
         let (mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
-        transform_encode_pass(&mut cfg, &data_types, ctx);
+        transform_encode_pass(&mut cfg, &data_types, ctx, &f.output);
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());

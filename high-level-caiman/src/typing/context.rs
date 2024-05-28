@@ -247,7 +247,7 @@ fn resolve_types(
                             if let DataType::RemoteObj { all, read, write } = &**t {
                                 use std::collections::hash_map::Entry;
                                 for readable in read {
-                                    if !all.contains_key(readable) {
+                                    if !all.iter().any(|(f, _)| f == readable) {
                                         return Err(type_error(
                                             Info::default(),
                                             &format!(

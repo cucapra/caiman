@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    fmt::Display,
-};
+use std::{collections::BTreeSet, fmt::Display};
 
 use caiman::ir;
 
@@ -50,14 +47,14 @@ pub enum DataType {
     Slice(Box<DataType>),
     UserDefined(String),
     Ref(Box<DataType>),
-    Record(BTreeMap<String, DataType>),
+    Record(Vec<(String, DataType)>),
     RemoteObj {
         /// set of all remote variables in the remote object
-        all: BTreeMap<String, DataType>,
+        all: Vec<(String, DataType)>,
         /// set of all remote variables readable by the public interface
-        read: HashSet<String>,
+        read: BTreeSet<String>,
         /// set of all remote variables writable by encoded copies
-        write: HashSet<String>,
+        write: BTreeSet<String>,
     },
 }
 

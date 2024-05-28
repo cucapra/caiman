@@ -2,7 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::unused_self, clippy::option_option)]
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};
@@ -121,7 +121,7 @@ pub struct ASTFactory {
     line_ending_byte_offsets: Vec<usize>,
     /// mapping of user-defined types. Handling this here
     /// requires that we declare a typedef before we use it
-    type_map: HashMap<String, FlaggedType>,
+    type_map: HashMap<String, DataType>,
 }
 
 /// `LALRpop` parsing error using our custom error type, `CustomParsingError`
@@ -303,11 +303,23 @@ impl ASTFactory {
         sanitize_expr(&expr).map(|_| expr)
     }
 
+    /// Finalizes a datatype used as the base type of a flagged type. Flagged types
+    /// are the annotatiions and input/output arguments for the schedules.
+    #[allow(clippy::missing_const_for_fn)]
+    fn finalize_data_type(t: DataType) -> DataType {
+        if let DataType::RemoteObj { all, ..} = t {
+            DataType::Record(all)
+        } else {
+            t
+        }
+    }
+
     /// Constructs a flagged type from a data type and a list of flags/settings
     /// Flags/settings are optional
     /// # Errors
     /// Returns an error if the flags/settings are invalid
-    pub fn flagged_type(&self, l: usize, t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
+    pub fn flagged_type(&self, l: usize, mut t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
+        t = Self::finalize_data_type(t);
         // are there a limited set of WGPU flags/setting we should check for?
         Ok(match flags {
             Some(flags) => {
@@ -534,10 +546,10 @@ impl ASTFactory {
         SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
         SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag });
-    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, defs: Option<Vec<MaybeArg<FullType>>>, device: Name) ->
+    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, device: Name) ->
         SchedTerm:SchedTerm::EncodeBegin { 
             device: device,
-            defs: defs.unwrap_or_default(),
+            defs: vec![],
             tag: tag 
         });
 
@@ -703,19 +715,18 @@ impl ASTFactory {
 
     struct_variant_factory!(pipeline(name: String, entry: String) -> TopLevel:TopLevel::Pipeline);
 
-    pub fn type_def(&mut self, l: usize, name: Name, typ: FlaggedType, r:usize) -> TopLevel {
+    pub fn type_def(&mut self, l: usize, name: Name, typ: DataType, r:usize) -> TopLevel {
         self.type_map.insert(name.clone(), typ.clone());
-        if !matches!(typ.base, DataType::RemoteObj { .. }) {
-            unimplemented!("Unimplemented typedef of: {:?}", typ.base);
-        }
-        TopLevel::Typedef { info: self.info(l, r), name, typ }
+        TopLevel::Typedef { info: self.info(l, r), name, typ: typ.into() }
     }
 
     /// Replaces a user-defined type with a concrete type
     /// # Errors
     /// Returns an error if the user-defined type is not found
-    pub fn user_defined_type(&self, name: &str) -> Result<DataType, ParserError> {
-        self.type_map.get(name).map(|t| t.base.clone()).ok_or_else(|| custom_parse_error!(self.info(0, 0), "Undefined type {name}"))
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn user_defined_type(&self, l: usize, name: String, r:usize, ) -> Result<DataType, ParserError> {
+        let info = self.info(l, r);
+        self.type_map.get(&name).cloned().ok_or_else(|| custom_parse_error!(info, "Undefined type {name}"))
     }
 
     /// Constructs a constant definition from a name and expression. Checks that
@@ -751,24 +762,31 @@ impl ASTFactory {
         Ok(prog)
     }
 
-    #[must_use] 
-    pub fn class_type(v: Vec<Arg<FlaggedType>>) -> DataType {
-        let mut all = BTreeMap::new();
-        let mut read = HashSet::new();
-        let mut write = HashSet::new();
+    /// Parses a remote object. We parse all records as remote objects to preserve
+    /// flag information, and if
+    /// we find a remote object as a base type in the schedule, we convert it
+    /// back to a record. See `finalize_data_type`.
+    /// # Errors
+    /// Returns an error if the remote object has invalid settings or flags
+    pub fn class_type(&self, l:usize, v: Vec<Arg<FlaggedType>>, r:usize) -> Result<DataType, ParserError> {
+        let mut all = Vec::new();
+        let mut read = BTreeSet::new();
+        let mut write = BTreeSet::new();
+        let info = self.info(l, r);
         for (name, typ) in v {
-            all.insert(name.clone(), typ.base);
+            all.push((name.clone(), typ.base));
             if !typ.settings.is_empty() {
-                unimplemented!("Unimplemented settings: {:?}", typ.settings);
+                return Err(custom_parse_error!(info, "Settings are not implemented yet"));
             }
-            if typ.flags.contains(&WGPUFlags::MapRead) {
-                read.insert(name);
-            } else if typ.flags.contains(&WGPUFlags::CopyDst) {
-                write.insert(name);
-            } else {
-                unimplemented!("Unimplemented flag: {:?}", typ.flags);
+            for f in typ.flags {
+                match f {
+                    WGPUFlags::MapRead => { read.insert(name.clone()); },
+                    WGPUFlags::CopyDst => { write.insert(name.clone()); },
+                    WGPUFlags::Storage => {},
+                    _ => return Err(custom_parse_error!(info, "Unimplemented flag {f:?}")),
+                };
             }
         }
-        DataType::RemoteObj { all, read, write }
+        Ok(DataType::RemoteObj { all, read, write })
     }
 }

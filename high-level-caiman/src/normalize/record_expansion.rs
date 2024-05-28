@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use crate::{
     error::Info,
@@ -10,9 +10,9 @@ use crate::{
 #[allow(clippy::too_many_arguments)]
 fn insert_record_args(
     new_inputs: &mut Vec<(String, Option<FullType>)>,
-    record_types: &BTreeMap<String, DataType>,
-    read: &HashSet<String>,
-    write: &HashSet<String>,
+    record_types: &Vec<(String, DataType)>,
+    read: &BTreeSet<String>,
+    write: &BTreeSet<String>,
     flags: &BTreeSet<WGPUFlags>,
     settings: &BTreeSet<WGPUSettings>,
     tags: &[Tag],
@@ -133,8 +133,8 @@ fn replace_io<T: IntoIterator<Item = (String, Option<FullType>)>>(
             }) => insert_record_args(
                 &mut new_inputs,
                 &types,
-                &HashSet::new(),
-                &HashSet::new(),
+                &BTreeSet::new(),
+                &BTreeSet::new(),
                 &flags,
                 &settings,
                 &tags,

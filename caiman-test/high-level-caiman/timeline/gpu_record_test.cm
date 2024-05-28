@@ -1,0 +1,95 @@
+#version 0.1.0
+
+// Test where we pass an encoder to a function, and that
+// function submits it and returns a fence
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    in {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    out {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x : i32) -> out: i32 {
+    c :- 1
+    y1 :- simple'<c, c, c>(x)
+    y2 :- simple'<c, c, c>(x)
+    z1, z2 :- bar(y1, y2)
+    res :- combine(z1, z2)
+    returns res
+}
+
+val bar(x: i32, y: i32) -> (i32, i32) {
+    returns (x, y)
+}
+
+// record arguments are passed in the order they are declared
+// so x is foo and y is baz
+val combine(x: i32, y: i32) -> i32 {
+    returns x + y
+}
+
+tmln bar_time(e: Event, r: Encoder) -> (out: Event, enc_out: Fence) {
+    sub :- submit_event(r)
+    returns (e, sub)
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    ret, f :- bar_time(loc, rem)
+    snc :- sync_event(ret, f)
+    c1 :- combine_time(snc)
+    returns c1
+}
+
+tmln combine_time(e: Event) -> out: Event { returns e }
+
+sptl space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+type R = { foo: i32'<storage, map_read>, baz: i32'<storage, map_read> };
+
+fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    let e = encode-begin @ node(tmln.(loc, rem)) gpu;
+    encode e.copy[x_gpu <- x];
+    encode e.call[foo <- simple'<1, 1, 1>(x_gpu)];
+    encode e.call[baz <- simple'<1, 1, 1>(x_gpu)];
+    let f @ node(tmln.f) = bar_impl(e) @ node(tmln.(ret, f));
+    @in {input: node(tmln.ret), output: node(tmln.out) };
+    let r = (await @ node(tmln.snc) f);
+    let r @ node(tmln.c1) = combine_impl(r) @ node(tmln.c1);
+    @in {input: node(tmln.c1), output: node(tmln.out) };
+    @out {input: node(tmln.out), output: node(tmln.out) };
+    r
+}
+
+fn combine_impl(r: R @ input(tmln.e)) -> i32 @ node(tmln.out) impls combine_time, space, combine {
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    @out { input: node(tmln.e), output: node(tmln.out) };
+    r.foo + r.baz
+}
+
+// we require the relative order of arguments and returns for a given dimension
+// to match its spec
+fn bar_impl(e: Encoder'R @ input(tmln.r)) -> Fence'R @ node(tmln.enc_out)
+            impls bar_time, bar, space 
+{
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    let f @ node(tmln.enc_out) = submit @ node(tmln.sub) e;
+    @out { input: node(tmln.e), output: node(tmln.out) };
+    f
+}
+
+pipeline main { foo_impl }

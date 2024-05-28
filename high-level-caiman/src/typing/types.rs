@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     vec,
 };
 
@@ -285,9 +285,9 @@ impl TryFrom<DTypeConstraint> for DataType {
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
             DTypeConstraint::Record(RecordConstraint::Record { fields, .. }) => {
-                let mut mp = BTreeMap::new();
+                let mut mp = Vec::new();
                 for (k, v) in fields {
-                    mp.insert(k, Self::try_from(v)?);
+                    mp.push((k, Self::try_from(v)?));
                 }
                 Ok(Self::Record(mp))
             }
@@ -296,9 +296,9 @@ impl TryFrom<DTypeConstraint> for DataType {
                 read: RecordConstraint::Record { fields: read, .. },
                 write: RecordConstraint::Record { fields: write, .. },
             } => {
-                let mut mp = BTreeMap::new();
+                let mut mp = Vec::new();
                 for (k, v) in fields {
-                    mp.insert(k, Self::try_from(v)?);
+                    mp.push((k, Self::try_from(v)?));
                 }
                 let read = read.into_keys().collect();
                 let write = write.into_keys().collect();
@@ -408,7 +408,7 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
 
 /// Converts a map of string to data types to a map of string to data type constraints
 fn record_dtypes_to_constraints(
-    fields: BTreeMap<String, DataType>,
+    fields: Vec<(String, DataType)>,
 ) -> BTreeMap<String, DTypeConstraint> {
     let mut mp = BTreeMap::new();
     for (k, v) in fields {
@@ -418,7 +418,7 @@ fn record_dtypes_to_constraints(
 }
 
 /// Converts a set of strings to a map of string to the Any data type constraint
-fn set_dtypes_to_constraints(set: HashSet<String>) -> BTreeMap<String, DTypeConstraint> {
+fn set_dtypes_to_constraints(set: BTreeSet<String>) -> BTreeMap<String, DTypeConstraint> {
     let mut mp = BTreeMap::new();
     for k in set {
         mp.insert(k, DTypeConstraint::Any);
