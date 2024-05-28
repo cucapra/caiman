@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet};
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::binop_to_str;
 use crate::parse::ast::{FlaggedType, FullType, SpecFunclet};
-use crate::typing::{ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS, LOCAL_TEMP_FLAGS};
+use crate::typing::{
+    ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS, LOCAL_TEMP_FLAGS,
+};
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -143,6 +145,22 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 storage_type: asm::FFIType::I32,
                 storage_place: ir::Place::Gpu,
                 buffer_flags: ENCODE_STORAGE_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&i32::gds"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_IO_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("i32::gds"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::FFIType::I32,
+                storage_place: ir::Place::Gpu,
+                buffer_flags: ENCODE_IO_FLAGS,
             },
         })),
     ]

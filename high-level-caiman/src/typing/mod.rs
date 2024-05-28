@@ -61,6 +61,16 @@ pub const ENCODE_STORAGE_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_src: false,
 };
 
+/// WGPU flags for regular encoded variables that are both inputs and outputs.
+pub const ENCODE_IO_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: true,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: true,
+    copy_src: false,
+};
+
 /// A typing environement for deducing quotients.
 #[derive(Debug, Clone)]
 pub struct NodeEnv {

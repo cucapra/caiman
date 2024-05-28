@@ -14,7 +14,8 @@ use crate::{
     lower::IN_STEM,
     parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
     typing::{
-        Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS,
+        Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
+        ENCODE_STORAGE_FLAGS,
     },
 };
 use caiman::assembly::ast::{self as asm};
@@ -409,6 +410,8 @@ impl<'a> Funclet<'a> {
                 "::gd"
             } else if *flags == ENCODE_STORAGE_FLAGS {
                 "::g"
+            } else if *flags == ENCODE_IO_FLAGS {
+                "::gds"
             } else {
                 return Err(format!("{}: Invalid flags for {var}", self.block.src_loc));
             };
