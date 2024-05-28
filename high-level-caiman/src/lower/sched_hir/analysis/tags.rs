@@ -141,7 +141,12 @@ impl TagAnalysis {
     /// Gets the input override for the specified variable or `None` if it was not
     /// overridden
     pub fn get_input_override(&self, var: &str) -> Option<&TripleTag> {
+        // if var.starts_with(IN_STEM) && !self.input_overrides.contains_key(var) {
+        //     // in annotations don't prepend the in stem
+        //     self.tags.get(&var[IN_STEM.len()..])
+        // } else {
         self.input_overrides.get(var)
+        //}
     }
 }
 
@@ -326,17 +331,20 @@ impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
+            let contains = self.tags.contains_key(&format!("{IN_STEM}{k}"));
             match self.tags.entry(k.to_string()) {
                 Entry::Occupied(mut old_v) => {
                     if old_v.get() != v {
                         old_v.get_mut().override_unknown_info(v.clone());
-                        if tag_conflict(old_v.get(), v) && !k.starts_with("_out") {
+                        if tag_conflict(old_v.get(), v) {
                             // TODO: the problem is that _out is used to identify the
                             // return value, which might change types in the last
                             // funclet. To avoid overriding the final output type,
                             // we don't do anything when it meets with a different value
+
+                            // we allow conflicts with outputs, and inputs
                             assert!(
-                                k.starts_with("_out"),
+                                k.starts_with("_out") || k.starts_with(IN_STEM) || contains,
                                 "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
                                 old_v.get(),
                             );

@@ -338,7 +338,9 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                         match d {
                             Constraint::Atom(x) => Ok(Self::Int(Some(x.try_into()?))),
                             Constraint::Var(_) => Ok(Self::Int(None)),
-                            Constraint::Term(..) | Constraint::DynamicTerm(..) => unreachable!(),
+                            Constraint::Term(..)
+                            | Constraint::DynamicTerm(..)
+                            | Constraint::DropTerm(..) => unreachable!(),
                         }
                     }
                     Constraint::Term(CDataType::Float, mut v) => {
@@ -346,7 +348,9 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                         match d {
                             Constraint::Atom(x) => Ok(Self::Float(Some(x.try_into()?))),
                             Constraint::Var(_) => Ok(Self::Float(None)),
-                            Constraint::Term(..) | Constraint::DynamicTerm(..) => unreachable!(),
+                            Constraint::Term(..)
+                            | Constraint::DynamicTerm(..)
+                            | Constraint::DropTerm(..) => unreachable!(),
                         }
                     }
                     _ => unreachable!(),
@@ -512,6 +516,7 @@ pub enum ValQuot {
         true_id: MetaVar,
         false_id: MetaVar,
     },
+    SchedCall(String, Vec<MetaVar>),
 }
 
 impl ValQuot {
@@ -610,7 +615,7 @@ impl From<&ValQuot> for VQType {
             ValQuot::Bool(b) => Self::Bool(*b),
             ValQuot::Input(i) => Self::Input(i.clone()),
             ValQuot::Output(_) => Self::Output,
-            ValQuot::Call(f, _) => Self::Call(f.clone()),
+            ValQuot::Call(f, _) | ValQuot::SchedCall(f, _) => Self::Call(f.clone()),
             ValQuot::Extract(_, j) => Self::Extract(*j),
             ValQuot::Bop(op, _, _) => Self::Bop(*op),
             ValQuot::Select { .. } => Self::Select,
@@ -630,6 +635,10 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
             ValQuot::Input(i) => Self::Term(VQType::Input(i.clone()), vec![]),
             ValQuot::Output(o) => Self::Term(VQType::Output, vec![Self::Var(o.0.clone())]),
             ValQuot::Call(f, args) => Self::Term(
+                VQType::Call(f.clone()),
+                args.iter().map(|x| Self::Var(x.0.clone())).collect(),
+            ),
+            ValQuot::SchedCall(f, args) => Self::DropTerm(
                 VQType::Call(f.clone()),
                 args.iter().map(|x| Self::Var(x.0.clone())).collect(),
             ),

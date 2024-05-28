@@ -141,6 +141,7 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
     let mut worklist: Vec<usize> = Vec::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
     in_facts.extend(cfg.graph.keys().map(|k| (*k, top.clone())));
+    //in_facts.insert(T::Dir::root_id(), top.clone());
     worklist.push(T::Dir::root_id());
 
     while let Some(block) = worklist.pop() {
@@ -211,7 +212,10 @@ fn broadcast_out_facts<T: Fact>(
         for neighbor in adj_lst.get(&block).unwrap() {
             in_facts.insert(
                 *neighbor,
-                in_facts.get(neighbor).cloned().unwrap().meet(out_fact[0]),
+                in_facts
+                    .get(neighbor)
+                    .cloned()
+                    .map_or_else(|| out_fact[0].clone(), |x| x.meet(out_fact[0])),
             );
         }
     }

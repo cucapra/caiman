@@ -61,7 +61,8 @@ where
         /// The unique id of the equivalence class the term is a member of.
         class_id: Option<String>,
     },
-    /// A term where the
+    /// A term representing record subtyping. Fields are named, and
+    /// unification results in the greatest lower bound of the two terms.
     DynamicTerm {
         parent: Option<NodePtr<T, A>>,
         op: T,
@@ -71,6 +72,15 @@ where
     },
     /// A concrete base type
     Atom(A),
+    /// A term that, when unifying with another term, may opt to drop some
+    /// unconstrained children.
+    DropTerm {
+        parent: Option<NodePtr<T, A>>,
+        op: T,
+        args: Vec<NodePtr<T, A>>,
+        /// The unique id of the equivalence class the term is a member of.
+        class_id: Option<String>,
+    },
 }
 
 /// A newtype for `String` to print strings without quotes.
@@ -125,6 +135,9 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
             }
             Self::Term {
                 op, args, class_id, ..
+            }
+            | Self::DropTerm {
+                op, args, class_id, ..
             } => {
                 let id = class_id.as_ref().map_or_else(
                     || format!("{op:?}"),
@@ -134,14 +147,6 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
                 for a in args {
                     t.field(&a.borrow());
                 }
-                // if parent.is_some() {
-                //     let p = parent.as_ref().unwrap().borrow();
-                //     if alt {
-                //         t.field(&FString(format!("parent: {p:#}",)));
-                //     } else {
-                //         t.field(&FString(format!("parent: {p}",)));
-                //     }
-                // }
                 t.finish()
             }
             Self::DynamicTerm {
@@ -170,7 +175,8 @@ impl<T: Kind, A: Kind> Node<T, A> {
         match self {
             Self::Var { ref mut parent, .. }
             | Self::Term { ref mut parent, .. }
-            | Self::DynamicTerm { ref mut parent, .. } => parent,
+            | Self::DynamicTerm { ref mut parent, .. }
+            | Self::DropTerm { ref mut parent, .. } => parent,
             Self::Atom(_) => panic!("Atoms have no parent"),
         }
     }
@@ -183,6 +189,9 @@ impl<T: Kind, A: Kind> Node<T, A> {
     fn get_class_mut(&mut self) -> &mut Option<String> {
         match self {
             Self::Var {
+                ref mut class_id, ..
+            }
+            | Self::DropTerm {
                 ref mut class_id, ..
             }
             | Self::Term {
@@ -199,7 +208,8 @@ impl<T: Kind, A: Kind> Node<T, A> {
         match self {
             Self::Var { class_id, .. }
             | Self::Term { class_id, .. }
-            | Self::DynamicTerm { class_id, .. } => class_id,
+            | Self::DynamicTerm { class_id, .. }
+            | Self::DropTerm { class_id, .. } => class_id,
             Self::Atom(_) => panic!("Atoms have no class"),
         }
     }
@@ -253,6 +263,21 @@ fn deep_clone<T: Kind, A: Kind>(
             cloned_ptrs.insert(key, r.clone());
             r
         }
+        Node::DropTerm {
+            op,
+            args,
+            parent,
+            class_id,
+        } => {
+            let r = Rc::new(RefCell::new(Node::DropTerm {
+                parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
+                op: op.clone(),
+                args: args.iter().map(|x| deep_clone(x, cloned_ptrs)).collect(),
+                class_id: class_id.clone(),
+            }));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
         Node::DynamicTerm {
             parent,
             op,
@@ -288,7 +313,7 @@ fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
             next_id.clone()
         }
         Node::Var { parent: None, .. } | Node::Atom(_) => n.clone(),
-        Node::Term { parent, args, .. } => {
+        Node::Term { parent, args, .. } | Node::DropTerm { parent, args, .. } => {
             for a in args {
                 *a = representative(a);
             }
@@ -368,6 +393,30 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
             },
         ) => op_a == op_b && args_a.len() == args_b.len(),
         (
+            Node::DropTerm {
+                op: op_a,
+                args: args_a,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: args_b,
+                ..
+            },
+        ) => op_a == op_b && args_a.len() >= args_b.len(),
+        (
+            Node::Term {
+                op: op_a,
+                args: args_a,
+                ..
+            },
+            Node::DropTerm {
+                op: op_b,
+                args: args_b,
+                ..
+            },
+        ) => op_a == op_b && args_a.len() <= args_b.len(),
+        (
             Node::DynamicTerm {
                 op: op_a,
                 constraint_kind: const_kind_a,
@@ -396,6 +445,7 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
 /// # Returns
 /// Returns `true` if the two nodes can be unified, `false` otherwise.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
     let a = representative(a);
     let b = representative(b);
@@ -426,6 +476,48 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                     return false;
                 }
                 for (a, b) in a_args.iter().zip(b_args.iter()) {
+                    if !unify(a, b) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            (
+                Node::Term {
+                    op: op_a,
+                    args: short_args,
+                    ..
+                },
+                Node::DropTerm {
+                    op: op_b,
+                    args: long_args,
+                    ..
+                },
+            )
+            | (
+                Node::DropTerm {
+                    op: op_a,
+                    args: long_args,
+                    ..
+                },
+                Node::Term {
+                    op: op_b,
+                    args: short_args,
+                    ..
+                },
+            ) => {
+                if op_a != op_b || short_args.len() > long_args.len() {
+                    return false;
+                }
+                let mut diff = long_args.len() - short_args.len();
+                for (a, b) in short_args.iter().zip(long_args.iter().filter(|node| {
+                    if diff > 0 && node.borrow().is_var() {
+                        diff -= 1;
+                        false
+                    } else {
+                        true
+                    }
+                })) {
                     if !unify(a, b) {
                         return false;
                     }
@@ -569,6 +661,7 @@ pub enum Constraint<T: Kind, A: Kind> {
     Term(T, Vec<Constraint<T, A>>),
     DynamicTerm(T, BTreeMap<String, Constraint<T, A>>, SubtypeConstraint),
     Var(String),
+    DropTerm(T, Vec<Constraint<T, A>>),
 }
 
 impl<T: Kind, A: Kind> Constraint<T, A> {
@@ -746,6 +839,15 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
                 class_id: None,
             })),
+            Constraint::DropTerm(op, args) => Rc::new(RefCell::new(Node::DropTerm {
+                parent: None,
+                op: op.clone(),
+                args: args
+                    .iter()
+                    .map(|c| self.contraint_to_node(c))
+                    .collect::<Vec<_>>(),
+                class_id: None,
+            })),
             Constraint::Var(name) => self.get_or_make_node(name),
             Constraint::DynamicTerm(op, args, constraint_kind) => {
                 Rc::new(RefCell::new(Node::DynamicTerm {
@@ -769,6 +871,12 @@ impl<T: Kind, A: Kind> Env<T, A> {
         match &*borrow {
             Node::Atom(a) => Constraint::Atom(a.clone()),
             Node::Term { op, args, .. } => Constraint::Term(
+                op.clone(),
+                args.iter()
+                    .map(|a| Self::node_to_constraint(a))
+                    .collect::<Vec<_>>(),
+            ),
+            Node::DropTerm { op, args, .. } => Constraint::DropTerm(
                 op.clone(),
                 args.iter()
                     .map(|a| Self::node_to_constraint(a))

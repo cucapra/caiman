@@ -89,7 +89,21 @@ pub fn deduce_val_quots(
     info: Info,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
-    let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes, info)?;
+    let mut overrides = Vec::new();
+    for i in &cfg.blocks[&START_BLOCK_ID].stmts {
+        if let HirBody::InAnnotation(_, tags) = i {
+            overrides.extend(tags.iter().cloned());
+        }
+    }
+    let env = add_io_constraints(
+        env,
+        inputs,
+        &overrides,
+        outputs,
+        output_dtypes,
+        dtypes,
+        info,
+    )?;
     let (env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, output_dtypes, &env);
@@ -103,17 +117,28 @@ pub fn deduce_val_quots(
 fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],
+    input_overrides: &[(String, TripleTag)],
     outputs: &mut [TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,
 ) -> Result<NodeEnv, LocalError> {
     env.override_output_classes(output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)));
+    for (name, tag) in input_overrides {
+        for (n2, t2) in inputs.iter_mut() {
+            if n2 == name {
+                t2.set_specified_info(tag.clone());
+            }
+        }
+    }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
         .filter(|(arg, _)| is_value_dtype(&dtypes[&ssa::original_name(arg)]))
         .enumerate()
     {
+        if fn_in_tag.value.quot == Some(Quotient::None) {
+            continue;
+        }
         let class_name = if let Some(annoted_quot) = &fn_in_tag.value.quot_var.spec_var {
             annoted_quot.clone()
         } else {
@@ -516,7 +541,7 @@ fn unify_call(
     env = add_overrideable_constraint(
         &tuple_name,
         &call.tag,
-        &ValQuot::Call(
+        &ValQuot::SchedCall(
             f_class,
             call.args
                 .iter()

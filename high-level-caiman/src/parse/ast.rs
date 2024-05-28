@@ -373,7 +373,7 @@ impl Tag {
         if other.quot.is_some() {
             self.quot = other.quot;
         }
-        if other.quot_var.spec_var.is_some() {
+        if other.quot_var.spec_var.is_some() || other.quot == Some(Quotient::None) {
             self.quot_var.spec_var = other.quot_var.spec_var;
         }
         if other.flow.is_some() {
@@ -386,7 +386,7 @@ impl Tag {
         if self.quot.is_none() {
             self.quot = other.quot;
         }
-        if self.quot_var.spec_var.is_none() {
+        if self.quot_var.spec_var.is_none() && self.quot != Some(Quotient::None) {
             self.quot_var.spec_var = other.quot_var.spec_var;
         }
         if self.flow.is_none() {
