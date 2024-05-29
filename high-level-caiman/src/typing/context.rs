@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::binop_to_str;
-use crate::parse::ast::{FlaggedType, FullType, SpecFunclet};
+use crate::parse::ast::{ExternDef, FlaggedType, FullType, IntSize, SpecFunclet};
 use crate::typing::{
     ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS, LOCAL_TEMP_FLAGS,
 };
@@ -217,6 +217,7 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
                         &funclet.statements,
                         spec,
                         &ctx.signatures,
+                        &ctx.class_dimensions,
                     )?);
                 }
             }
@@ -341,12 +342,19 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     panic!("All input data types should be specified for now");
                 }
             }
+            let num_dims = ctx.scheds[name].unwrap_sched().dtype_sig.num_dims;
             let must_be_mut = collect_schedule(&ctx, &mut env, statements, output, input, *info)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
                 sched_info
                     .defined_names
                     .insert(in_name.clone(), Mutability::Const);
+            }
+            for i in 0..num_dims {
+                env.add_dtype_constraint(&format!("_dim{i}"), DataType::Int(IntSize::I32), *info)?;
+                sched_info
+                    .defined_names
+                    .insert(format!("_dim{i}"), Mutability::Const);
             }
             collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
             resolve_types(
@@ -383,7 +391,7 @@ fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
     } in externs
     {
         let op_name = binop_to_str(*op, &format!("{op_l:#}"), &format!("{op_r:#}")).to_string();
-        let sig = Signature::new(vec![op_l.clone(), op_r.clone()], vec![ret.clone()]);
+        let sig = Signature::new(vec![op_l.clone(), op_r.clone()], vec![ret.clone()], 0);
         ctx.signatures.insert(op_name.clone(), sig.clone());
         ctx.scheds.insert(op_name, SchedOrExtern::Extern(sig));
     }
@@ -445,8 +453,9 @@ fn collect_spec_sig(
     spec: &SpecFunclet,
     spec_type: SpecType,
     mut ctx: Context,
+    num_dims: usize,
 ) -> Result<(Context, Option<Signature>), LocalError> {
-    let sig = NamedSignature::new(&spec.input, spec.output.iter());
+    let sig = NamedSignature::new(&spec.input, spec.output.iter(), num_dims);
     if let Some(member_sig) = &member_sig {
         if !sig_match(member_sig, &sig) {
             return Err(type_error(
@@ -462,9 +471,37 @@ fn collect_spec_sig(
     }
     ctx.specs.insert(
         spec.name.to_string(),
-        SpecInfo::new(spec_type, sig, spec.info, Some(class_name)),
+        SpecInfo::new(spec_type, sig, spec.info, class_name),
     );
     Ok((ctx, member_sig))
+}
+
+fn collect_class_dimension(
+    class_name: &str,
+    members: &[ClassMembers],
+) -> Result<usize, LocalError> {
+    let mut member_dimensions = 0;
+    for m in members {
+        if let ClassMembers::Extern {
+            name,
+            info,
+            def: Some(ExternDef { dimensions, .. }),
+            ..
+        } = m
+        {
+            if member_dimensions == 0 {
+                member_dimensions = *dimensions;
+            } else if member_dimensions != *dimensions {
+                return Err(type_error(
+                    *info,
+                    &format!(
+                        "Function class {class_name} has inconsistent dimensions for member {name}",
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(member_dimensions)
 }
 
 fn collect_class_signatures(
@@ -473,23 +510,42 @@ fn collect_class_signatures(
     class_name: &str,
 ) -> Result<Context, LocalError> {
     let mut member_sig = None;
+    let member_dimensions = collect_class_dimension(class_name, members)?;
     for m in members {
         match m {
             ClassMembers::TimelineFunclet(spec) => {
-                let (new_ctx, new_sig) =
-                    collect_spec_sig(member_sig, class_name, spec, SpecType::Timeline, ctx)?;
+                let (new_ctx, new_sig) = collect_spec_sig(
+                    member_sig,
+                    class_name,
+                    spec,
+                    SpecType::Timeline,
+                    ctx,
+                    member_dimensions,
+                )?;
                 ctx = new_ctx;
                 member_sig = new_sig;
             }
             ClassMembers::SpatialFunclet(spec) => {
-                let (new_ctx, new_sig) =
-                    collect_spec_sig(member_sig, class_name, spec, SpecType::Spatial, ctx)?;
+                let (new_ctx, new_sig) = collect_spec_sig(
+                    member_sig,
+                    class_name,
+                    spec,
+                    SpecType::Spatial,
+                    ctx,
+                    member_dimensions,
+                )?;
                 ctx = new_ctx;
                 member_sig = new_sig;
             }
             ClassMembers::ValueFunclet(spec) => {
-                let (new_ctx, new_sig) =
-                    collect_spec_sig(member_sig, class_name, spec, SpecType::Value, ctx)?;
+                let (new_ctx, new_sig) = collect_spec_sig(
+                    member_sig,
+                    class_name,
+                    spec,
+                    SpecType::Value,
+                    ctx,
+                    member_dimensions,
+                )?;
                 ctx = new_ctx;
                 member_sig = new_sig;
             }
@@ -506,6 +562,7 @@ fn collect_class_signatures(
                         .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
                         .collect::<Vec<_>>(),
                     output.iter(),
+                    member_dimensions,
                 );
                 let unnamed_sig = Signature::from(&sig);
                 if let Some(member_sig) = &member_sig {
@@ -526,12 +583,14 @@ fn collect_class_signatures(
                 ctx.signatures.insert(name.to_string(), unnamed_sig.clone());
                 ctx.specs.insert(
                     name.to_string(),
-                    SpecInfo::new(SpecType::Value, sig, *info, Some(class_name)),
+                    SpecInfo::new(SpecType::Value, sig, *info, class_name),
                 );
                 ctx.externs.insert(name.to_string());
             }
         }
     }
+    ctx.class_dimensions
+        .insert(class_name.to_string(), member_dimensions);
     ctx.signatures.insert(
         class_name.to_string(),
         member_sig
@@ -561,6 +620,7 @@ fn make_signature(
     input: &[(String, Option<FullType>)],
     output: &[FullType],
     info: Info,
+    num_dims: usize,
 ) -> Result<Signature, LocalError> {
     Ok(Signature {
         input: input
@@ -584,6 +644,7 @@ fn make_signature(
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
+        num_dims,
     })
 }
 
@@ -599,7 +660,22 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
             ..
         } = s
         {
-            let sig = make_signature(input, output, *info)?;
+            let num_dims = specs
+                .iter()
+                .find_map(|spec| {
+                    if let Some(SpecInfo {
+                        typ: SpecType::Value,
+                        sig: NamedSignature { num_dims, .. },
+                        ..
+                    }) = ctx.specs.get(spec)
+                    {
+                        Some(*num_dims)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+            let sig = make_signature(input, output, *info, num_dims)?;
             ctx.scheds.insert(
                 name.to_string(),
                 SchedOrExtern::Sched(SchedInfo::new(
@@ -646,6 +722,7 @@ impl Context {
             scheds: HashMap::new(),
             externs: HashSet::new(),
             user_types: collect_user_defined_types(tl),
+            class_dimensions: HashMap::new(),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;

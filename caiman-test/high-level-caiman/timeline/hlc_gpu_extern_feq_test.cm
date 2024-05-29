@@ -1,0 +1,63 @@
+#version 0.1.0
+
+feq simple {
+    extern(cpu) pure simple_cpu(i32) -> i32
+
+
+    extern(gpu) simple(x: i32) -> out: i32 {
+        path : "gpu_external.comp",
+        entry : "main",
+        dimensions : 3,
+        resource {
+            group : 0,
+            binding : 0,
+            input : x
+        },
+        resource {
+            group : 0,
+            binding : 1,
+            output : out
+        }
+    }
+
+    val simple_loc(x: i32) -> i32 {
+        // somewhat hacky, but every spec that is part of a function class
+        // with an external gpu function has access to _dimn, where n is a
+        // single digit integer
+
+        // these are the 0th, 1st, and 2nd dimensions of the external function
+        // and they are all i32
+        returns x + 1 + _dim0 + _dim1 + _dim2
+    }
+}
+
+val foo(x: i32) -> i32 {
+    c :- 1
+    r :- simple'<c, c, c>(x)
+    returns r
+}
+
+tmln foo_time(e: Event) -> Event {
+    returns e
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+fn simple_impl(x: &i32) -> i32 
+    impls simple_loc, foo_time, foo_space
+{
+    // every function that implements a spec with dimensional arguments
+    // must be supplied them when called and have access to them via
+    // _dimn, where n is a single digit integer
+    *x + 1 + _dim0 + _dim1 + _dim2
+}
+
+fn foo_main(x: &i32) -> i32 
+    impls foo, foo_time, foo_space
+{
+    simple_impl'<1, 1, 1>(x)
+}
+
+pipeline main {
+    foo_main
+}

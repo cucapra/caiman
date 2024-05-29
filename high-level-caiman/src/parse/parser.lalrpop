@@ -15,6 +15,7 @@ match {
   r"[a-zA-Z][a-zA-Z0-9_]*", // Id
   r"[0-9]+[.][0-9]+",   // Float Constant
   r"[0-9]+",            // Integer Constant (we parse negatives as unary ops)
+  r"_dim[0-9]",         // Dimension arguments
 
   // Keywords (omitting things with symbols in here is ok for some reason)
   "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
@@ -383,6 +384,7 @@ SchedCallStmt: SchedFuncCall = {
 SchedAtom<L>: SchedTerm = {
     <@L> "?" <@R> => astf.sched_hole_expr(<>),
     <@L> <Id> <TagOp?> <@R> => astf.sched_var(<>),
+    <l: @L> <s: r"_dim[0-9]"> <k: TagOp?> <r: @R> => astf.sched_var(l, s.to_string(), k, r),
     <@L> <L> <TagOp?> <@R> => astf.sched_lit(<>),
 }
 

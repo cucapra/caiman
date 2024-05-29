@@ -159,11 +159,16 @@ impl NodeEnv {
 
     /// Overrides the output classes with the output classes annotated at the
     /// scheduling function.
+    /// # Arguments
+    /// * `outputs` - An iterator over the output types and their tags.
+    /// * `filter` - A filter function that returns true if the output should
+    /// be considered.
     pub fn override_output_classes<'a, T: Iterator<Item = (&'a DataType, &'a Tag)>>(
         &mut self,
         outputs: T,
+        filter: &dyn Fn(&DataType) -> bool,
     ) {
-        for (id, (_, tag)) in outputs.filter(|(dt, _)| is_value_dtype(dt)).enumerate() {
+        for (id, (_, tag)) in outputs.filter(|(dt, _)| filter(dt)).enumerate() {
             if id >= self.outputs.len() {
                 self.outputs.push(None);
             }
@@ -447,20 +452,20 @@ pub struct SpecInfo {
     pub types: HashMap<String, DataType>,
     /// Source-level starting and ending line and column number.
     pub info: Info,
-    /// The function class if the spec is a value spec.
-    pub feq: Option<String>,
+    /// The function class.
+    pub feq: String,
 }
 
 impl SpecInfo {
     #[must_use]
-    pub fn new(typ: SpecType, sig: NamedSignature, info: Info, class_name: Option<&str>) -> Self {
+    pub fn new(typ: SpecType, sig: NamedSignature, info: Info, class_name: &str) -> Self {
         Self {
             typ,
             sig,
             types: HashMap::new(),
             info,
             nodes: NodeEnv::new(),
-            feq: class_name.map(ToString::to_string),
+            feq: class_name.to_string(),
         }
     }
 }
@@ -612,11 +617,12 @@ impl SchedInfo {
 pub struct Signature {
     pub input: Vec<FlaggedType>,
     pub output: Vec<FlaggedType>,
+    pub num_dims: usize,
 }
 
 impl Signature {
     #[must_use]
-    pub fn new(input: Vec<DataType>, output: Vec<DataType>) -> Self {
+    pub fn new(input: Vec<DataType>, output: Vec<DataType>, num_dims: usize) -> Self {
         Self {
             input: input
                 .into_iter()
@@ -636,6 +642,7 @@ impl Signature {
                     settings: BTreeSet::new(),
                 })
                 .collect(),
+            num_dims,
         }
     }
 }
@@ -645,6 +652,7 @@ impl Signature {
 pub struct NamedSignature {
     pub input: Vec<(String, FlaggedType)>,
     pub output: Vec<(String, FlaggedType)>,
+    pub num_dims: usize,
 }
 
 impl NamedSignature {
@@ -653,6 +661,7 @@ impl NamedSignature {
     pub fn new<'a, I: Iterator<Item = &'a (Option<String>, DataType)>>(
         input: &[(String, DataType)],
         output: I,
+        num_dims: usize,
     ) -> Self {
         Self {
             input: input
@@ -668,6 +677,7 @@ impl NamedSignature {
                     )
                 })
                 .collect::<Vec<_>>(),
+            num_dims,
         }
     }
 }
@@ -677,6 +687,7 @@ impl From<&NamedSignature> for Signature {
         Self {
             input: sig.input.iter().cloned().map(|(_, t)| t).collect(),
             output: sig.output.iter().cloned().map(|(_, t)| t).collect(),
+            num_dims: sig.num_dims,
         }
     }
 }
@@ -689,6 +700,7 @@ impl PartialEq for NamedSignature {
                 .iter()
                 .map(|(_, x)| x)
                 .eq(other.input.iter().map(|(_, x)| x))
+            && self.num_dims == other.num_dims
     }
 }
 
@@ -699,6 +711,7 @@ fn sig_match(sig1: &Signature, sig2: &NamedSignature) -> bool {
     sig1.input.len() == sig2.input.len()
         && sig1.input.iter().eq(sig2.input.iter().map(|(_, t)| t))
         && sig1.output.iter().eq(sig2.output.iter().map(|(_, t)| t))
+        && sig1.num_dims == sig2.num_dims
 }
 
 /// A global context for a caiman program. This contains information about constants,
@@ -717,6 +730,8 @@ pub struct Context {
     pub externs: HashSet<String>,
     /// User defined types. Map from type name to type.
     pub user_types: HashMap<String, FlaggedType>,
+    /// Map from class name to the class's dimensions (number of value template arguments)
+    pub class_dimensions: HashMap<String, usize>,
 }
 
 /// A typed binary operation.

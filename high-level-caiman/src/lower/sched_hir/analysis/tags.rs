@@ -80,23 +80,26 @@ impl PartialEq for TagAnalysis {
 impl Eq for TagAnalysis {}
 
 impl TagAnalysis {
-    /// Constructs a new top element
-    pub fn top(
-        input: &[(String, TripleTag)],
-        out: &[TripleTag],
+    /// Constructs tags for special input arguments
+    /// # Arguments
+    /// * `tags` - The tags to insert into
+    /// * `data_types` - The data types of the input arguments
+    /// * `input` - The input arguments
+    /// * `num_dims` - The number of dimensional template arguments
+    fn get_input_tags(
+        tags: &mut HashMap<String, TripleTag>,
         data_types: &HashMap<String, DataType>,
         flags: &HashMap<String, ir::BufferFlags>,
-    ) -> Self {
-        let mut tags = HashMap::new();
-        for (out_idx, out_type) in out.iter().enumerate() {
-            tags.insert(
-                format!("{RET_VAR}{out_idx}"),
-                override_none_usable(
-                    out_type.clone(),
-                    &data_types[&format!("{RET_VAR}{out_idx}")],
-                    flags.get(&format!("{RET_VAR}{out_idx}")),
-                ),
-            );
+        input: &[(String, TripleTag)],
+        num_dims: usize,
+    ) {
+        for i in 0..num_dims {
+            let mut t = TripleTag::new_none_usable();
+            t.value.quot = Some(Quotient::Node);
+            t.value.quot_var.spec_var = Some(format!("_dim{i}"));
+            tags.insert(format!("_dim{i}"), t.clone());
+            t.value.quot = Some(Quotient::Input);
+            tags.insert(format!("{IN_STEM}_dim{i}"), t);
         }
         for (arg_name, arg_type) in input {
             let mut tg = arg_type.clone();
@@ -124,6 +127,28 @@ impl TagAnalysis {
             tags.insert(format!("{IN_STEM}{arg_name}"), in_tg);
             tags.insert(arg_name.clone(), node_tg);
         }
+    }
+    /// Constructs a new top element
+    pub fn top(
+        input: &[(String, TripleTag)],
+        out: &[TripleTag],
+        data_types: &HashMap<String, DataType>,
+        flags: &HashMap<String, ir::BufferFlags>,
+        num_dims: usize,
+    ) -> Self {
+        // create tags for outputs
+        let mut tags = HashMap::new();
+        for (out_idx, out_type) in out.iter().enumerate() {
+            tags.insert(
+                format!("{RET_VAR}{out_idx}"),
+                override_none_usable(
+                    out_type.clone(),
+                    &data_types[&format!("{RET_VAR}{out_idx}")],
+                    flags.get(&format!("{RET_VAR}{out_idx}")),
+                ),
+            );
+        }
+        Self::get_input_tags(&mut tags, data_types, flags, input, num_dims);
         Self {
             tags,
             input_overrides: HashMap::new(),

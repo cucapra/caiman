@@ -1,0 +1,31 @@
+#version 0.1.0
+
+tmln time(e: Event) -> out: Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main(a: i64, c: bool) -> i64 {
+    returns a + a if c else a * a
+}
+
+fn main_impl(a: i64 @ input(tmln.e), 
+             c: bool @ input(tmln.e)) -> i64 @ node(tmln.out) 
+    impls main, time, space  
+{
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    let r @ node(tmln.e) = if c {
+        @in { input: node(tmln.e), output: node(tmln.e),
+              a: node(tmln.e), c: node(tmln.e) };
+        let r @ node(tmln.e) = a + a;
+        r
+    } else {
+        @in { input: node(tmln.e), output: node(tmln.e),
+            a: node(tmln.e), c: node(tmln.e) };
+        let r @ node(tmln.e) = a * a;
+        r
+    };
+    @in { input: node(tmln.e), output: node(tmln.out) };
+    @out { input: node(tmln.out), output: node(tmln.out) };
+    r
+}
+
+pipeline main { main_impl }

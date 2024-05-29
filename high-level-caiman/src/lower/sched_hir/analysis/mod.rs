@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 mod continuations;
 mod dominators;
 mod op_transform;
-mod quot_typing;
+mod quot;
 mod record_expansion;
 mod refs;
 mod ssa;
@@ -17,7 +17,7 @@ use super::{
 
 pub use continuations::{compute_continuations, Succs};
 pub use op_transform::op_transform_pass;
-pub use quot_typing::deduce_val_quots;
+pub use quot::deduce_val_quots;
 pub use record_expansion::transform_encode_pass;
 pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;

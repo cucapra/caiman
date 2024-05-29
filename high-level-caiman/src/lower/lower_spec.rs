@@ -2,8 +2,8 @@ use crate::{
     enum_cast,
     lower::IN_STEM,
     parse::ast::{
-        Binop, ClassMembers, NestedExpr, SpecExpr, SpecFunclet, SpecLiteral, SpecStmt, SpecTerm,
-        TemplateArgs,
+        Binop, ClassMembers, DataType, IntSize, NestedExpr, SpecExpr, SpecFunclet, SpecLiteral,
+        SpecStmt, SpecTerm, TemplateArgs,
     },
     typing::{Context, SpecInfo},
 };
@@ -346,6 +346,47 @@ fn lower_spec_stmts(
     res
 }
 
+/// Gets the template inputs, which are the dimensions of the class, and the phi nodes
+/// for the spec funclet.
+fn get_templates_and_phis(
+    ctx: &Context,
+    class_name: &str,
+    spec: &SpecFunclet,
+) -> (Vec<asm::FuncletArgument>, Vec<Hole<asm::Command>>) {
+    let template_inputs = {
+        let mut v = Vec::new();
+        for i in 0..ctx.class_dimensions[class_name] {
+            v.push(asm::FuncletArgument {
+                name: Some(asm::NodeId(format!("{IN_STEM}_dim{i}"))),
+                typ: DataType::Int(IntSize::I32).asm_type(),
+                tags: Vec::new(),
+            });
+        }
+        v
+    };
+    let phi_nodes: Vec<_> = template_inputs
+        .iter()
+        .enumerate()
+        .map(|(idx, _)| {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(format!("_dim{idx}"))),
+                node: asm::Node::Phi {
+                    index: Hole::Filled(idx),
+                },
+            }))
+        })
+        .chain(spec.input.iter().enumerate().map(|(idx, (name, _))| {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.to_string())),
+                node: asm::Node::Phi {
+                    index: Hole::Filled(idx + template_inputs.len()),
+                },
+            }))
+        }))
+        .collect();
+    (template_inputs, phi_nodes)
+}
+
 /// Lower a spec funclet into a caiman assembly funclet.
 /// # Arguments
 /// * `name` - The name of the funclet
@@ -358,36 +399,23 @@ fn lower_spec_stmts(
 /// * `ctx` - The global context
 fn lower_spec_funclet(
     spec: SpecFunclet,
-    class_name: Option<&str>,
+    class_name: &str,
     ctx: &Context,
 ) -> (asm::FuncletHeader, Vec<Hole<asm::Command>>) {
-    let phi_nodes: Vec<_> = spec
-        .input
-        .iter()
-        .enumerate()
-        .map(|(idx, (name, _))| {
-            Hole::Filled(asm::Command::Node(asm::NamedNode {
-                name: Some(asm::NodeId(name.to_string())),
-                node: asm::Node::Phi {
-                    index: Hole::Filled(idx),
-                },
-            }))
-        })
-        .collect();
+    let (template_inputs, phi_nodes) = get_templates_and_phis(ctx, class_name, &spec);
     (
         asm::FuncletHeader {
             name: asm::FuncletId(spec.name.clone()),
-            args: spec
-                .input
+            args: template_inputs
                 .into_iter()
-                .map(|x| {
+                .chain(spec.input.into_iter().map(|x| {
                     let (name, dt) = x;
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(format!("{IN_STEM}{name}"))),
                         typ: dt.asm_type(),
                         tags: Vec::new(),
                     }
-                })
+                }))
                 .collect(),
             ret: spec
                 .output
@@ -399,11 +427,9 @@ fn lower_spec_funclet(
                     tags: Vec::new(),
                 })
                 .collect(),
-            binding: class_name.map_or(asm::FuncletBinding::None, |name| {
-                asm::FuncletBinding::SpecBinding(asm::FunctionClassBinding {
-                    default: false,
-                    function_class: asm::FunctionClassId(name.to_string()),
-                })
+            binding: asm::FuncletBinding::SpecBinding(asm::FunctionClassBinding {
+                default: false,
+                function_class: asm::FunctionClassId(class_name.to_string()),
             }),
         },
         lower_spec_stmts(spec.statements, ctx, &spec.name, phi_nodes),
@@ -416,7 +442,7 @@ fn lower_spec_funclet(
 pub fn lower_spec(f: ClassMembers, class_name: &str, ctx: &Context) -> asm::Funclet {
     match f {
         ClassMembers::ValueFunclet(spec) => {
-            let (header, commands) = lower_spec_funclet(spec, Some(class_name), ctx);
+            let (header, commands) = lower_spec_funclet(spec, class_name, ctx);
             asm::Funclet {
                 kind: ir::FuncletKind::Value,
                 header,
@@ -424,7 +450,7 @@ pub fn lower_spec(f: ClassMembers, class_name: &str, ctx: &Context) -> asm::Func
             }
         }
         ClassMembers::SpatialFunclet(spec) => {
-            let (header, commands) = lower_spec_funclet(spec, Some(class_name), ctx);
+            let (header, commands) = lower_spec_funclet(spec, class_name, ctx);
             asm::Funclet {
                 kind: ir::FuncletKind::Spatial,
                 header,
@@ -432,7 +458,7 @@ pub fn lower_spec(f: ClassMembers, class_name: &str, ctx: &Context) -> asm::Func
             }
         }
         ClassMembers::TimelineFunclet(spec) => {
-            let (header, commands) = lower_spec_funclet(spec, Some(class_name), ctx);
+            let (header, commands) = lower_spec_funclet(spec, class_name, ctx);
             asm::Funclet {
                 kind: ir::FuncletKind::Timeline,
                 header,

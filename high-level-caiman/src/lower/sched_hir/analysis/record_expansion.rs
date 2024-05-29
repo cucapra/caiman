@@ -113,9 +113,24 @@ impl<'a> EncodeTransform<'a> {
     /// target. We expand record arguments in the order of declaration, as such,
     /// `sig` must be the signature of the target so we expand the arguments in
     /// the correct order.
-    fn replace_call_args(&self, args: &[String], sig: &[FlaggedType]) -> Vec<String> {
+    ///
+    /// # Arguments
+    /// * `args` - The arguments to replace
+    /// * `sig` - The signature of the target, excluding the template arguments
+    /// * `num_dims` - The number of dimensional arguments of the target. Dimensional
+    /// arguments are copied as is to the new args since they must all be `i32`.
+    /// Furthermore, dimensional arguments are not expressed in the target signature.
+    fn replace_call_args(
+        &self,
+        args: &[String],
+        sig: &[FlaggedType],
+        num_dims: usize,
+    ) -> Vec<String> {
         let mut new_args = Vec::new();
-        for (arg_name, sig) in args.iter().zip(sig) {
+        for arg_name in args.iter().take(num_dims) {
+            new_args.push(arg_name.clone());
+        }
+        for (arg_name, sig) in args.iter().skip(num_dims).zip(sig) {
             match sig {
                 FlaggedType {
                     base: DataType::RemoteObj { all, .. } | DataType::Record(all),
@@ -162,7 +177,7 @@ impl<'a> EncodeTransform<'a> {
                     // expanded
 
                     // use the signature so we expand in the correct order
-                    *rets = self.replace_call_args(rets, self.sig_out);
+                    *rets = self.replace_call_args(rets, self.sig_out, 0);
                 }
                 for ((dest, _), src) in dests.iter().zip(rets.iter()) {
                     if let Some(src) = self.fence_map.get(src) {
@@ -176,7 +191,11 @@ impl<'a> EncodeTransform<'a> {
             }
             Terminator::Call(dests, call) => {
                 if let Some(SchedOrExtern::Sched(target_info)) = self.ctx.scheds.get(&call.target) {
-                    call.args = self.replace_call_args(&call.args, &target_info.dtype_sig.input);
+                    call.args = self.replace_call_args(
+                        &call.args,
+                        &target_info.dtype_sig.input,
+                        call.num_dims,
+                    );
                     *dests = self.expand_rets(
                         std::mem::take(dests).into_iter(),
                         &target_info.dtype_sig.output,

@@ -5,7 +5,8 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::tuple_id,
     parse::ast::{
-        Binop, DataType, FlaggedType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TemplateArgs,
+        Binop, DataType, FlaggedType, IntSize, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
+        TemplateArgs,
     },
 };
 
@@ -39,6 +40,9 @@ fn collect_spec_names(
             return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
         }
         res.insert(name.clone());
+    }
+    for i in 0..ctx.sig.num_dims {
+        res.insert(format!("_dim{i}"));
     }
     Ok(res)
 }
@@ -148,6 +152,7 @@ fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Ve
 }
 
 /// Collects types and nodes for a given assignment `lhs :- function(args)`.
+#[allow(clippy::too_many_arguments)]
 fn collect_spec_assign_call(
     lhs: &[(String, Option<DataType>)],
     function: &SpecExpr,
@@ -155,6 +160,7 @@ fn collect_spec_assign_call(
     templates: &Option<TemplateArgs>,
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
+    dimensions: &HashMap<String, usize>,
     info: Info,
 ) -> Result<(), LocalError> {
     if let SpecExpr::Term(SpecTerm::Var {
@@ -188,7 +194,12 @@ fn collect_spec_assign_call(
                 ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
             );
         }
-        for (arg_name, arg_type) in arg_nodes.iter().zip(input_types.iter()) {
+        let num_dims = dimensions.get(func_name).copied().unwrap_or(0);
+        for arg_name in arg_nodes.iter().take(num_dims) {
+            ctx.types
+                .add_dtype_constraint(arg_name, DataType::Int(IntSize::I32), info)?;
+        }
+        for (arg_name, arg_type) in arg_nodes.iter().skip(num_dims).zip(input_types.iter()) {
             ctx.types
                 .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
         }
@@ -207,6 +218,7 @@ fn collect_spec_assign_term(
     lhs: &[(String, Option<DataType>)],
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
+    dimensions: &HashMap<String, usize>,
 ) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
@@ -242,7 +254,9 @@ fn collect_spec_assign_term(
             templates,
             info,
             ..
-        } => collect_spec_assign_call(lhs, function, args, templates, ctx, signatures, *info),
+        } => collect_spec_assign_call(
+            lhs, function, args, templates, ctx, signatures, dimensions, *info,
+        ),
     }
 }
 
@@ -388,6 +402,12 @@ fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError
         env.types.add_dtype_constraint(&arg, typ.base, info)?;
         env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
     }
+    for i in 0..ctx.sig.num_dims {
+        let name = format!("_dim{i}");
+        env.types
+            .add_dtype_constraint(&name, DataType::Int(IntSize::I32), info)?;
+        env.nodes.add_quotient(&name, ValQuot::Input(name.clone()));
+    }
     Ok(())
 }
 
@@ -481,6 +501,7 @@ pub(super) fn collect_spec(
     stmts: &Vec<SpecStmt>,
     ctx: &mut SpecInfo,
     signatures: &HashMap<String, Signature>,
+    dimensions: &HashMap<String, usize>,
 ) -> Result<HashSet<TypedBinop>, LocalError> {
     let mut unresolved_externs = HashSet::new();
     let names = collect_spec_names(stmts, ctx)?;
@@ -489,7 +510,9 @@ pub(super) fn collect_spec(
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, rhs, .. } => match rhs {
-                SpecExpr::Term(t) => collect_spec_assign_term(t, lhs, &mut env, signatures)?,
+                SpecExpr::Term(t) => {
+                    collect_spec_assign_term(t, lhs, &mut env, signatures, dimensions)?;
+                }
                 SpecExpr::Conditional {
                     if_true,
                     guard,

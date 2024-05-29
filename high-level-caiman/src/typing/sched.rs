@@ -4,8 +4,9 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     parse::ast::{
-        Binop, EncodedCommand, EncodedStmt, FlaggedType, FullType, SchedExpr, SchedFuncCall,
-        SchedLiteral, SchedStmt, SchedTerm, TimelineOperation, Uop, WGPUFlags,
+        Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType, FullType, IntSize, SchedExpr,
+        SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecTerm, TemplateArgs,
+        TimelineOperation, Uop, WGPUFlags,
     },
 };
 use std::iter::once;
@@ -346,11 +347,11 @@ fn collect_assign_call(
         name,
         enum_cast!(SchedExpr::Term, &*call_info.target)
     );
-    let sig = ctx
+    let func = ctx
         .scheds
         .get(fn_name)
-        .ok_or_else(|| type_error(info, &format!("{info}: Function {fn_name} not found")))?
-        .sig();
+        .ok_or_else(|| type_error(info, &format!("{info}: Function {fn_name} not found")))?;
+    let sig = func.sig();
     if arg_names.len() != sig.input.len() {
         return Err(type_error(
             info,
@@ -368,6 +369,34 @@ fn collect_assign_call(
                 "{info}: Expected {} return values, found {}",
                 sig.output.len(),
                 dest.len()
+            ),
+        ));
+    }
+    if let Some(TemplateArgs::Vals(ts)) = &call_info.templates {
+        if ts.len() != sig.num_dims {
+            return Err(type_error(
+                info,
+                &format!(
+                    "{info}: Expected {} template arguments, found {}",
+                    sig.num_dims,
+                    ts.len()
+                ),
+            ));
+        }
+        for t_arg in ts {
+            let t_name = enum_cast!(
+                SpecTerm::Var { name, .. },
+                name,
+                enum_cast!(SpecExpr::Term, t_arg)
+            );
+            env.add_dtype_constraint(t_name, DataType::Int(IntSize::I32), info)?;
+        }
+    } else if sig.num_dims != 0 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Expected {} template arguments, found 0",
+                sig.num_dims
             ),
         ));
     }

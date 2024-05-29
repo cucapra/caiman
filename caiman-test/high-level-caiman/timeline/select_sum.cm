@@ -25,7 +25,7 @@ feq rec_sum {
     val rec_sum(a: i32, b: i32) -> i32 {
         returns 0 if a > b else 
                 a if a == b else
-                rec_sum(a + 1, b) + a
+                rec_sum'<_dim0, _dim1, _dim2>(a + 1, b) + a
     }
 }
 
@@ -35,19 +35,19 @@ fn rec_sum_local(a: i32, b: i32) -> i32 impls rec_sum, time, space {
     } else if a == b {
         a
     } else {
-        rec_sum_local(a + 1, b) + a
+        rec_sum_local'<_dim0, _dim1, _dim2>(a + 1, b) + a
     }
 }
 
 val select_sum(a: i32, b: i32, c: i32) -> i32 {
-    x :- rec_sum(a, b)
-    returns rec_sum(b, c) if x < 0 else x
+    x :- rec_sum'<1, 1, 1>(a, b)
+    returns rec_sum'<1, 1, 1>(b, c) if x < 0 else x
 }
 
 fn select_sum_local(a: i32, b: i32, c: i32) -> i32 impls select_sum, time, space {
-    let x = rec_sum_local(a, b);
+    let x = rec_sum_local'<1, 1, 1>(a, b);
     if x < 0 {
-        rec_sum_local(b, c)
+        rec_sum_local'<1, 1, 1>(b, c)
     } else {
         x
     }
@@ -66,14 +66,17 @@ tmln double_sync(e: Event) -> Event {
 fn select_sum_gpu(a: i32, b: i32, c: i32) -> i32 
     impls select_sum, double_sync, space 
 {
-    let e = encode-begin { a_gpu, b_gpu, x_gpu } gpu;
-    encode e.copy[a_gpu <- a];
-    encode e.copy[b_gpu <- b];
+    var a = a;
+    var b = b;
+    var c = c;
+    let e = encode-begin gpu;
+    encode e.copy[a_gpu <- &a];
+    encode e.copy[b_gpu <- &b];
     encode e.call[x_gpu <- rec_sum_gpu'<1, 1, 1>(a_gpu, b_gpu)];
     let f1 = submit e;
-    let e2 = encode-begin { b_gpu2, c_gpu, r_gpu } gpu;
-    encode e2.copy[b_gpu2 <- b];
-    encode e2.copy[c_gpu <- c];
+    let e2 = encode-begin gpu;
+    encode e2.copy[b_gpu2 <- &b];
+    encode e2.copy[c_gpu <- &c];
     encode e2.call[r_gpu <- rec_sum_gpu'<1, 1, 1>(b_gpu2, c_gpu)];
     let f2 = submit e2;
     let x = (await f1).x_gpu;

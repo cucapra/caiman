@@ -13,7 +13,7 @@ pub use hir::*;
 use crate::{
     error::LocalError,
     lower::IN_STEM,
-    parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
+    parse::ast::{DataType, FlaggedType, FullType, IntSize, SchedulingFunc},
     typing::{
         Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
         ENCODE_STORAGE_FLAGS,
@@ -73,6 +73,8 @@ pub struct Funclets {
     variables: HashSet<String>,
     /// Mapping from device variable to its buffer flags
     flags: HashMap<String, ir::BufferFlags>,
+    /// Number of dimensional template arguments
+    num_dims: usize,
 }
 
 /// A specific funclet in a scheduling function.
@@ -208,23 +210,37 @@ impl<'a> Funclet<'a> {
         }
     }
 
-    /// Gets the input arguments for each block based on the block's live in variables
-    pub fn inputs(&self) -> Vec<asm::FuncletArgument> {
-        #[allow(clippy::map_unwrap_or)]
-        if self.id() == cfg::START_BLOCK_ID {
-            self.parent
-                .finfo
-                .input
-                .iter()
-                .map(|(name, _)| asm::FuncletArgument {
+    /// Gets the input arguments for the start block
+    fn start_block_inputs(&self) -> Vec<asm::FuncletArgument> {
+        // gets the inputs for the special dimensional template arguments
+        let template_args = (0..self.num_dims()).map(|i| asm::FuncletArgument {
+            name: Some(asm::NodeId(format!("_dim{i}"))),
+            typ: DataType::Int(IntSize::I32).asm_type(),
+            tags: self
+                .get_input_tag(&format!("{IN_STEM}_dim{i}"))
+                .unwrap()
+                .tags_vec(),
+        });
+        // add on all other input arguments
+        template_args
+            .chain(self.parent.finfo.input.iter().map(|(name, _)| {
+                asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: self.get_asm_type(name).unwrap(),
                     tags: self
                         .get_input_tag(&format!("{IN_STEM}{name}"))
                         .unwrap()
                         .tags_vec(),
-                })
-                .collect()
+                }
+            }))
+            .collect()
+    }
+
+    /// Gets the input arguments for each block based on the block's live in variables
+    pub fn inputs(&self) -> Vec<asm::FuncletArgument> {
+        #[allow(clippy::map_unwrap_or)]
+        if self.id() == cfg::START_BLOCK_ID {
+            self.start_block_inputs()
         } else if self.id() == FINAL_BLOCK_ID {
             // final block is just for type conversion
             // final block input and output are the same as the function
@@ -263,6 +279,7 @@ impl<'a> Funclet<'a> {
     }
 
     /// Gets the input tag of the specified variable, handling input overrides
+    /// specified in the block via in annotations
     pub fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
@@ -337,6 +354,14 @@ impl<'a> Funclet<'a> {
     #[inline]
     pub fn stmts(&self) -> &[hir::HirBody] {
         &self.block.stmts
+    }
+
+    /// Gets the number of dimensions of the scheduling function.
+    /// That is, get the number of template value arguments of the function,
+    /// template value arguments are passed first and are always i32. They
+    /// control the grid size of external gpu functions.
+    pub const fn num_dims(&self) -> usize {
+        self.parent.num_dims
     }
 
     #[inline]
@@ -568,9 +593,10 @@ impl Funclets {
             )?;
             cfg = transform_out_ssa(cfg);
         }
+        let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags),
+            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
         );
         bft_transform(
             &mut cfg,
@@ -606,6 +632,7 @@ impl Funclets {
             literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
             variables,
             flags,
+            num_dims,
         })
     }
 

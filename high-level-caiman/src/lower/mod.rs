@@ -1,3 +1,5 @@
+
+
 use crate::{
     error::{self, type_error, Info, LocalError},
     parse::ast::{
@@ -174,7 +176,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Re
                             output,
                             def,
                             info,
-                        } => asm.declarations.push(extern_to_asm(&name, device, pure, input, output, def, info, &class.name)?),
+                        } => asm.declarations.push(extern_to_asm(&name, device, pure, input, output, def, info, &class.name, typing_ctx.class_dimensions[&class.name.0])?),
                     }
                 }
                 asm.declarations
@@ -309,6 +311,17 @@ fn get_gpu_info(def: Option<ExternDef>) -> Option<asm::ExternalGPUInfo> {
 }
 
 /// Converts an extern def into a declaration for an assembly external function
+/// For a cpu extern, we insert arguments for the dimensions of the function class.
+/// # Arguments
+/// * `name` - The name of the function
+/// * `device` - The device the function is on
+/// * `pure` - Whether the function is pure
+/// * `input` - The input arguments of the function, excluding templates
+/// * `output` - The output arguments of the function
+/// * `def` - The extern def of the function, if it's a gpu extern
+/// * `info` - The src info of the function
+/// * `class_name` - The name of the function class the extern is a member of
+/// * `num_dims` - The number of dimensions (templates) of the function class
 /// # Errors
 /// Returns an error if the device is not recognized.
 /// # Panics
@@ -323,7 +336,16 @@ fn extern_to_asm(
     def: Option<ExternDef>,
     info: Info,
     class_name: &asm::FunctionClassId,
+    num_dims: usize,
 ) -> Result<asm::Declaration, LocalError> {
+    let template_args = if device == "gpu" {
+        vec![]
+    } else {
+        (0..num_dims).map(|_| asm::ExternalArgument{
+            name: None,
+            ffi_type: DataType::Int(IntSize::I32).ffi().unwrap(),
+        }).collect()
+    };
     Ok(asm::Declaration::ExternalFunction(asm::ExternalFunction {
         name: name.to_string(),
         kind: match (device, pure) {
@@ -342,12 +364,12 @@ fn extern_to_asm(
                 ))
             }
         },
-        input_args: input
+        input_args: template_args.into_iter().chain(input
             .into_iter()
             .map(|(n, t)| asm::ExternalArgument{
                 name: n.map(asm::NodeId),
                 ffi_type: t.ffi().unwrap(),
-            })
+            }))
             .collect(),
         output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
             name: n.map(asm::NodeId),

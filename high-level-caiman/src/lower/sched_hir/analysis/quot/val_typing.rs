@@ -58,7 +58,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     lower::{
         sched_hir::{
             cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
@@ -72,7 +72,10 @@ use crate::{
     typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
-use super::{continuations::compute_pretinuations, ssa};
+use super::{
+    super::{continuations::compute_pretinuations, ssa},
+    add_constraint, add_node_eq, add_var_constraint,
+};
 
 /// Deduces the quotients for the value specification. Returns an error
 /// if unification fails, otherwise, writes the deduced quotients to the tags
@@ -103,6 +106,7 @@ pub fn deduce_val_quots(
         output_dtypes,
         dtypes,
         info,
+        spec_info.sig.num_dims,
     )?;
     let (env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
     fill_type_info(&env, cfg, &selects);
@@ -114,6 +118,7 @@ pub fn deduce_val_quots(
 /// Any unspecified annotations are going to be assumed to match up with the
 /// spec. Requires that the input and output variables of a given dimension
 /// (timeline, value, etc.) are kept in the same relative order as the spec.
+#[allow(clippy::too_many_arguments)]
 fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],
@@ -122,14 +127,21 @@ fn add_io_constraints(
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,
+    num_dims: usize,
 ) -> Result<NodeEnv, LocalError> {
-    env.override_output_classes(output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)));
+    env.override_output_classes(
+        output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)),
+        &is_value_dtype,
+    );
     for (name, tag) in input_overrides {
         for (n2, t2) in inputs.iter_mut() {
             if n2 == name {
                 t2.set_specified_info(tag.clone());
             }
         }
+    }
+    for i in 0..num_dims {
+        env = super::add_node_eq(&format!("_dim{i}"), &format!("_dim{i}"), info, env)?;
     }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
@@ -149,31 +161,8 @@ fn add_io_constraints(
                 continue;
             }
         };
-        env = add_node_eq(arg_name, &class_name, info, env)?;
+        env = super::add_node_eq(arg_name, &class_name, info, env)?;
     }
-    Ok(env)
-}
-/// Adds a type constraint to the environment
-/// # Arguments
-/// * `lhs` - The name of the variable to constrain
-/// * `rhs` - The constraint to apply to the type variable
-/// * `info` - The source info for the constraint
-/// * `env` - The current environment
-/// # Returns
-/// The updated environment
-#[allow(clippy::unnecessary_wraps)]
-fn add_constraint(
-    lhs: &str,
-    rhs: &ValQuot,
-    info: Info,
-    mut env: NodeEnv,
-) -> Result<NodeEnv, LocalError> {
-    env.add_constraint(lhs, rhs).map_err(|e| {
-        type_error(
-            info,
-            &format!("Failed to unify node constraints of {lhs}:\n {e}"),
-        )
-    })?;
     Ok(env)
 }
 
@@ -194,61 +183,7 @@ fn add_overrideable_constraint(
     info: Info,
     env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    if matches!(lhs_tag.value.quot, Some(Quotient::None)) {
-        return Ok(env);
-    }
-    if let Some(annot) = &lhs_tag.value.quot_var.spec_var {
-        if let Some(class_constraint) = env.get_spec_node(annot) {
-            if !class_constraint.alpha_equiv(&From::from(rhs)) {
-                return Ok(env);
-            }
-        }
-    }
-    add_constraint(lhs, rhs, info, env)
-}
-
-/// Constrains two type variables to be equal
-/// # Arguments
-/// * `lhs` - The name of the first variable
-/// * `rhs` - The name of the second variable
-/// * `info` - The source info for the constraint
-/// * `env` - The current environment
-/// # Returns
-/// The updated environment
-#[allow(clippy::unnecessary_wraps)]
-fn add_var_constraint(
-    lhs: &str,
-    var: &str,
-    info: Info,
-    mut env: NodeEnv,
-) -> Result<NodeEnv, LocalError> {
-    env.add_var_eq(lhs, var)
-        .map_err(|e| type_error(info, &format!("Failed to unify {lhs} with {var}:\n {e}")))?;
-    Ok(env)
-}
-
-/// Adds a node with the given name to match the class name (spec node id)
-/// # Arguments
-/// * `name` - The name of the type variable
-/// * `class_name` - The name of the class that the type variable must match with
-/// * `info` - The source info for the constraint
-/// * `env` - The current environment
-/// # Returns
-/// The updated environment
-#[allow(clippy::unnecessary_wraps)]
-fn add_node_eq(
-    name: &str,
-    class_name: &str,
-    info: Info,
-    mut env: NodeEnv,
-) -> Result<NodeEnv, LocalError> {
-    env.add_node_eq(name, class_name).map_err(|e| {
-        type_error(
-            info,
-            &format!("Failed to unify {name} with node {class_name}:\n {e}"),
-        )
-    })?;
-    Ok(env)
+    super::add_overrideable_constraint(lhs, lhs_tag, rhs, info, env, &|dt| &dt.value)
 }
 
 /// Adds a type annotation for `name` to the environement if the given annotation
@@ -265,11 +200,7 @@ fn add_type_annot(
     info: Info,
     env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    if let Some(class_name) = &annot.value.quot_var.spec_var {
-        add_node_eq(name, class_name, info, env)
-    } else {
-        Ok(env)
-    }
+    super::add_type_annot(name, annot, info, env, &|dt| &dt.value)
 }
 
 /// Unifies an assignment to the variable `lhs` with the given rhs.
@@ -404,7 +335,7 @@ fn unify_op(
         }
         HirOp::FFI(target, OpType::External) => {
             // The name of an external function is the name of its value spec
-            let f_class = ctx.specs[target].feq.clone().unwrap();
+            let f_class = ctx.specs[target].feq.clone();
             let dest_tuple = tuple_id(
                 &dests
                     .iter()
@@ -530,7 +461,7 @@ fn unify_call(
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     let val_spec = value_name(&call.target, ctx);
-    let f_class = ctx.specs[&val_spec].feq.clone().unwrap();
+    let f_class = ctx.specs[&val_spec].feq.clone();
     let tuple_name = tuple_id(
         &dests
             .iter()
