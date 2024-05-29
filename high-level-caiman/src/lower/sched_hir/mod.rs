@@ -7,6 +7,7 @@ use std::{
     rc::Rc,
 };
 
+use analysis::bft_transform;
 pub use hir::*;
 
 use crate::{
@@ -571,7 +572,7 @@ impl Funclets {
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags),
         );
-        let _ = analyze(
+        bft_transform(
             &mut cfg,
             &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
                 if let Some(FullType {

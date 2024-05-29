@@ -10,6 +10,7 @@ val sort2(a: i64, b: i64) -> (i64, i64) {
 }
 
 fn sort2_impl(a: i64, b: i64) -> (i64, i64) impls sort2, time, space {
+    // another way to make copies, we can load from references multiple times
     var a2 = a;
     let a3 = &a2;
     var b2 = b;
@@ -29,16 +30,18 @@ val merge3(r: i64, a: i64, b: i64) -> (i64, i64, i64) {
     returns (one, two, three)
 }
 
-fn merge3_impl(r_: i64, a_: i64, b: i64) -> (i64, i64, i64) 
+fn merge3_impl(r: i64, a: i64, b: i64) -> (i64, i64, i64) 
     impls merge3, space, time
 {
-    var rr = r_;
-    var aa = a_;
-    let r = &rr;
-    let a = &aa;
+    // make copies so we don't consume the original values
+    // can do this with either constants or variables
+    var rr = r;
+    var aa = a;
+    let r2 = r;
+    let a2 = a;
     
-    let rem = if *r <= *a { *a } else { *r };
-    let one = if *r <= *a { *r } else { *a };
+    let rem = if r2 <= a2 { a } else { r };
+    let one = if r2 <= a2 { rr } else { aa };
     let two, three = sort2_impl(rem, b);
     (one, two, three)
 }
@@ -66,21 +69,19 @@ fn sort4_impl(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64)
     let x, y = sort2_impl(a, b);
     let z, w = sort2_impl(c, d);
 
-    // need to make references after the calls since we can't capture save
-    var xx = x;
-    var yy = y;
-    var zz = z;
-    var ww = w;
-    let x2 = &xx;
-    let y2 = &yy;
-    let z2 = &zz;
-    let w2 = &ww;
+    // need to make copies so we can consume them again
+    let x2 = x;
+    let z2 = z;
+    let xx = x;
+    let yy = y;
+    let zz = z;
+    let ww = w;
 
-    let one = if x <= z { *x2 } else { *z2 };
-    let rem = if x <= z { *y2 } else { *w2 };
+    let one = if x2 <= z2 { x } else { z };
+    let rem = if x2 <= z2 { y } else { w };
 
-    let f = if x <= z { *z2 } else { *x2 };
-    let r = if x <= z { *w2 } else { *y2 };
+    let f = if x2 <= z2 { zz } else { xx };
+    let r = if x2 <= z2 { ww } else { yy };
 
     let two, three, four = merge3_impl(rem, f, r);
 
@@ -112,33 +113,14 @@ fn main_impl(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64)
     let s1 = w - z - y - x;
     let s2 = l - k - j - i;
 
-    // need to use references so we don't consume the arguments and 
-    // copy them instead 
-    var xx = x;
-    var yy = y;
-    var zz = z;
-    var ww = w;
-    var ii = i;
-    var jj = j;
-    var kk = k;
-    var ll = l;
-    let x2 = &xx;
-    let y2 = &yy;
-    let z2 = &zz;
-    let w2 = &ww;
-    let i2 = &ii;
-    let j2 = &jj;
-    let k2 = &kk;
-    let l2 = &ll;
-
     // TODO: maybe some kind of ref and cpy keywords?
     // maybe a builtin clone() function?
     // ex: x.clone()
 
-    let one = if s1 < s2 { *x2 } else { *i2 };
-    let two = if s1 < s2 { *y2 } else { *j2 };
-    let three = if s1 < s2 { *z2 } else { *k2 };
-    let four = if s1 < s2 { *w2 } else { *l2 };
+    let one = if s1 < s2 { x } else { i };
+    let two = if s1 < s2 { y } else { j };
+    let three = if s1 < s2 { z } else { k };
+    let four = if s1 < s2 { w } else { l };
     (one, two, three, four)
 }
 

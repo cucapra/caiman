@@ -141,12 +141,7 @@ impl TagAnalysis {
     /// Gets the input override for the specified variable or `None` if it was not
     /// overridden
     pub fn get_input_override(&self, var: &str) -> Option<&TripleTag> {
-        // if var.starts_with(IN_STEM) && !self.input_overrides.contains_key(var) {
-        //     // in annotations don't prepend the in stem
-        //     self.tags.get(&var[IN_STEM.len()..])
-        // } else {
         self.input_overrides.get(var)
-        //}
     }
 }
 
@@ -156,14 +151,18 @@ impl TagAnalysis {
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
-            HirBody::ConstDecl { lhs, lhs_tag, .. } => {
+            HirBody::ConstDecl {
+                lhs, lhs_tag, rhs, ..
+            } => {
+                let mut info = lhs_tag.clone();
+                if let SchedTerm::Var { name, .. } = rhs {
+                    if let Some(rhs_typ) = self.tags.get(name).cloned() {
+                        info.value = rhs_typ.value;
+                    }
+                }
                 self.tags.insert(
                     lhs.clone(),
-                    override_none_usable(
-                        lhs_tag.clone(),
-                        &self.data_types[lhs],
-                        self.flags.get(lhs),
-                    ),
+                    override_none_usable(info, &self.data_types[lhs], self.flags.get(lhs)),
                 );
             }
             HirBody::VarDecl {

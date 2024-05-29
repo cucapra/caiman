@@ -7,7 +7,7 @@ use crate::{
     typing::{Context, SchedOrExtern},
 };
 
-use super::{bft, Fact, Forwards};
+use super::{bft_transform, Fact, Forwards};
 
 /// Dataflow for transforming the encoded variables to become scoped
 /// and expanding records into all their fields.
@@ -342,5 +342,5 @@ pub fn transform_encode_pass(
         .map(|x| x.base.as_ref().unwrap().clone())
         .collect();
     let top = EncodeTransform::top(data_types, ctx, &sig_out);
-    bft(cfg, &top);
+    bft_transform(cfg, &top);
 }

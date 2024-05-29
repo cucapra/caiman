@@ -141,7 +141,6 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
     let mut worklist: Vec<usize> = Vec::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
     in_facts.extend(cfg.graph.keys().map(|k| (*k, top.clone())));
-    //in_facts.insert(T::Dir::root_id(), top.clone());
     worklist.push(T::Dir::root_id());
 
     while let Some(block) = worklist.pop() {
@@ -161,14 +160,17 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
 }
 
 /// Performs a breadth first traversal, only performing a dataflow analysis
-/// once per block
-pub fn bft<T: Fact>(cfg: &mut Cfg, top: &T) {
+/// once per block. Similar to `analyze`, but we won't ever reanalyze a block.
+///
+/// Furthermore, we don't meet with top. Only the input fact of the initial block
+/// is initialized to top.
+pub fn bft_transform<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
     let mut out_facts: HashMap<usize, T> = HashMap::new();
     let mut worklist: VecDeque<usize> = VecDeque::new();
     let mut visited: HashSet<usize> = HashSet::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
-    in_facts.extend(cfg.graph.keys().map(|k| (*k, top.clone())));
+    in_facts.insert(T::Dir::root_id(), top.clone());
     worklist.push_back(T::Dir::root_id());
 
     while let Some(block) = worklist.pop_front() {
@@ -184,6 +186,10 @@ pub fn bft<T: Fact>(cfg: &mut Cfg, top: &T) {
             worklist.extend(adj_lst.get(&block).unwrap());
         }
         out_facts.insert(block, out_fact);
+    }
+    InOutFacts {
+        in_facts,
+        out_facts,
     }
 }
 
