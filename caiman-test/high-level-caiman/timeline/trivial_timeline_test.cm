@@ -24,7 +24,6 @@ fn main_impl(a: i64 @ input(tmln.e),
         r
     };
     @in { input: node(tmln.e), output: node(tmln.out) };
-    @out { input: node(tmln.out), output: node(tmln.out) };
     r
 }
 

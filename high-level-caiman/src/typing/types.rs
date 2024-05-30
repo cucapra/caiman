@@ -508,7 +508,12 @@ pub enum ValQuot {
     Bool(bool),
     Input(String),
     Output(MetaVar),
+    /// A call in the spec, or a call in the schedule where unconstrained
+    /// arguments cannot be dropped.
     Call(String, Vec<MetaVar>),
+    /// A call with a single return that does not need an extraction.
+    /// Unconstrained arguments are not dropped.
+    CallOne(String, Vec<MetaVar>),
     Extract(MetaVar, usize),
     Bop(Binop, MetaVar, MetaVar),
     Select {
@@ -516,6 +521,8 @@ pub enum ValQuot {
         true_id: MetaVar,
         false_id: MetaVar,
     },
+    /// A call in the schedule, where unmatching unconstrained arguments
+    /// can be ignored.
     SchedCall(String, Vec<MetaVar>),
 }
 
@@ -589,6 +596,7 @@ pub enum VQType {
     Extract(usize),
     Bop(Binop),
     Select,
+    CallBuiltin(String),
 }
 
 impl std::fmt::Debug for VQType {
@@ -603,6 +611,7 @@ impl std::fmt::Debug for VQType {
             Self::Extract(i) => write!(f, "Extract({i})"),
             Self::Bop(op) => write!(f, "Bop({op:?})"),
             Self::Select => write!(f, "Select"),
+            Self::CallBuiltin(i) => write!(f, "{i}"),
         }
     }
 }
@@ -619,6 +628,7 @@ impl From<&ValQuot> for VQType {
             ValQuot::Extract(_, j) => Self::Extract(*j),
             ValQuot::Bop(op, _, _) => Self::Bop(*op),
             ValQuot::Select { .. } => Self::Select,
+            ValQuot::CallOne(s, _) => Self::CallBuiltin(s.clone()),
         }
     }
 }
@@ -636,6 +646,10 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
             ValQuot::Output(o) => Self::Term(VQType::Output, vec![Self::Var(o.0.clone())]),
             ValQuot::Call(f, args) => Self::Term(
                 VQType::Call(f.clone()),
+                args.iter().map(|x| Self::Var(x.0.clone())).collect(),
+            ),
+            ValQuot::CallOne(f, args) => Self::Term(
+                VQType::CallBuiltin(f.clone()),
                 args.iter().map(|x| Self::Var(x.0.clone())).collect(),
             ),
             ValQuot::SchedCall(f, args) => Self::DropTerm(

@@ -52,7 +52,7 @@ fn foo_impl(x: &i32, z: &i32) -> i32 impls foo, space, time {
     encode e2.call[y2 <- simple'<1, 1, 1>(x2) @ node(val.y2)];
     let f2 = submit @ node(tmln.sub2) e2;
     let y = (await @ node(tmln.snc1) f).y1;
-    @out {input: node(tmln.out), output: node(tmln.out)};
+    @out {input: node(tmln.snc2), output: node(tmln.out)};
     y + (await @ node(tmln.snc2) f2).y2
 }
 

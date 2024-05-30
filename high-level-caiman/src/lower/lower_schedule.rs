@@ -514,7 +514,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         } => lower_begin_encode(
             device,
             device_vars,
-            encoder,
+            &encoder.0,
             tags,
             temp_id,
             active_fences,

@@ -229,7 +229,7 @@ pub enum HirBody {
         device: String,
         device_vars: Vec<(Name, TripleTag)>,
         tags: TripleTag,
-        encoder: String,
+        encoder: (String, TripleTag),
         /// The active fences that haven't been consumed yet at the time of the encoding
         /// Filled via analysis
         active_fences: Vec<String>,
@@ -246,6 +246,7 @@ pub enum HirBody {
         info: Info,
         dest: Name,
         src: Name,
+        // only one tag since a submit does not require an extraction
         tags: TripleTag,
     },
     Sync {
@@ -255,6 +256,7 @@ pub enum HirBody {
         dests: FillIn<Name, Vec<(Name, TripleTag)>>,
         /// fence followed by all the variables being copied to the local device
         srcs: FillIn<Name, Vec<Name>>, 
+        // sync does not require an extraction
         tags: TripleTag,
     },
     /// Declaration of an immutable variable
@@ -727,7 +729,7 @@ impl HirBody {
                             device,
                             device_vars: defs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                             tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
-                            encoder: lhs[0].0.clone(),
+                            encoder: (lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1)),
                             active_fences: vec![],
                         }
                     },
@@ -874,7 +876,7 @@ impl Hir for HirBody {
             }
             Self::BeginEncoding { device_vars, encoder, .. } => {
                 let mut res = device_vars.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>();
-                res.push(encoder.clone());
+                res.push(encoder.0.clone());
                 Some(res)
                 
             }
@@ -908,7 +910,7 @@ impl Hir for HirBody {
                 for (name, _) in device_vars {
                     *name = f(name);
                 }
-                *encoder = f(encoder);
+                *encoder = (f(&encoder.0), encoder.1.clone());
             }
             Self::Submit { dest, ..} => {
                 *dest = f(dest);

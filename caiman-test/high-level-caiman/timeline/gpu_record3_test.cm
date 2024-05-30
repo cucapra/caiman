@@ -78,7 +78,6 @@ fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
     let r = (await @ node(tmln.snc) f);
     let r @ node(tmln.c1) = combine_impl(r) @ node(tmln.c1);
     @in {input: node(tmln.c1), output: node(tmln.out) };
-    @out {input: node(tmln.out), output: node(tmln.out) };
     r
 }
 

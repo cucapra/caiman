@@ -74,7 +74,7 @@ use crate::{
 
 use super::{
     super::{continuations::compute_pretinuations, ssa},
-    add_constraint, add_node_eq, add_var_constraint,
+    add_constraint, add_node_eq, add_var_constraint, fill_quotient,
 };
 
 /// Deduces the quotients for the value specification. Returns an error
@@ -696,30 +696,7 @@ fn unify_terminator(
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
 fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
-    if let Some(node) = env.get_node_name(name) {
-        let quot = tag.value.quot;
-        let flow = tag.value.flow;
-        let old_spec_var = tag.value.quot_var.spec_var.as_ref();
-        assert!(
-            old_spec_var.is_none() || old_spec_var.unwrap() == &node,
-            "Cannot unify class {name} with unequal nodes {node} and {}",
-            old_spec_var.unwrap()
-        );
-        tag.value = Tag {
-            quot: Some(quot.unwrap_or_else(|| {
-                if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
-                    Quotient::Input
-                } else {
-                    Quotient::Node
-                }
-            })),
-            quot_var: QuotientReference {
-                spec_var: Some(node),
-                spec_type: SpecType::Value,
-            },
-            flow,
-        };
-    }
+    fill_quotient(name, tag, env, block_id, SpecType::Value);
 }
 
 /// Constructs a new triple tag based on information from the environment.

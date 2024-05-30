@@ -42,7 +42,7 @@ fn foo_main(x: &i32) -> i32
 
     let y = await @ node(tmln.snc) f;
     let result = y.y_gpu;
-    @out { output: node(tmln.out), input: node(tmln.out) };
+    @out { output: node(tmln.out), input: node(tmln.snc) };
     result
 
 }

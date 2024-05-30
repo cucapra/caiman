@@ -123,6 +123,13 @@ fn get_target_signature(
     Ok((input_types, output_types))
 }
 
+/// Returns true if `fn_name` is the name of a builtin function which returns
+/// a single argument. If this function returns true, then `fn_name` doesn't
+/// need extract nodes
+fn is_single_return_builtin(fn_name: &str) -> bool {
+    fn_name == "sync_event" || fn_name == "submit_event"
+}
+
 /// Gets a list of arguments (regular arguments + non-type template args)
 /// to a function call.
 /// # Panics
@@ -170,17 +177,36 @@ fn collect_spec_assign_call(
         let (input_types, output_types) =
             get_target_signature(func_name, signatures, args, lhs.len(), info)?;
         let arg_nodes = get_call_arguments(args, templates);
-        let tuple_name = tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>());
-        ctx.nodes.add_quotient(
-            &tuple_name,
-            ValQuot::Call(
-                func_name.clone(),
-                arg_nodes
-                    .iter()
-                    .map(|x| MetaVar::new_class_name(x))
-                    .collect(),
-            ),
-        );
+        let single_ret_builtin = is_single_return_builtin(func_name);
+        assert!(!single_ret_builtin || lhs.len() == 1);
+        let tuple_name = if single_ret_builtin {
+            lhs[0].0.clone()
+        } else {
+            tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>())
+        };
+        if single_ret_builtin {
+            ctx.nodes.add_quotient(
+                &tuple_name,
+                ValQuot::CallOne(
+                    func_name.clone(),
+                    arg_nodes
+                        .iter()
+                        .map(|x| MetaVar::new_class_name(x))
+                        .collect(),
+                ),
+            );
+        } else {
+            ctx.nodes.add_quotient(
+                &tuple_name,
+                ValQuot::Call(
+                    func_name.clone(),
+                    arg_nodes
+                        .iter()
+                        .map(|x| MetaVar::new_class_name(x))
+                        .collect(),
+                ),
+            );
+        }
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
                 if a != &typ.base {
@@ -192,10 +218,12 @@ fn collect_spec_assign_call(
             }
             ctx.types
                 .add_dtype_constraint(name, typ.base.clone(), info)?;
-            ctx.nodes.add_quotient(
-                name,
-                ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
-            );
+            if !single_ret_builtin {
+                ctx.nodes.add_quotient(
+                    name,
+                    ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
+                );
+            }
         }
         let num_dims = dimensions.get(func_name).copied().unwrap_or(0);
         for arg_name in arg_nodes.iter().take(num_dims) {

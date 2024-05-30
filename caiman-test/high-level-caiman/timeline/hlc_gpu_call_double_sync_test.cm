@@ -65,7 +65,6 @@ fn foo_impl(a: &i32 @ node(tmln.ret), b: &i32 @ node(tmln.ret)) -> i32 impls foo
     encode e2.call[y_gpu <- simple'<1, 1, 1>(x2_gpu)];
     let r = bar_impl(f, e2) @ node(tmln.ret);
     @in {input: node(tmln.ret), output: node(tmln.out) };
-    @out {input: node(tmln.out), output: node(tmln.out) };
     r
 }
 
@@ -76,7 +75,7 @@ fn bar_impl(f: Fence'R @ input(tmln.f1), e: Encoder'R @ input(tmln.r1)) -> i32
     let f2 = submit @ node(tmln.sub) e;
     let ye = (await @ node(tmln.snc1) f2).y_gpu;
     let yf = (await @ node(tmln.snc2) f).y_gpu;
-    @out { input: node(tmln.out), output: node(tmln.out) };
+    @out { input: node(tmln.snc2), output: node(tmln.out) };
     yf + ye
 }
 

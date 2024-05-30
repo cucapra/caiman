@@ -7,8 +7,8 @@ pub use val_typing::deduce_val_quots;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    lower::sched_hir::TripleTag,
-    parse::ast::{Quotient, Tag},
+    lower::sched_hir::{cfg::START_BLOCK_ID, TripleTag},
+    parse::ast::{Quotient, QuotientReference, SpecType, Tag},
     typing::{NodeEnv, ValQuot},
 };
 /// Adds a type constraint to the environment
@@ -129,5 +129,51 @@ fn add_type_annot(
         add_node_eq(name, class_name, info, env)
     } else {
         Ok(env)
+    }
+}
+
+/// Fills the quotient spec node id in `tag` for `name`. If the quotient is unspecified,
+/// The deduced quotient will always be `node` unless the variable is an input,
+/// in which case it will be `input`.
+///
+/// Does nothing if the environement does not contain `name`.
+/// # Arguments
+/// * `name` - The name of the variable
+/// * `tag` - The tag to fill
+/// * `env` - The current environment
+/// * `specs` - The specs
+/// # Panics
+/// If the value quotient spec id is already filled with a value that
+/// conflicts with the information in `env`.
+fn fill_quotient(
+    name: &str,
+    tag: &mut TripleTag,
+    env: &NodeEnv,
+    block_id: usize,
+    spec_type: SpecType,
+) {
+    if let Some(node) = env.get_node_name(name) {
+        let quot = tag.value.quot;
+        let flow = tag.value.flow;
+        let old_spec_var = tag.value.quot_var.spec_var.as_ref();
+        assert!(
+            old_spec_var.is_none() || old_spec_var.unwrap() == &node,
+            "Cannot unify class {name} with unequal nodes {node} and {}",
+            old_spec_var.unwrap()
+        );
+        tag.value = Tag {
+            quot: Some(quot.unwrap_or_else(|| {
+                if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
+                    Quotient::Input
+                } else {
+                    Quotient::Node
+                }
+            })),
+            quot_var: QuotientReference {
+                spec_var: Some(node),
+                spec_type,
+            },
+            flow,
+        };
     }
 }

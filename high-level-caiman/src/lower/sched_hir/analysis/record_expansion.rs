@@ -268,14 +268,16 @@ impl<'a> Fact for EncodeTransform<'a> {
             }) => {
                 if let DataType::Encoder(Some(dt)) = &self
                     .data_types
-                    .get(encoder)
-                    .unwrap_or_else(|| panic!("Missing type for {encoder}"))
+                    .get(&encoder.0)
+                    .unwrap_or_else(|| panic!("Missing type for {}", encoder.0))
                 {
                     if let DataType::RemoteObj { all, .. } = &**dt {
                         device_vars.clear();
                         for (var, _) in all.iter() {
-                            device_vars
-                                .push((format!("{encoder}::{var}"), TripleTag::new_unspecified()));
+                            device_vars.push((
+                                format!("{}::{var}", encoder.0),
+                                TripleTag::new_unspecified(),
+                            ));
                         }
                     }
                 }

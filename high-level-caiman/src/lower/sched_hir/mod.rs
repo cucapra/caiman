@@ -148,7 +148,13 @@ impl<'a> Funclet<'a> {
 
     /// Gets the output arguments of this funclet based on the live out variables
     /// of this block. The returned vector of strings do not contain duplicates and
-    /// contains captures **and** non-captures. The entire result is sorted
+    /// contains captures **and** non-captures. The entire result is sorted.
+    ///
+    /// The outputs of a given funclet is the outputs of the continuation if
+    /// the block is terminated in a call, select, or final return, otherwise,
+    /// they are the live outs of the current block if the block is terminated
+    /// in a way to returns control back to a parent (such as final blocks in
+    /// child paths of a select)
     #[allow(clippy::option_if_let_else)]
     fn output_vars(&self) -> Vec<(String, TripleTag)> {
         // Schedule call and select occurs "before" funclet ends.
@@ -403,8 +409,7 @@ impl<'a> Funclet<'a> {
     /// In other words, this funclet is a top level funclet with a `return`
     /// terminator.
     pub fn is_final_return(&self) -> bool {
-        self.parent.cfg.predecessors(FINAL_BLOCK_ID).len() == 1
-            && self.parent.cfg.predecessors(FINAL_BLOCK_ID).first() == Some(&self.id())
+        self.parent.cfg.is_final_return(self.id())
     }
 
     /// Gets the tag of the specified variable at the end of the funclet

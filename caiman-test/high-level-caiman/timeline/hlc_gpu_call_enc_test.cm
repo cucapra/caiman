@@ -61,7 +61,6 @@ fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let r = bar_impl(e) @ node(tmln.ret);
     @in {input: node(tmln.ret), output: node(tmln.out) };
-    @out {input: node(tmln.out), output: node(tmln.out) };
     r
 }
 
@@ -77,7 +76,7 @@ fn bar_impl(e2: Encoder'R @ input(tmln.r)) -> i32
     let f = submit @ node(tmln.sub2) e2;
     let y = (await @ node(tmln.snc1) f2).y_gpu;
     let x2 = (await @ node(tmln.snc2) f).y_gpu;
-    @out { input: node(tmln.out), output: node(tmln.out) };
+    @out { input: node(tmln.snc2), output: node(tmln.out) };
     x2 + y
 }
 

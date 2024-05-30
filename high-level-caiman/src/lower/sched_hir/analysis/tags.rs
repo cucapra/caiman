@@ -293,13 +293,14 @@ impl TagAnalysis {
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
             HirBody::BeginEncoding {
                 encoder,
-                tags,
                 device_vars,
+                tags,
                 ..
             } => {
+                tags.override_unknown_info(TripleTag::new_none_usable());
                 self.tags.insert(
-                    encoder.clone(),
-                    override_none_usable(tags.clone(), &DataType::Encoder(None), None),
+                    encoder.0.clone(),
+                    override_none_usable(encoder.1.clone(), &DataType::Encoder(None), None),
                 );
                 for (var, tag) in device_vars {
                     self.tags

@@ -71,7 +71,7 @@ fn foo_impl(x: &i32, b: bool) -> i32 impls space, foo_time, foo {
         submit @ node(tmln.sub) e
     };
     @in { input: node(tmln.loc1), output: node(tmln.out), f: node(tmln.sub) };
-    @out {input: node(tmln.out), output: node(tmln.out) };
+    @out {input: node(tmln.snc), output: node(tmln.out) };
     (await @ node(tmln.snc) f).y_gpu
 }
 

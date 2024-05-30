@@ -70,7 +70,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
     encode e.call[y_gpu <- gpu_merge'<1, 1, 1>(a_gpu, b_gpu)];
     let f = submit @ node(tmln.sub) e;
     let r = await @ node(tmln.snc) f;
-    @out { input: node(tmln.out), output: node(tmln.out) };
+    @out { input: node(tmln.snc), output: node(tmln.out) };
     r.y_gpu
 }
 
