@@ -1,6 +1,7 @@
 mod tmln_typing;
 mod val_typing;
 
+pub use tmln_typing::deduce_tmln_quots;
 pub use tmln_typing::*;
 pub use val_typing::deduce_val_quots;
 

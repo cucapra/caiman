@@ -17,6 +17,7 @@ use super::{
 
 pub use continuations::{compute_continuations, Succs};
 pub use op_transform::op_transform_pass;
+pub use quot::deduce_tmln_quots;
 pub use quot::deduce_val_quots;
 pub use record_expansion::transform_encode_pass;
 pub use refs::deref_transform_pass;
@@ -413,7 +414,7 @@ impl Fact for ActiveFences {
                 self.active_fences.insert((*dest).to_string());
             }
             HirInstr::Stmt(HirBody::Sync { srcs, .. }) => {
-                self.active_fences.remove(&srcs.processed()[0]);
+                self.active_fences.remove(srcs.initial());
             }
             _ => {}
         }

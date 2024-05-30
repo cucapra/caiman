@@ -163,19 +163,31 @@ impl NodeEnv {
     /// * `outputs` - An iterator over the output types and their tags.
     /// * `filter` - A filter function that returns true if the output should
     /// be considered.
+    /// * `offset` - The number of spec outputs to skip when matching function outputs.
+    /// This is for implicit output parameters.
     pub fn override_output_classes<'a, T: Iterator<Item = (&'a DataType, &'a Tag)>>(
         &mut self,
         outputs: T,
         filter: &dyn Fn(&DataType) -> bool,
+        offset: usize,
     ) {
         for (id, (_, tag)) in outputs.filter(|(dt, _)| filter(dt)).enumerate() {
-            if id >= self.outputs.len() {
+            if id + offset >= self.outputs.len() {
                 self.outputs.push(None);
             }
             if let Some(annotated_quot) = &tag.quot_var.spec_var {
-                self.outputs[id] = Some(annotated_quot.clone());
+                self.outputs[id + offset] = Some(annotated_quot.clone());
             }
         }
+    }
+
+    /// Returns true if the spec has a match for the constraint type. That is if there
+    /// is at least one spec node that has the same form as the constraint.
+    /// This function returning true is necessary for unification without
+    /// annotation overrides to succeed, but not sufficient.
+    #[must_use]
+    pub fn spec_has_match(&self, constraint: &ValQuot) -> bool {
+        self.spec_nodes.contains_key(&constraint.get_type())
     }
 
     /// Returns true if the name is a wildcard name

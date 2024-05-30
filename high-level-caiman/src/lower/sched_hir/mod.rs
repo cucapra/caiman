@@ -7,7 +7,7 @@ use std::{
     rc::Rc,
 };
 
-use analysis::bft_transform;
+use analysis::{bft_transform, deduce_tmln_quots};
 pub use hir::*;
 
 use crate::{
@@ -560,12 +560,24 @@ impl Funclets {
         let (mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
-        transform_encode_pass(&mut cfg, &data_types, ctx, &f.output);
-        deref_transform_pass(&mut cfg, &mut data_types, &variables);
-        op_transform_pass(&mut cfg, &data_types);
-        let live_vars = analyze(&mut cfg, &LiveVars::top());
-        let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        let specs_rc = Rc::new(specs.clone());
+        bft_transform(
+            &mut cfg,
+            &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
+                if let Some(FullType {
+                    base:
+                        Some(FlaggedType {
+                            base: DataType::Fence(_),
+                            ..
+                        }),
+                    ..
+                }) = t
+                {
+                    Some(n)
+                } else {
+                    None
+                }
+            })),
+        );
         let mut hir_inputs: Vec<_> = f
             .input
             .iter()
@@ -577,6 +589,23 @@ impl Funclets {
             .iter()
             .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
             .collect();
+        deduce_tmln_quots(
+            &mut hir_inputs,
+            &mut hir_outputs,
+            &output_dtypes,
+            &mut cfg,
+            &ctx.specs[&specs.timeline.0],
+            ctx,
+            &data_types,
+            f.info,
+        )?;
+
+        transform_encode_pass(&mut cfg, &data_types, ctx, &f.output);
+        deref_transform_pass(&mut cfg, &mut data_types, &variables);
+        op_transform_pass(&mut cfg, &data_types);
+        let live_vars = analyze(&mut cfg, &LiveVars::top());
+        let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
+        let specs_rc = Rc::new(specs.clone());
 
         if !no_inference {
             cfg = transform_to_ssa(cfg, &live_vars);
@@ -598,24 +627,7 @@ impl Funclets {
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
         );
-        bft_transform(
-            &mut cfg,
-            &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
-                if let Some(FullType {
-                    base:
-                        Some(FlaggedType {
-                            base: DataType::Fence(_),
-                            ..
-                        }),
-                    ..
-                }) = t
-                {
-                    Some(n)
-                } else {
-                    None
-                }
-            })),
-        );
+
         let finfo = FuncInfo {
             name: f.name,
             input: hir_inputs,

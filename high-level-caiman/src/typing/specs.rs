@@ -175,7 +175,10 @@ fn collect_spec_assign_call(
             &tuple_name,
             ValQuot::Call(
                 func_name.clone(),
-                arg_nodes.iter().map(MetaVar::new_class_name).collect(),
+                arg_nodes
+                    .iter()
+                    .map(|x| MetaVar::new_class_name(x))
+                    .collect(),
             ),
         );
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {

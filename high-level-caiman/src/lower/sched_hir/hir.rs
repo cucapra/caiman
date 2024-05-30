@@ -179,6 +179,13 @@ impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
             Self::Processed(_) => (),
         }
     }
+
+    pub fn initial(&self) -> &T {
+        match self {
+            Self::Initial(t) => t,
+            Self::Processed(_) => panic!("Processed value"),
+        }
+    }
 }
 
 /// High-level caiman IR, excluding tail edges.

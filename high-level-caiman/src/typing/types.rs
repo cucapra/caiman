@@ -482,13 +482,13 @@ impl MetaVar {
 
     /// Creates a type equivalence class name
     #[must_use]
-    pub fn new_class_name(s: &String) -> Self {
+    pub fn new_class_name(s: &str) -> Self {
         Self(format!("${s}"))
     }
 
     /// Creates a type variable name
     #[must_use]
-    pub fn new_var_name(s: &String) -> Self {
+    pub fn new_var_name(s: &str) -> Self {
         Self(s.to_string())
     }
 

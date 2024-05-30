@@ -132,6 +132,7 @@ fn add_io_constraints(
     env.override_output_classes(
         output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)),
         &is_value_dtype,
+        0,
     );
     for (name, tag) in input_overrides {
         for (n2, t2) in inputs.iter_mut() {
@@ -346,7 +347,7 @@ fn unify_op(
                 &format!("!{dest_tuple}"),
                 &ValQuot::Call(
                     f_class,
-                    arg_names.iter().map(MetaVar::new_var_name).collect(),
+                    arg_names.iter().map(|x| MetaVar::new_var_name(x)).collect(),
                 ),
                 info,
                 env,
