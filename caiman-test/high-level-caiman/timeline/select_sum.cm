@@ -65,7 +65,7 @@ tmln double_sync(e: Event) -> out: Event {
     sub2 :- submit_event(rem2)
     f1 :- sync_event(loc2, sub)
     f2 :- sync_event(f1, sub2)
-    returns f1
+    returns f2
 }
 
 fn select_sum_gpu(a: i32, b: i32, c: i32) -> i32 

@@ -186,6 +186,7 @@ impl<T: Kind, A: Kind> Node<T, A> {
         matches!(self, Self::Var { .. })
     }
 
+    /// Gets the mutable class of a node. Requires that the node is not an atom.
     fn get_class_mut(&mut self) -> &mut Option<String> {
         match self {
             Self::Var {
@@ -204,13 +205,14 @@ impl<T: Kind, A: Kind> Node<T, A> {
         }
     }
 
-    fn get_class(&self) -> &Option<String> {
+    /// Gets the class of a node, or `None` if it is not a member of a class.
+    const fn get_class(&self) -> Option<&String> {
         match self {
             Self::Var { class_id, .. }
             | Self::Term { class_id, .. }
             | Self::DynamicTerm { class_id, .. }
-            | Self::DropTerm { class_id, .. } => class_id,
-            Self::Atom(_) => panic!("Atoms have no class"),
+            | Self::DropTerm { class_id, .. } => class_id.as_ref(),
+            Self::Atom(_) => None,
         }
     }
 }
@@ -355,11 +357,14 @@ fn union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
         if a.borrow().get_class().is_some() {
             assert!(
                 b.borrow().get_class().is_none()
-                    || b.borrow().get_class() == a.borrow().get_class()
+                    || b.borrow().get_class() == a.borrow().get_class(),
+                "Cannot unify two unequal classes: {:?} != {:?}",
+                a.borrow().get_class().as_ref().unwrap(),
+                b.borrow().get_class().as_ref().unwrap()
             );
-            *b.borrow_mut().get_class_mut() = a.borrow().get_class().clone();
+            *b.borrow_mut().get_class_mut() = a.borrow().get_class().cloned();
         } else {
-            *a.borrow_mut().get_class_mut() = b.borrow().get_class().clone();
+            *a.borrow_mut().get_class_mut() = b.borrow().get_class().cloned();
         }
     }
 
@@ -451,6 +456,12 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
     let b = representative(b);
     if a == b {
         return true;
+    }
+    if a.borrow().get_class().is_some()
+        && b.borrow().get_class().is_some()
+        && a.borrow().get_class() != b.borrow().get_class()
+    {
+        return false;
     }
     if can_union(&a, &b) {
         union(&a, &b);
@@ -920,6 +931,6 @@ impl<T: Kind, A: Kind> Env<T, A> {
     pub fn get_class_id(&self, name: &str) -> Option<String> {
         self.nodes
             .get(name)
-            .and_then(|n| representative(n).borrow().get_class().clone())
+            .and_then(|n| representative(n).borrow().get_class().cloned())
     }
 }

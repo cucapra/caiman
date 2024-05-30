@@ -118,7 +118,7 @@ fn unify_nodes(
                     // merge last local events to be equal
                     // this must be the case since the timeline doesn't have selects
                     if entry.get() != &last_loc {
-                        println!("{env:#?}");
+                        // println!("{env:#?}");
                         env = add_var_constraint(
                             &format!("{LOCAL_STEM}{last_loc}"),
                             &format!("{LOCAL_STEM}{}", entry.get()),
