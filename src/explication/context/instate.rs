@@ -310,8 +310,6 @@ impl InState {
         instantiation: LocationTriple,
         context: &StaticContext,
     ) {
-        dbg!(&schedule_node);
-        dbg!(&instantiation);
         self.get_latest_scope_mut()
             .set_instantiation(schedule_node, instantiation, context);
     }
@@ -413,10 +411,11 @@ impl InState {
     //   3. recurse from 1 up the stack
     pub fn find_matching_instantiations(
         &self,
-        target_location_triple: &LocationTriple,
+        mut target_location_triple: LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
+        target_location_triple = target_location_triple.into_node_id(context);
         self.instantiation_search(Some(target_location_triple), target_type, context)
     }
 
@@ -431,7 +430,7 @@ impl InState {
 
     fn instantiation_search(
         &self,
-        target_location_triple: Option<&LocationTriple>,
+        target_location_triple: Option<LocationTriple>,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
@@ -441,7 +440,7 @@ impl InState {
             // sort the results so we go top to bottom of the funclet
             let nodes = match target_location_triple {
                 None => scope.all_instantiations(context),
-                Some(triple) => scope.match_triple(triple, context),
+                Some(ref triple) => scope.match_triple(&triple, context),
             };
             for node in nodes.iter().sorted() {
                 let node_info = scope

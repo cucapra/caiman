@@ -248,75 +248,19 @@ fn explicate_encode_do(
     state: InState,
     context: &StaticContext,
 ) -> Option<OperationOutState> {
-    let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
-
-    let operations_to_try = match operation {
-        Hole::Filled(op) => vec![op.clone()],
-        Hole::Empty => state
-            .find_satisfied_operations(&value_funclet_id, context)
-            .drain(..)
-            .filter(|val_op| {
-                match context.get_node(Location {
-                    funclet_id: value_funclet_id,
-                    quot: val_op.clone(),
-                }) {
-                    expir::Node::CallFunctionClass {
-                        function_id: _,
-                        arguments: _,
-                    } => true,
-                    _ => false,
-                }
-            })
-            .collect(),
-    };
-
-    let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
-
-    for operation_to_try in operations_to_try {
-        let mut new_state = state.clone();
-        let location = Location {
-            funclet_id: value_funclet_id,
-            quot: operation_to_try.clone(),
-        };
-        let base_node_id = location.node_id(context).unwrap();
-        let node_info = context
-            .get_node_type_information(&value_funclet_id, &location.node_id(context).unwrap());
-        for offset in 0..node_info.output_types.len() {
-            let offset_location = Location::new(value_funclet_id, base_node_id + offset + 1);
-            new_state.add_value_operation(offset_location, context);
-        }
-        new_state.add_value_operation(location, context);
-        let node = expir::Node::EncodeDoExternal {
+    build_do_operation(
+        operation,
+        Some(external_function_id),
+        |operation_to_try, external_to_try| expir::Node::EncodeDoExternal {
             operation: Hole::Filled(operation_to_try),
+            external_function_id: Hole::Filled(external_to_try.unwrap()),
             inputs: inputs.clone(),
             outputs: outputs.clone(),
-            external_function_id: external_function_id.clone(),
-            encoder: encoder.clone(),
-        };
-        new_state.next_node();
-        match explicate_node(new_state, context) {
-            None => {}
-            Some(mut out) => {
-                out.add_node(node);
-                return Some(out);
-            }
-        }
-    }
-    None
+            encoder: encoder.clone()
+        },
+        state,
+        context,
+    )
 }
 
 pub fn explicate_node(state: InState, context: &StaticContext) -> Option<OperationOutState> {

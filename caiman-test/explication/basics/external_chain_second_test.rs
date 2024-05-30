@@ -1,8 +1,11 @@
 struct Callbacks;
 
 impl main::CpuFunctions for Callbacks {
-    fn op(&self, _: &mut dyn caiman_rt::State, value: i64) -> main::outputs::op {
-        return (value + 1,);
+    fn neg(&self, _: &mut dyn caiman_rt::State, value: i64) -> main::outputs::neg {
+        return (-value,);
+    }
+    fn add(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::add {
+        return (x + y,);
     }
 }
 
@@ -14,6 +17,6 @@ fn main() -> Result<(), String> {
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = main::Instance::new(&mut root_state, &callbacks);
-    let result = instance.start(&mut join_stack);
-    crate::expect_returned!(3, result.returned().map(|x| x.0))
+    let result = instance.start(&mut join_stack, 1, 2);
+    crate::expect_returned!((-1, 3), result.returned().cloned())
 }

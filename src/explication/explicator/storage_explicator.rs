@@ -183,7 +183,7 @@ fn enumerate_fill_attempts(
                     .expect(&error(&format!("Missing argument index {}", offset)));
                 let attempts_to_try = match &instantiation_bounds {
                     Some(bounds) => state.find_matching_instantiations(
-                        &LocationTriple::new_value(bounds.get(offset).unwrap().clone()),
+                        LocationTriple::new_value(bounds.get(offset).unwrap().clone()),
                         &target_type,
                         context,
                     ),
@@ -1291,9 +1291,10 @@ fn explicate_return(
                     context,
                 )
                 .triple_ignoring_none();
+                
                 let target_type = context.get_type(get_expect_box(&funclet.output_types, index));
                 match state
-                    .find_matching_instantiations(&target_location_triple, target_type, context)
+                    .find_matching_instantiations(target_location_triple, target_type, context)
                     .first()
                 {
                     // we couldn't find anything in our funclet

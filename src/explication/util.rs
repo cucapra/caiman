@@ -46,6 +46,17 @@ impl Location {
         node_id.is_none()
             || (self.funclet_id == other.funclet_id && node_id == other.node_id(context))
     }
+
+    // Converts a location with an `Input` or `Output` to just be `Node`
+    pub fn into_node_id(&self, context : &StaticContext) -> Location {
+        Location {
+            funclet_id: self.funclet_id.clone(),
+            quot: match self.node_id(context) {
+                None => ir::Quotient::None,
+                Some(node_id) => ir::Quotient::Node { node_id }
+            }
+        }       
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -164,6 +175,15 @@ impl LocationTriple {
             _ => true,
         };
         value && timeline && spatial
+    }
+
+    // Converts all locations in this triple from inputs/outputs to nodes
+    pub fn into_node_id(&self, context: &StaticContext) -> LocationTriple {
+        LocationTriple {
+            value: self.value.clone().map(|loc| loc.into_node_id(context)),
+            timeline: self.timeline.clone().map(|loc| loc.into_node_id(context)),
+            spatial: self.spatial.clone().map(|loc| loc.into_node_id(context)),
+        }
     }
 }
 

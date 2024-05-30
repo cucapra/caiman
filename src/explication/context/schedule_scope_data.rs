@@ -87,7 +87,8 @@ impl ScheduleScopeData {
         }
     }
 
-    pub fn add_value_operation(&mut self, operation: Location, context: &StaticContext) {
+    pub fn add_value_operation(&mut self, mut operation: Location, context: &StaticContext) {
+        operation = operation.into_node_id(context);
         self.as_operation_mut().value_operations.insert(operation);
     }
 
@@ -142,13 +143,18 @@ impl ScheduleScopeData {
             .typ = Hole::Filled(typ);
     }
 
+    // Sets the given node to the given instantiation set
+    // Updates the internal data structure "hooks" to do so
+    // Turns any instantiation Inputs to Nodes
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
-        instantiation: LocationTriple,
+        mut instantiation: LocationTriple,
         context: &StaticContext,
     ) {
         let funclet_id = self.funclet_id;
+
+        instantiation = instantiation.into_node_id(context);
 
         // note that this may overwrite what a node instantiates
         // this is, of course, completely fine mechanically
@@ -309,6 +315,7 @@ impl ScheduleScopeData {
      * Returns a list of all instantiations that match
      *   _all_ three non-empty members of the triple
      * empty members of the triple are ignored
+     * Assumes that the triple has already been node-ified
      */
     pub fn match_triple(
         &self,
