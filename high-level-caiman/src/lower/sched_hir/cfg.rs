@@ -38,11 +38,6 @@ impl BasicBlock {
     pub fn get_starting_info(&self) -> Info {
         self.stmts.first().map_or(self.src_loc, Hir::get_info)
     }
-
-    /// Gets the source location of the last statement in the block
-    pub fn get_final_info(&self) -> Info {
-        self.terminator.get_info()
-    }
 }
 
 /// An edge in the CFG
@@ -70,7 +65,7 @@ impl Edge {
     }
 
     /// Gets the single target of the edge, if it exists
-    pub fn next(&self) -> Option<usize> {
+    pub const fn next(&self) -> Option<usize> {
         match self {
             Self::Next(id) => Some(*id),
             _ => None,

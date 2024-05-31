@@ -1,0 +1,71 @@
+#version 0.1.0
+
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+extern(gpu) simple2(x : i32) -> out: i32
+{
+    path : "gpu_external2.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x: i32, b: bool) -> out: i32
+{
+    y :- simple'<1, 1, 1>(x)
+    y2 :- simple2'<1, 1, 1>(x)
+    ret :- y if b else y2
+    returns ret
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc1, rem1 :- encode_event(e)
+    sub :- submit_event(rem1)
+    snc :- sync_event(loc1, sub)
+    returns snc
+}
+
+sptl space(bs: BufferSpace) -> out: BufferSpace {
+    returns bs
+}
+
+
+fn foo_impl(x: &i32, b: bool) -> i32 impls space, foo_time, foo {
+    let e = encode-begin gpu;
+    encode e.copy[x_gpu <- x];
+    let f = if b {
+        encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+        submit e
+    } else {
+        encode e.call[y_gpu <- simple2'<1, 1, 1>(x_gpu)];
+        submit e
+    };
+    (await f).y_gpu
+}
+
+pipeline main { foo_impl }

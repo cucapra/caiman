@@ -1,0 +1,88 @@
+#version 0.1.0
+
+// Test where we pass an encoder to a function, and that
+// function submits it and returns a fence
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    in {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    out {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x : i32) -> out: i32 {
+    c :- 1
+    y1 :- simple'<c, c, c>(x)
+    z1, z2, z3 :- bar(y1, x)
+    res :- combine(z1, z2)
+    returns res
+}
+
+val bar(x: i32, z: i32) -> (i32, i32, i32) {
+    y2 :- simple'<1, 1, 1>(z)
+    returns (x, y2, z)
+}
+
+// record arguments are passed in the order they are declared
+// so x is foo and y is baz
+val combine(x: i32, y: i32) -> i32 {
+    returns x + y
+}
+
+tmln bar_time(e: Event, r: Encoder) -> (out: Event, enc_out: Fence) {
+    sub :- submit_event(r)
+    returns (e, sub)
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    ret, f :- bar_time(loc, rem)
+    snc :- sync_event(ret, f)
+    c1 :- combine_time(snc)
+    returns c1
+}
+
+tmln combine_time(e: Event) -> out: Event { returns e }
+
+sptl space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+type R1 = { foo: i32'<storage, map_read>, 
+            baz: i32'<storage, map_read, copy_dst>, 
+            x_gpu: i32'<storage, copy_dst> 
+};
+type R2 = { foo: i32, baz: i32 };
+
+fn foo_impl(x: &i32) -> i32 impls foo_time, foo, space {
+    let e = encode-begin gpu;
+    encode e.copy[x_gpu <- x];
+    encode e.call[foo <- simple'<1, 1, 1>(x_gpu)];
+    combine_impl(await bar_impl(e))
+}
+
+fn combine_impl(r: R2) -> i32 impls combine_time, space, combine {
+    r.foo + r.baz
+}
+
+// we require the relative order of arguments and returns for a given dimension
+// to match its spec
+fn bar_impl(e: Encoder'R1) -> Fence'R1
+            impls bar_time, bar, space 
+{
+    @in { e.x_gpu: input(val.z), e.foo: input(val.x), e.baz: none(val)-dead };
+    encode e.call[baz <- simple'<1, 1, 1>(x_gpu)];
+    submit e
+}
+
+pipeline main { foo_impl }

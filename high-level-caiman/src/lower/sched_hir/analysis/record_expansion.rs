@@ -274,10 +274,7 @@ impl<'a> Fact for EncodeTransform<'a> {
                     if let DataType::RemoteObj { all, .. } = &**dt {
                         device_vars.clear();
                         for (var, _) in all.iter() {
-                            device_vars.push((
-                                format!("{}::{var}", encoder.0),
-                                TripleTag::new_unspecified(),
-                            ));
+                            device_vars.push((format!("{}::{var}", encoder.0), encoder.1.clone()));
                         }
                     }
                 }
@@ -306,15 +303,13 @@ impl<'a> Fact for EncodeTransform<'a> {
             }
             HirInstr::Tail(term) => self.transfer_tail(term),
             HirInstr::Stmt(HirBody::Sync { dests, srcs, .. }) => {
-                dests.process(|record| {
+                dests.process(|(record, rec_tag)| {
                     let dt = self.data_types;
                     let record_type = dt.get(record).unwrap();
                     let rt = enum_cast!(DataType::Record, record_type);
                     let mut v: Vec<_> = rt
                         .iter()
-                        .map(|(name, _)| {
-                            (format!("{record}::{name}"), TripleTag::new_unspecified())
-                        })
+                        .map(|(name, _)| (format!("{record}::{name}"), rec_tag.clone()))
                         .collect();
                     // sort so that the dest order matches the src order
                     v.sort_by(|(a, _), (b, _)| a.cmp(b));

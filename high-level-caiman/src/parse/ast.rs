@@ -393,6 +393,20 @@ impl Tag {
             self.flow = other.flow;
         }
     }
+
+    pub fn override_unknown_specified_info(&mut self, other: Self) {
+        if self.quot.is_none() && other.quot.is_some() {
+            self.quot = other.quot;
+        }
+        if (self.quot_var.spec_var.is_none() && self.quot != Some(Quotient::None))
+            && (other.quot_var.spec_var.is_some() || other.quot == Some(Quotient::None))
+        {
+            self.quot_var.spec_var = other.quot_var.spec_var;
+        }
+        if self.flow.is_none() && other.flow.is_some() {
+            self.flow = other.flow;
+        }
+    }
 }
 
 impl PartialEq for Tag {

@@ -1,0 +1,69 @@
+#version 0.1.0
+
+// Test where we pass an encoder to a function, and that
+// function submits it and returns a fence
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    in {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    out {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x : i32) -> out: i32 {
+    y :- simple'<1, 1, 1>(x)
+    y2 :- bar(y)
+    returns y2
+}
+
+val bar(x : i32) -> out: i32 {
+    returns x
+}
+
+tmln bar_time(e: Event, r: Encoder) -> (out: Event, enc_out: Fence) {
+    sub :- submit_event(r)
+    returns (e, sub)
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    ret, f :- bar_time(loc, rem)
+    snc :- sync_event(ret, f)
+    returns snc
+}
+
+sptl space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+type R = { v: i32'<storage, map_read> };
+
+
+fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
+    let e = encode-begin gpu;
+    encode e.copy[x_gpu <- x];
+    encode e.call[v <- simple'<1, 1, 1>(x_gpu)];
+    let f = bar_impl(e);
+    let r = (await f).v;
+    r
+}
+
+// we require the relative order of arguments and returns for a given dimension
+// to match its spec
+fn bar_impl(e: Encoder'R) -> Fence'R impls bar_time, bar, space 
+{
+    let f = submit e;
+    f
+}
+
+pipeline main { foo_impl }

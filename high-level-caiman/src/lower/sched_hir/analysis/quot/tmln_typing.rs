@@ -7,7 +7,7 @@ use crate::{
     error::{Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
+            cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
             Hir, HirBody, HirFuncCall, Terminator, TripleTag,
         },
         tuple_id,
@@ -42,6 +42,7 @@ pub fn deduce_tmln_quots(
     ctx: &Context,
     dtypes: &HashMap<String, DataType>,
     info: Info,
+    num_dims: usize,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
     let mut overrides = Vec::new();
@@ -58,14 +59,17 @@ pub fn deduce_tmln_quots(
         output_dtypes,
         dtypes,
         info,
+        num_dims,
     )?;
     let (env, implicit_events) = unify_nodes(cfg, &spec_info.sig.input[0].0, dtypes, ctx, env)?;
-    //add_implicit_annotations(cfg, &implicit_events);
+    fill_io_tags(inputs, outputs, output_dtypes, &env, &implicit_events);
+    fill_tmln_tags(cfg, &env, &implicit_events);
+    add_implicit_annotations(cfg, &implicit_events);
     Ok(())
 }
 
 /// A struct containing the implicit input and output events for each funclet in the CFG.
-struct InOutEvents(HashMap<usize, (TripleTag, TripleTag)>);
+struct InOutEvents(HashMap<usize, (TripleTag, TripleTag, Vec<i32>)>);
 
 impl InOutEvents {
     /// Gets the implicit input event for the given block
@@ -76,6 +80,19 @@ impl InOutEvents {
     /// Gets the implicit output event for the given block
     pub fn get_implicit_output(&self, block: usize) -> &TripleTag {
         &self.0[&block].1
+    }
+
+    pub fn get_local_name_after_instr(&self, block: usize, instr_id: usize) -> String {
+        // +1 to skip the implicit input
+        format!("{LOCAL_STEM}{}", &self.0[&block].2[instr_id + 1])
+    }
+
+    pub fn get_implicit_in_name(&self, block: usize) -> String {
+        format!("{LOCAL_STEM}{}", &self.0[&block].2[0])
+    }
+
+    pub fn get_implicit_out_name(&self, block: usize) -> String {
+        format!("{LOCAL_STEM}{}", &self.0[&block].2.last().unwrap())
     }
 }
 
@@ -132,15 +149,17 @@ fn unify_nodes(
         let bb = &cfg.blocks[&bb];
         // the last local event number for the current path
         let mut last_loc = seen[&bb.id];
-        let in_local_event = last_loc;
         implicit_annotations.set_cur_block(bb.id);
         env = implicit_annotations.unify_inputs(last_loc, env)?;
+        let mut local_events = vec![last_loc];
         env = unify_instrs(
             bb,
             env,
             &mut last_loc,
             &mut latest_loc,
             &mut implicit_annotations,
+            &mut local_events,
+            dtypes,
         )?;
         env = unify_terminator(
             bb,
@@ -152,14 +171,9 @@ fn unify_nodes(
             ctx,
             &mut implicit_annotations,
         )?;
+        local_events.push(last_loc);
         env = implicit_annotations.unify_outputs(last_loc, env)?;
-        block_loc_events.insert(
-            bb.id,
-            (
-                format!("{LOCAL_STEM}{in_local_event}"),
-                format!("{LOCAL_STEM}{last_loc}"),
-            ),
-        );
+        block_loc_events.insert(bb.id, local_events);
         for succ in cfg.graph[&bb.id].targets() {
             match seen.entry(succ) {
                 Entry::Occupied(entry) => {
@@ -195,24 +209,32 @@ fn unify_nodes(
 fn into_input_output_annotations(
     cfg: &Cfg,
     env: &NodeEnv,
-    first_last_events: &HashMap<usize, (String, String)>,
+    first_last_events: &HashMap<usize, Vec<i32>>,
 ) -> InOutEvents {
     let mut res = HashMap::new();
-    for (block, (first, _)) in first_last_events {
+    for (block, events) in first_last_events {
         let mut in_ev = TripleTag::new_unspecified();
         in_ev.timeline.quot = if *block == START_BLOCK_ID {
             Some(Quotient::Input)
         } else {
             Some(Quotient::Node)
         };
-        in_ev.timeline.quot_var.spec_var = Some(env.get_node_name(first).unwrap());
-        let mut out_ev = TripleTag::new_unspecified();
-        out_ev.timeline.quot_var.spec_var = Some(
-            env.get_node_name(&first_last_events[&cfg.get_continuation_output_block(*block)].1)
+        in_ev.timeline.quot_var.spec_var = Some(
+            env.get_node_name(&format!("{LOCAL_STEM}{}", events.first().unwrap()))
                 .unwrap(),
         );
+        let mut out_ev = TripleTag::new_unspecified();
+        out_ev.timeline.quot_var.spec_var = Some(
+            env.get_node_name(&format!(
+                "{LOCAL_STEM}{}",
+                first_last_events[&cfg.get_continuation_output_block(*block)]
+                    .last()
+                    .unwrap()
+            ))
+            .unwrap(),
+        );
         out_ev.timeline.quot = Some(Quotient::Node);
-        res.insert(*block, (in_ev, out_ev));
+        res.insert(*block, (in_ev, out_ev, events.clone()));
     }
     InOutEvents(res)
 }
@@ -314,6 +336,8 @@ fn unify_instrs(
     last_loc: &mut i32,
     latest_loc: &mut i32,
     implicit_annotations: &mut ImplicitAnnotations,
+    local_events: &mut Vec<i32>,
+    dtypes: &HashMap<String, DataType>,
 ) -> Result<NodeEnv, LocalError> {
     let input_loc = format!("{LOCAL_STEM}{}", *last_loc);
     for instr in &bb.stmts {
@@ -354,7 +378,7 @@ fn unify_instrs(
                         env = add_type_annot(&input_loc, tag, *info, env)?;
                     } else if name == "output" {
                         implicit_annotations.add_cur_output(tag, *info);
-                    } else {
+                    } else if is_timeline_dtype(&dtypes[name]) {
                         env = add_type_annot(name, tag, *info, env)?;
                     }
                 }
@@ -366,7 +390,7 @@ fn unify_instrs(
                         implicit_annotations.add_next_input(tag, *info);
                     } else if name == "output" {
                         implicit_annotations.add_cur_output(tag, *info);
-                    } else {
+                    } else if is_timeline_dtype(&dtypes[name]) {
                         env = add_type_annot(name, tag, *info, env)?;
                     }
                 }
@@ -399,7 +423,7 @@ fn unify_instrs(
                 tags,
                 info,
             } => unify_sync(
-                dests.initial(),
+                &dests.initial().0,
                 srcs.initial(),
                 tags,
                 *info,
@@ -414,7 +438,8 @@ fn unify_instrs(
             | HirBody::DeviceCopy { .. }
             | HirBody::EncodeDo { .. }
             | HirBody::Hole { .. } => env,
-        }
+        };
+        local_events.push(*last_loc);
     }
     Ok(env)
 }
@@ -446,7 +471,7 @@ fn unify_terminator(
 ) -> Result<NodeEnv, LocalError> {
     match &bb.terminator {
         Terminator::CaptureCall { .. } => unreachable!(),
-        Terminator::Call(dests, call) => unify_call(
+        Terminator::Call(dests, call, ..) => unify_call(
             dests,
             call,
             &cfg.blocks[&cfg.graph[&bb.id].next().unwrap()],
@@ -660,17 +685,23 @@ fn timeline_class_name(sched_target: &str, ctx: &Context) -> String {
         .clone()
 }
 
-/// Returns true if the successor of `bb` has an implicit input annotation
-/// Requires that `bb` has only one successor
-fn has_implicit_input_annot(bb: &BasicBlock) -> bool {
-    for stmt in &bb.stmts {
+/// Returns the implicit input annotation for a block if it exists
+fn implicit_input_annot(bb: &BasicBlock) -> Option<TripleTag> {
+    for stmt in bb.stmts.iter().rev() {
         if let HirBody::InAnnotation(_, annots) = stmt {
-            if annots.iter().find(|(name, _)| name == "input").is_some() {
-                return true;
+            let t = annots.iter().find_map(|(name, t)| {
+                if name == "input" {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            });
+            if t.is_some() {
+                return t;
             }
         }
     }
-    false
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -706,10 +737,19 @@ fn unify_call(
             }))
             .collect(),
     );
+    let succ_implicit_input = implicit_input_annot(succ);
     if !env.spec_has_match(&call_constraint) {
         // there is no call for this function in the spec, so this isn't something to worry about
+        // we do this for "backwards compatibility", in the sense that if the function
+        // call isn't in the spec, we assume it's none. This is slightly different from
+        // the value language which requires a type annotation to do this.
 
-        if has_implicit_input_annot(succ) {
+        // this decision makes more sense in the timeline language since we can assume
+        // the timeline isn't affected by the function and let the previous local
+        // event carry over. The value language can't make such an assumption,
+        // we need to determine the tags for the return values of the function.
+
+        if succ_implicit_input.is_some() {
             // we increment the latest loc here even if we skip the call bc the call
             // might alter the timeline even if it isn't in the spec
             // further, there is an annotation in the successor block to constrain
@@ -723,8 +763,12 @@ fn unify_call(
     *last_loc = *latest_loc;
     env = add_type_annot(&tuple_name, &call.tag, call.info, env)?;
     env = add_overrideable_constraint(&tuple_name, &call.tag, &call_constraint, call.info, env)?;
-    env = add_constraint(
+    // allow an annotation to overload the local constraint
+    env = add_overrideable_constraint(
         &format!("{LOCAL_STEM}{}", *latest_loc),
+        succ_implicit_input
+            .as_ref()
+            .unwrap_or(&TripleTag::new_unspecified()),
         &ValQuot::Extract(MetaVar::new_var_name(&tuple_name), 0),
         call.info,
         env,
@@ -756,6 +800,7 @@ fn unify_call(
 /// Any unspecified annotations are going to be assumed to match up with the
 /// spec. Requires that the input and output variables of a given dimension
 /// (timeline, value, etc.) are kept in the same relative order as the spec.
+#[allow(clippy::too_many_arguments)]
 fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],
@@ -764,9 +809,12 @@ fn add_io_constraints(
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,
+    num_dims: usize,
 ) -> Result<NodeEnv, LocalError> {
     env.override_output_classes(
-        output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)),
+        output_dtypes
+            .iter()
+            .zip(outputs.iter().map(|t| &t.timeline)),
         &is_timeline_dtype,
         1,
     );
@@ -799,10 +847,89 @@ fn add_io_constraints(
         };
         env = super::add_node_eq(arg_name, &class_name, info, env)?;
     }
+    let implicit_in = env.get_input_classes()[0].clone();
+    for i in 0..num_dims {
+        // TODO: allow user to override this
+        env = super::add_node_eq(&format!("_dim{i}"), &implicit_in, info, env)?;
+    }
     Ok(env)
 }
 
-/// Adds a type constraint to the environment, allowing value
+fn fill_io_tags(
+    inputs: &mut [(String, TripleTag)],
+    outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
+    env: &NodeEnv,
+    event_info: &InOutEvents,
+) {
+    // the io has already been expanded, so we need to carry over the annotations
+    // for fences and encoders
+    for (name, tag) in inputs.iter_mut() {
+        fill_tmln_quotient(name, tag, env, START_BLOCK_ID);
+        if name.contains("::") {
+            let record_name = name.split("::").next().unwrap();
+            fill_tmln_quotient(record_name, tag, env, START_BLOCK_ID);
+        }
+        add_tmln_quotient(
+            &event_info.get_implicit_in_name(START_BLOCK_ID),
+            tag,
+            env,
+            START_BLOCK_ID,
+        );
+    }
+    // output_class[0] is the implicit out
+    let output_classes = env.get_function_output_classes().to_vec();
+    // map from output index to the class name
+    let mut annots = HashMap::new();
+    for (((out_idx, tag), dt), output_class) in outputs
+        .iter_mut()
+        .enumerate()
+        .zip(output_dtypes.iter())
+        .filter(|(_, dt)| is_timeline_dtype(dt))
+        .zip(output_classes.iter().skip(1))
+    {
+        if tag.timeline.quot.is_none() {
+            tag.timeline.quot = Some(Quotient::Node);
+        }
+        if let Some(output_class) = output_class {
+            fill_tmln_quotient(
+                &MetaVar::new_class_name(output_class).into_string(),
+                tag,
+                env,
+                START_BLOCK_ID,
+            );
+            if let DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) = dt {
+                if let DataType::RemoteObj { all, .. } = &**t {
+                    // annotate all of the following elements of the encoder/fence
+                    for i in 0..all.len() {
+                        annots.insert(i + out_idx + 1, output_class.clone());
+                    }
+                }
+            }
+        }
+    }
+    let implicit_out = event_info.get_implicit_out_name(FINAL_BLOCK_ID);
+    assert!(output_classes[0].is_some());
+    for (out_idx, tag) in outputs
+        .iter_mut()
+        .enumerate()
+        .zip(output_dtypes)
+        .filter_map(|(t, dt)| if is_timeline_dtype(dt) { None } else { Some(t) })
+    {
+        if let Some(node) = annots.get(&out_idx) {
+            fill_tmln_quotient(
+                &MetaVar::new_class_name(node).into_string(),
+                tag,
+                env,
+                START_BLOCK_ID,
+            );
+        } else {
+            add_tmln_quotient(&implicit_out, tag, env, FINAL_BLOCK_ID);
+        }
+    }
+}
+
+/// Adds a type constraint to the environment, allowing
 /// information from `TripleTag` to override the constraint.
 /// # Arguments
 /// * `lhs` - The name of the variable to constrain
@@ -823,7 +950,7 @@ fn add_overrideable_constraint(
 }
 
 /// Adds a type annotation for `name` to the environement if the given annotation
-/// provides a value node matching.
+/// provides a node matching.
 /// # Arguments
 /// * `name` - The name of the variable to annotate
 /// * `annot` - The annotation to add
@@ -865,84 +992,84 @@ fn unify_decl(
 
 /// Inserts timeline tags into each instruction
 fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
-    for (_, block) in &mut cfg.blocks {
-        for stmt in &mut block.stmts {
+    for block in cfg.blocks.values_mut() {
+        for (instr_id, stmt) in block.stmts.iter_mut().enumerate() {
+            let local_event = implicit_events.get_local_name_after_instr(block.id, instr_id);
             match stmt {
-                // HirBody::ConstDecl { lhs, lhs_tag, .. }
-                // | HirBody::VarDecl { lhs, lhs_tag, .. }
-                // | HirBody::RefStore {
-                //     lhs,
-                //     lhs_tags: lhs_tag,
-                //     ..
-                // } => {
-                //     fill_tmln_quotient(lhs, lhs_tag, env, block.id);
-                // }
-                // HirBody::Op { dests, .. } => {
-                //     for (d, t) in dests {
-                //         fill_val_quotient(d, t, env, block.id);
-                //     }
-                // }
+                HirBody::ConstDecl { lhs_tag, .. }
+                | HirBody::VarDecl { lhs_tag, .. }
+                | HirBody::RefStore {
+                    lhs_tags: lhs_tag, ..
+                } => add_tmln_quotient(&local_event, lhs_tag, env, block.id),
+                HirBody::Op { dests, .. } => {
+                    for (_, t) in dests {
+                        add_tmln_quotient(&local_event, t, env, block.id);
+                    }
+                }
                 HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
                     for (name, tag) in tags {
                         fill_tmln_quotient(name, tag, env, block.id);
+                        // add_tmln_quotient(&local_event, tag, env, block.id);
                     }
                 }
                 HirBody::BeginEncoding { encoder, tags, .. } => {
                     fill_tmln_quotient(&tuple_id(&[encoder.0.clone()]), tags, env, block.id);
                     fill_tmln_quotient(&encoder.0, &mut encoder.1, env, block.id);
                 }
-                HirBody::Submit { dest, tags, .. } => {}
-                // HirBody::Hole(_)
-                // | HirBody::RefLoad { .. }
-                // | HirBody::BeginEncoding { .. }
-                // | HirBody::Submit { .. } => {}
-                // HirBody::Phi { dest, info, .. } => {
-                //     insertions.push((
-                //         idx,
-                //         HirBody::InAnnotation(
-                //             *info,
-                //             vec![(dest.clone(), construct_new_tag(dest, env, block.id))],
-                //         ),
-                //     ));
-                // }
-                // HirBody::Sync { dests, .. } => {
-                //     for (dest, dest_tag) in dests.processed_mut() {
-                //         fill_val_quotient(dest, dest_tag, env, block.id);
-                //     }
-                // }
+                HirBody::Submit { dest, tags, .. } => {
+                    fill_tmln_quotient(dest, tags, env, block.id);
+                }
+                HirBody::Sync { dests, tags, .. } => {
+                    let nm = dests.initial().0.clone();
+                    fill_tmln_quotient(&nm, tags, env, block.id);
+                    fill_tmln_quotient(&nm, &mut dests.initial_mut().1, env, block.id);
+                }
+                HirBody::Phi { .. } => unreachable!(),
                 _ => {}
             }
-            match &mut block.terminator {
-                // Terminator::CaptureCall { dests, call, .. } => {
-                //     for (dest, tag) in dests.iter_mut() {
-                //         fill_val_quotient(dest, tag, env, block.id);
-                //     }
-                //     fill_val_quotient(
-                //         &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
-                //         &mut call.tag,
-                //         env,
-                //         block.id,
-                //     );
-                // }
-                // Terminator::Select { dests, tag, .. } => {
-                //     for (dest, tag) in dests {
-                //         fill_val_quotient(dest, tag, env, block.id);
-                //     }
-                //     fill_val_quotient(&selects[&block.id], tag, env, block.id);
-                // }
-                // Terminator::Call(..) | Terminator::None(..) => unreachable!(),
-                // // TODO: check the return, I think this is right bc returns should be handled
-                // // by Phi nodes
-                // Terminator::Next(..)
-                // | Terminator::FinalReturn(..)
-                // | Terminator::Return { .. }
-                // | Terminator::Yield(..) => {}
-                _ => {}
+        }
+        let local_event = implicit_events.get_local_name_after_instr(block.id, block.stmts.len());
+        match &mut block.terminator {
+            Terminator::Call(dests, call, ..) => {
+                for (dest, tag) in dests.iter_mut() {
+                    fill_tmln_quotient(dest, tag, env, block.id);
+                    add_tmln_quotient(&local_event, tag, env, block.id);
+                }
+                fill_tmln_quotient(
+                    &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                    &mut call.tag,
+                    env,
+                    block.id,
+                );
             }
+            // Terminator::Return { dests, .. } => {
+            //     for (dest, tag) in dests {
+            //         fill_tmln_quotient(dest, tag, env, block.id);
+            //         add_tmln_quotient(&local_event, tag, env, block.id);
+            //     }
+            // }
+            Terminator::CaptureCall { .. } => unreachable!(),
+            Terminator::Next(..)
+            | Terminator::Select { .. }
+            | Terminator::None(_)
+            | Terminator::FinalReturn(..)
+            | Terminator::Return { .. }
+            | Terminator::Yield(..) => {}
         }
     }
 }
 
+/// Overwrites the tag with the class of the given meta variable
 fn fill_tmln_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
-    super::fill_quotient(name, tag, env, block_id, SpecType::Timeline);
+    super::fill_quotient(name, tag, env, block_id, SpecType::Timeline, false, &|dt| {
+        &mut dt.timeline
+    });
+}
+
+/// Attempts to add a timeline quotient to the given tag. Does nothing
+/// if the tag already has a timeline quotient.
+fn add_tmln_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
+    super::fill_quotient(name, tag, env, block_id, SpecType::Timeline, true, &|dt| {
+        &mut dt.timeline
+    });
 }

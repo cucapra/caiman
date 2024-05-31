@@ -696,7 +696,9 @@ fn unify_terminator(
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
 fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
-    fill_quotient(name, tag, env, block_id, SpecType::Value);
+    fill_quotient(name, tag, env, block_id, SpecType::Value, false, &|dt| {
+        &mut dt.value
+    });
 }
 
 /// Constructs a new triple tag based on information from the environment.

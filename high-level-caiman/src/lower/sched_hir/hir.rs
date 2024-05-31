@@ -186,6 +186,13 @@ impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
             Self::Processed(_) => panic!("Processed value"),
         }
     }
+
+    pub fn initial_mut(&mut self) -> &mut T {
+        match self {
+            Self::Initial(t) => t,
+            Self::Processed(_) => panic!("Processed value"),
+        }
+    }
 }
 
 /// High-level caiman IR, excluding tail edges.
@@ -253,7 +260,7 @@ pub enum HirBody {
         info: Info,
         /// the local versions of the encoded variables or the name of the record
         /// destination.
-        dests: FillIn<Name, Vec<(Name, TripleTag)>>,
+        dests: FillIn<(Name, TripleTag), Vec<(Name, TripleTag)>>,
         /// fence followed by all the variables being copied to the local device
         srcs: FillIn<Name, Vec<Name>>, 
         // sync does not require an extraction
@@ -721,7 +728,8 @@ impl HirBody {
                         ,
                     SchedTerm::TimelineOperation { info, op: TimelineOperation::Await, arg, tag } => {
                         let arg_name = enum_cast!(SchedTerm::Var {name, .. }, name, enum_cast!(SchedExpr::Term, *arg));
-                        Self::Sync { info, dests: FillIn::Initial(lhs[0].0.clone()), srcs: FillIn::Initial(arg_name), tags: TripleTag::from_opt(&tag) }
+                        Self::Sync { info, dests: FillIn::Initial((lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))), 
+                            srcs: FillIn::Initial(arg_name), tags: TripleTag::from_opt(&tag) }
                     },
                     SchedTerm::EncodeBegin { info, device, tag, defs } => {
                         Self::BeginEncoding {

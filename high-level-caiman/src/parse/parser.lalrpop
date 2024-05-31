@@ -247,6 +247,10 @@ QuotRef: QuotientReference = {
         spec_type: a,
         spec_var: Some(String::from(b)),
     },
+    <a: SpecType> "." <s: r"_dim[0-9]"> => QuotientReference {
+        spec_type: a,
+        spec_var: Some(s.to_string()),
+    },
     <a: SpecType> "." "(" <b: TupleCommaList<Id>> ")" => QuotientReference {
         spec_type: a,
         spec_var: Some(format!("_{}", b.join("_"))),
@@ -419,6 +423,7 @@ InOutArg<T>: Arg<T> = {
     "output" ":" <t: T> => (String::from("output"), t),
     <i: Id> "." <d: Id> ":" <t: T> => (format!("{}::{}", i, d), t),
     <i: Id> ":" <t: T> => (i, t),
+    <s: r"_dim[0-9]"> ":" <t: T> => (s.to_string(), t),
 }
 
 // argument with optional type

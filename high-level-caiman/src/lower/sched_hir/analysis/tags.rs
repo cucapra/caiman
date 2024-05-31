@@ -4,7 +4,7 @@ use std::rc::Rc;
 use caiman::ir;
 
 use crate::lower::{
-    sched_hir::{HirBody, HirFuncCall, HirInstr, Terminator, TripleTag},
+    sched_hir::{cfg::START_BLOCK_ID, HirBody, HirFuncCall, HirInstr, Terminator, TripleTag},
     IN_STEM,
 };
 use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SpecType, Tag};
@@ -173,7 +173,7 @@ impl TagAnalysis {
 impl TagAnalysis {
     /// Transfer function for an HIR body statement
     #[allow(clippy::too_many_lines)]
-    fn transfer_stmt(&mut self, stmt: &mut HirBody) {
+    fn transfer_stmt(&mut self, stmt: &mut HirBody, block_id: usize) {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl {
@@ -279,14 +279,20 @@ impl TagAnalysis {
             }
             HirBody::InAnnotation(_, tags) => {
                 for (v, tag) in tags {
-                    self.input_overrides.insert(v.clone(), tag.clone());
-                    match self.tags.entry(v.clone()) {
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().set_specified_info(tag.clone());
+                    let mut annotate = |v: &String| {
+                        self.input_overrides.insert(v.clone(), tag.clone());
+                        match self.tags.entry(v.clone()) {
+                            Entry::Occupied(mut entry) => {
+                                entry.get_mut().set_specified_info(tag.clone());
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(tag.clone());
+                            }
                         }
-                        Entry::Vacant(entry) => {
-                            entry.insert(tag.clone());
-                        }
+                    };
+                    annotate(v);
+                    if block_id == START_BLOCK_ID {
+                        annotate(&format!("{IN_STEM}{v}"));
                     }
                 }
             }
@@ -307,11 +313,21 @@ impl TagAnalysis {
                         .insert(var.clone(), override_defaults_ref(tag.clone()));
                 }
             }
-            HirBody::Submit { dest, tags, .. } => {
+            HirBody::Submit {
+                dest, tags, src, ..
+            } => {
                 self.tags.insert(
                     dest.clone(),
                     override_none_usable(tags.clone(), &DataType::Fence(None), None),
                 );
+                if let Some(DataType::Fence(Some(t))) = self.data_types.get(dest) {
+                    if let DataType::RemoteObj { all, .. } = &**t {
+                        for (v, _) in all {
+                            let t = self.tags.get_mut(&format!("{src}::{v}")).unwrap();
+                            t.set_specified_info(tags.clone());
+                        }
+                    }
+                }
             }
             HirBody::Sync { dests, .. } => {
                 for (dest, dest_tag) in dests.processed() {
@@ -386,7 +402,7 @@ impl Fact for TagAnalysis {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize) {
         match stmt {
             HirInstr::Tail(Terminator::Select { dests, tag, .. }) => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
@@ -442,7 +458,7 @@ impl Fact for TagAnalysis {
                 | Terminator::Yield(..),
             ) => (),
             HirInstr::Tail(Terminator::Call(..)) => panic!("Call should be eliminated"),
-            HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
+            HirInstr::Stmt(stmt) => self.transfer_stmt(stmt, block_id),
         }
     }
 

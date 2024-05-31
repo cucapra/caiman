@@ -594,6 +594,7 @@ impl Funclets {
             .iter()
             .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
             .collect();
+        let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         deduce_tmln_quots(
             &mut hir_inputs,
             &mut hir_outputs,
@@ -603,6 +604,7 @@ impl Funclets {
             ctx,
             &data_types,
             f.info,
+            num_dims,
         )?;
 
         transform_encode_pass(&mut cfg, &data_types, ctx, &f.output);
@@ -625,9 +627,9 @@ impl Funclets {
                 &data_types,
                 f.info,
             )?;
+
             cfg = transform_out_ssa(cfg);
         }
-        let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         let type_info = analyze(
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
