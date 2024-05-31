@@ -60,12 +60,12 @@ sptl space(bs: BufferSpace) -> BufferSpace {
 
 type R = { foo: i32'<storage, map_read>, baz: i32'<storage, map_read> };
 
-fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
+fn foo_impl(x: &i32) -> i32 impls foo_time, foo, space {
     let e = encode-begin gpu;
     encode e.copy[x_gpu <- x];
     encode e.call[foo <- simple'<1, 1, 1>(x_gpu)];
     encode e.call[baz <- simple'<1, 1, 1>(x_gpu)];
-    combine_impl(await bar_impl(e));
+    combine_impl(await bar_impl(e))
 }
 
 fn combine_impl(r: R) -> i32 impls combine_time, space, combine {
@@ -74,8 +74,7 @@ fn combine_impl(r: R) -> i32 impls combine_time, space, combine {
 
 // we require the relative order of arguments and returns for a given dimension
 // to match its spec
-fn bar_impl(e: Encoder'R) -> Fence'R
-            impls bar_time, bar, space 
+fn bar_impl(e: Encoder'R) -> Fence'R impls bar_time, bar, space 
 {
     submit e
 }

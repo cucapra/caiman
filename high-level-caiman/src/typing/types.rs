@@ -498,6 +498,11 @@ impl MetaVar {
     pub fn into_string(self) -> String {
         self.0
     }
+
+    #[must_use]
+    pub fn get(&self) -> &str {
+        &self.0
+    }
 }
 
 /// A constraint on a value quotient
@@ -540,7 +545,9 @@ impl ValQuot {
             | (Self::Input(x), Self::Input(y)) => x == y,
             (Self::Output(x), Self::Output(y)) => x == y,
             (Self::Bool(x), Self::Bool(y)) => x == y,
-            (Self::Call(f1, args1), Self::Call(f2, args2)) => {
+            (Self::Call(f1, args1) | Self::SchedCall(f1, args1), Self::Call(f2, args2))
+            | (Self::CallOne(f1, args1), Self::CallOne(f2, args2))
+            | (Self::Call(f1, args1), Self::SchedCall(f2, args2)) => {
                 f1 == f2
                     && args1.len() == args2.len()
                     && args1

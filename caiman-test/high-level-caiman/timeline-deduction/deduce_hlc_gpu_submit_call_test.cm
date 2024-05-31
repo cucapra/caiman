@@ -50,12 +50,13 @@ fn foo_impl(x: &i32) -> i32 impls foo_time, foo_space, foo {
     encode e.copy[x_gpu <- x];
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let s = submit e;
-    let f = await s;
+    let f = await @ node(tmln.snc) s;
     let r = bar_impl(f.y_gpu);
+    @in { input: node(tmln.snc2) };
     r
 }
 
-fn bar_impl(x: i32 @ node(tmln.snc)) -> i32 @ node(tmln.snc2) impls foo_time, foo_space, bar {
+fn bar_impl(x: i32 @ node(tmln.snc)) -> i32 impls foo_time, foo_space, bar {
     @in { input: node(tmln.snc) };
     let e = encode-begin gpu;
     var x = x;
@@ -63,6 +64,7 @@ fn bar_impl(x: i32 @ node(tmln.snc)) -> i32 @ node(tmln.snc2) impls foo_time, fo
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let s = submit e;
     let f = await s;
+    @out { input: node(tmln.snc2), output: node(tmln.snc2) };
     f.y_gpu
 }
 

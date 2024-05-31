@@ -38,6 +38,10 @@ impl BasicBlock {
     pub fn get_starting_info(&self) -> Info {
         self.stmts.first().map_or(self.src_loc, Hir::get_info)
     }
+
+    pub fn get_final_info(&self) -> Info {
+        self.terminator.get_info()
+    }
 }
 
 /// An edge in the CFG

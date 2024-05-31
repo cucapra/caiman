@@ -744,6 +744,8 @@ pub struct Context {
     pub user_types: HashMap<String, FlaggedType>,
     /// Map from class name to the class's dimensions (number of value template arguments)
     pub class_dimensions: HashMap<String, usize>,
+    /// The set of spec classes which are called from another spec.
+    pub called_specs: HashSet<String>,
 }
 
 /// A typed binary operation.

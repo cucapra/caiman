@@ -7,6 +7,7 @@ use crate::{
     error::{Info, LocalError},
     lower::{
         sched_hir::{
+            analysis::{analyze, InOutFacts, LiveVars},
             cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
             Hir, HirBody, HirFuncCall, Terminator, TripleTag,
         },
@@ -61,9 +62,18 @@ pub fn deduce_tmln_quots(
         info,
         num_dims,
     )?;
+    let is_called = true; //ctx.called_specs.contains(&spec_info.feq);
     let (env, implicit_events) = unify_nodes(cfg, &spec_info.sig.input[0].0, dtypes, ctx, env)?;
-    fill_io_tags(inputs, outputs, output_dtypes, &env, &implicit_events);
-    fill_tmln_tags(cfg, &env, &implicit_events);
+    fill_io_tags(
+        inputs,
+        outputs,
+        output_dtypes,
+        &env,
+        &implicit_events,
+        is_called,
+    );
+    let live_vars = analyze(cfg, &LiveVars::top());
+    fill_tmln_tags(cfg, &env, &implicit_events, &live_vars, dtypes, is_called);
     add_implicit_annotations(cfg, &implicit_events);
     Ok(())
 }
@@ -221,17 +231,26 @@ fn into_input_output_annotations(
         };
         in_ev.timeline.quot_var.spec_var = Some(
             env.get_node_name(&format!("{LOCAL_STEM}{}", events.first().unwrap()))
-                .unwrap(),
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{}: Need annotation for implicit in",
+                        cfg.blocks[block].get_starting_info()
+                    )
+                }),
         );
         let mut out_ev = TripleTag::new_unspecified();
+        let out_block = cfg.get_continuation_output_block(*block);
         out_ev.timeline.quot_var.spec_var = Some(
             env.get_node_name(&format!(
                 "{LOCAL_STEM}{}",
-                first_last_events[&cfg.get_continuation_output_block(*block)]
-                    .last()
-                    .unwrap()
+                first_last_events[&out_block].last().unwrap()
             ))
-            .unwrap(),
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}: Need annotation for implicit out",
+                    cfg.blocks[&out_block].get_final_info()
+                )
+            }),
         );
         out_ev.timeline.quot = Some(Quotient::Node);
         res.insert(*block, (in_ev, out_ev, events.clone()));
@@ -435,8 +454,8 @@ fn unify_instrs(
             // ignore device copy since that's just part of the begin encoding event
             HirBody::Op { .. }
             | HirBody::Phi { .. }
-            | HirBody::DeviceCopy { .. }
             | HirBody::EncodeDo { .. }
+            | HirBody::DeviceCopy { .. }
             | HirBody::Hole { .. } => env,
         };
         local_events.push(*last_loc);
@@ -855,12 +874,21 @@ fn add_io_constraints(
     Ok(env)
 }
 
+/// Fills timeline tags for the inputs and outputs of a function.
+/// # Arguments
+/// * `inputs` - The inputs of the function
+/// * `outputs` - The output tags of the function
+/// * `output_dtypes` - The data types of the outputs
+/// * `env` - The current environment
+/// * `event_info` - The implicit input and output events for each funclet
+/// * `fill_non_tmln` - Whether to fill in non-timeline tags with the last local event
 fn fill_io_tags(
     inputs: &mut [(String, TripleTag)],
     outputs: &mut [TripleTag],
     output_dtypes: &[DataType],
     env: &NodeEnv,
     event_info: &InOutEvents,
+    fill_non_tmln: bool,
 ) {
     // the io has already been expanded, so we need to carry over the annotations
     // for fences and encoders
@@ -870,12 +898,14 @@ fn fill_io_tags(
             let record_name = name.split("::").next().unwrap();
             fill_tmln_quotient(record_name, tag, env, START_BLOCK_ID);
         }
-        add_tmln_quotient(
-            &event_info.get_implicit_in_name(START_BLOCK_ID),
-            tag,
-            env,
-            START_BLOCK_ID,
-        );
+        if fill_non_tmln {
+            add_tmln_quotient(
+                &event_info.get_implicit_in_name(START_BLOCK_ID),
+                tag,
+                env,
+                START_BLOCK_ID,
+            );
+        }
     }
     // output_class[0] is the implicit out
     let output_classes = env.get_function_output_classes().to_vec();
@@ -923,7 +953,7 @@ fn fill_io_tags(
                 env,
                 START_BLOCK_ID,
             );
-        } else {
+        } else if fill_non_tmln {
             add_tmln_quotient(&implicit_out, tag, env, FINAL_BLOCK_ID);
         }
     }
@@ -991,7 +1021,16 @@ fn unify_decl(
 }
 
 /// Inserts timeline tags into each instruction
-fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
+fn fill_tmln_tags(
+    cfg: &mut Cfg,
+    env: &NodeEnv,
+    implicit_events: &InOutEvents,
+    live_vars: &InOutFacts<LiveVars>,
+    dtypes: &HashMap<String, DataType>,
+    fill_non_tmln: bool,
+) {
+    // insertion index, var name, info, metavar name, block id of new in annotations
+    let mut new_in_annots = Vec::new();
     for block in cfg.blocks.values_mut() {
         for (instr_id, stmt) in block.stmts.iter_mut().enumerate() {
             let local_event = implicit_events.get_local_name_after_instr(block.id, instr_id);
@@ -1000,8 +1039,8 @@ fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
                 | HirBody::VarDecl { lhs_tag, .. }
                 | HirBody::RefStore {
                     lhs_tags: lhs_tag, ..
-                } => add_tmln_quotient(&local_event, lhs_tag, env, block.id),
-                HirBody::Op { dests, .. } => {
+                } if fill_non_tmln => add_tmln_quotient(&local_event, lhs_tag, env, block.id),
+                HirBody::Op { dests, .. } if fill_non_tmln => {
                     for (_, t) in dests {
                         add_tmln_quotient(&local_event, t, env, block.id);
                     }
@@ -1025,6 +1064,12 @@ fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
                     fill_tmln_quotient(&nm, &mut dests.initial_mut().1, env, block.id);
                 }
                 HirBody::Phi { .. } => unreachable!(),
+                HirBody::DeviceCopy {
+                    src, info, encoder, ..
+                } => {
+                    // make sure the source can be used here
+                    new_in_annots.push((instr_id, src.clone(), *info, encoder.clone(), block.id));
+                }
                 _ => {}
             }
         }
@@ -1033,7 +1078,9 @@ fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
             Terminator::Call(dests, call, ..) => {
                 for (dest, tag) in dests.iter_mut() {
                     fill_tmln_quotient(dest, tag, env, block.id);
-                    add_tmln_quotient(&local_event, tag, env, block.id);
+                    if fill_non_tmln {
+                        add_tmln_quotient(&local_event, tag, env, block.id);
+                    }
                 }
                 fill_tmln_quotient(
                     &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
@@ -1042,12 +1089,6 @@ fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
                     block.id,
                 );
             }
-            // Terminator::Return { dests, .. } => {
-            //     for (dest, tag) in dests {
-            //         fill_tmln_quotient(dest, tag, env, block.id);
-            //         add_tmln_quotient(&local_event, tag, env, block.id);
-            //     }
-            // }
             Terminator::CaptureCall { .. } => unreachable!(),
             Terminator::Next(..)
             | Terminator::Select { .. }
@@ -1057,6 +1098,83 @@ fn fill_tmln_tags(cfg: &mut Cfg, env: &NodeEnv, implicit_events: &InOutEvents) {
             | Terminator::Yield(..) => {}
         }
     }
+
+    for (idx, src, info, event_name, block_id) in new_in_annots {
+        let mut t = TripleTag::new_unspecified();
+        add_tmln_quotient(&event_name, &mut t, env, block_id);
+        let annot = HirBody::InAnnotation(info, vec![(src, TripleTag::new_unspecified())]);
+        // cfg.blocks
+        //     .get_mut(&block_id)
+        //     .unwrap()
+        //     .stmts
+        //     .insert(idx, annot);
+    }
+
+    if fill_non_tmln {
+        // collect so we don't borrow
+        #[allow(clippy::needless_collect)]
+        for block in cfg.graph.keys().copied().collect::<Vec<_>>() {
+            fill_local_in_annotations(
+                block,
+                live_vars,
+                dtypes,
+                &implicit_events.get_implicit_in_name(block),
+                cfg,
+                env,
+            );
+        }
+    }
+}
+
+/// Adds an annotation for all non-timeline live-ins to have a quotient matching the
+/// current local event.
+fn fill_local_in_annotations(
+    block: usize,
+    live_vars: &InOutFacts<LiveVars>,
+    dtypes: &HashMap<String, DataType>,
+    last_loc: &str,
+    cfg: &mut Cfg,
+    env: &NodeEnv,
+) {
+    let preds = cfg.predecessors(block);
+    // hash sets can be viewed in debugger more easily
+    let mut live_ins: std::collections::HashSet<_> = live_vars
+        .get_in_fact(block)
+        .live_set
+        .iter()
+        .cloned()
+        .chain(
+            preds
+                .iter()
+                .flat_map(|b| live_vars.get_out_fact(*b).live_set.iter().cloned()),
+        )
+        .collect();
+    for term_dest in preds
+        .iter()
+        .filter_map(|b| cfg.blocks[b].terminator.get_defs())
+        .flatten()
+    {
+        live_ins.remove(&term_dest);
+    }
+    let mut annots = Vec::new();
+    for live_in in live_ins {
+        if let Some(dt) = &dtypes.get(&live_in) {
+            if !is_timeline_dtype(dt)
+                && (!live_in.contains("::")
+                    || !is_timeline_dtype(&dtypes[live_in.split("::").next().unwrap()]))
+            {
+                let mut tag = TripleTag::new_unspecified();
+                add_tmln_quotient(last_loc, &mut tag, env, block);
+                annots.push((live_in, tag));
+            }
+        }
+    }
+    let starting_info = cfg.blocks[&block].get_starting_info();
+    cfg.blocks
+        .get_mut(&block)
+        .unwrap()
+        .stmts
+        .insert(0, HirBody::InAnnotation(starting_info, annots));
 }
 
 /// Overwrites the tag with the class of the given meta variable

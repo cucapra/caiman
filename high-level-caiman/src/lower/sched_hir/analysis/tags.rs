@@ -280,7 +280,14 @@ impl TagAnalysis {
             HirBody::InAnnotation(_, tags) => {
                 for (v, tag) in tags {
                     let mut annotate = |v: &String| {
-                        self.input_overrides.insert(v.clone(), tag.clone());
+                        match self.input_overrides.entry(v.clone()) {
+                            Entry::Occupied(mut entry) => {
+                                entry.get_mut().set_specified_info(tag.clone());
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(tag.clone());
+                            }
+                        }
                         match self.tags.entry(v.clone()) {
                             Entry::Occupied(mut entry) => {
                                 entry.get_mut().set_specified_info(tag.clone());

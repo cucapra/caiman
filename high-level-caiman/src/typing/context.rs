@@ -213,12 +213,14 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
                     for (name, typ) in &funclet.input {
                         spec.types.insert(name.clone(), typ.clone());
                     }
-                    existing_externs.extend(collect_spec(
+                    let (externs, callees) = collect_spec(
                         &funclet.statements,
                         spec,
                         &ctx.signatures,
                         &ctx.class_dimensions,
-                    )?);
+                    )?;
+                    existing_externs.extend(externs);
+                    ctx.called_specs.extend(callees);
                 }
             }
         }
@@ -723,6 +725,7 @@ impl Context {
             externs: HashSet::new(),
             user_types: collect_user_defined_types(tl),
             class_dimensions: HashMap::new(),
+            called_specs: HashSet::new(),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;

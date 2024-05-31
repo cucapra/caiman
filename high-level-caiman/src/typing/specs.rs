@@ -169,7 +169,7 @@ fn collect_spec_assign_call(
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
     info: Info,
-) -> Result<(), LocalError> {
+) -> Result<String, LocalError> {
     if let SpecExpr::Term(SpecTerm::Var {
         name: func_name, ..
     }) = function
@@ -234,7 +234,7 @@ fn collect_spec_assign_call(
             ctx.types
                 .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
         }
-        Ok(())
+        Ok(func_name.clone())
     } else {
         panic!("Not lowered")
     }
@@ -250,6 +250,7 @@ fn collect_spec_assign_term(
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
+    called_specs: &mut HashSet<String>,
 ) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
@@ -285,9 +286,13 @@ fn collect_spec_assign_term(
             templates,
             info,
             ..
-        } => collect_spec_assign_call(
-            lhs, function, args, templates, ctx, signatures, dimensions, *info,
-        ),
+        } => {
+            let r = collect_spec_assign_call(
+                lhs, function, args, templates, ctx, signatures, dimensions, *info,
+            )?;
+            called_specs.insert(r);
+            Ok(())
+        }
     }
 }
 
@@ -533,16 +538,24 @@ pub(super) fn collect_spec(
     ctx: &mut SpecInfo,
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
-) -> Result<HashSet<TypedBinop>, LocalError> {
+) -> Result<(HashSet<TypedBinop>, HashSet<String>), LocalError> {
     let mut unresolved_externs = HashSet::new();
     let names = collect_spec_names(stmts, ctx)?;
     let mut env = SpecEnvs::new();
+    let mut called_specs = HashSet::new();
     collect_spec_sig(&mut env, ctx)?;
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, rhs, .. } => match rhs {
                 SpecExpr::Term(t) => {
-                    collect_spec_assign_term(t, lhs, &mut env, signatures, dimensions)?;
+                    collect_spec_assign_term(
+                        t,
+                        lhs,
+                        &mut env,
+                        signatures,
+                        dimensions,
+                        &mut called_specs,
+                    )?;
                 }
                 SpecExpr::Conditional {
                     if_true,
@@ -572,13 +585,16 @@ pub(super) fn collect_spec(
     }
     resolve_types(&env.types, &names, ctx)?;
     ctx.nodes = env.nodes;
-    Ok(unresolved_externs
-        .into_iter()
-        .map(|u| TypedBinop {
-            op: u.op,
-            op_l: ctx.types[&u.op_l].clone(),
-            op_r: ctx.types[&u.op_r].clone(),
-            ret: ctx.types[&u.ret].clone(),
-        })
-        .collect::<HashSet<_>>())
+    Ok((
+        unresolved_externs
+            .into_iter()
+            .map(|u| TypedBinop {
+                op: u.op,
+                op_l: ctx.types[&u.op_l].clone(),
+                op_r: ctx.types[&u.op_r].clone(),
+                ret: ctx.types[&u.ret].clone(),
+            })
+            .collect::<HashSet<_>>(),
+        called_specs,
+    ))
 }

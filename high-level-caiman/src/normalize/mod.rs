@@ -34,9 +34,14 @@ pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
             }
             TopLevel::FunctionClass { members, .. } => {
                 for member in members {
-                    if let ClassMembers::ValueFunclet(SpecFunclet { statements, .. }) = member {
-                        let stmts = std::mem::take(statements);
-                        *statements = flatten_spec(stmts);
+                    match member {
+                        ClassMembers::ValueFunclet(SpecFunclet { statements, .. })
+                        | ClassMembers::TimelineFunclet(SpecFunclet { statements, .. })
+                        | ClassMembers::SpatialFunclet(SpecFunclet { statements, .. }) => {
+                            let stmts = std::mem::take(statements);
+                            *statements = flatten_spec(stmts);
+                        }
+                        ClassMembers::Extern { .. } => {}
                     }
                 }
             }

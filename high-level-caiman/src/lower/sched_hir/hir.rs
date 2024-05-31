@@ -852,7 +852,14 @@ impl Hir for HirBody {
                 res.insert(encoder.clone());
             }
             Self::Sync { srcs, .. } => {
-                res.extend(srcs.processed().iter().cloned());
+                match srcs {
+                    FillIn::Initial(name) => {
+                        res.insert(name.clone());
+                    }
+                    FillIn::Processed(srcs) => {
+                        res.extend(srcs.iter().cloned());
+                    }
+                }
             }
             
         }
@@ -889,7 +896,10 @@ impl Hir for HirBody {
                 
             }
             Self::Submit { dest, ..} => Some(vec![dest.clone()]),
-            Self::Sync { dests, .. } => Some(dests.processed().iter().map(|(name, _)| name.clone()).collect()),
+            Self::Sync { dests, .. } => match dests {
+                FillIn::Initial((name, _)) => Some(vec![name.clone()]),
+                FillIn::Processed(dests) => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
+            }
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
             Self::Hole(..)
@@ -925,8 +935,15 @@ impl Hir for HirBody {
                 
             }
             Self::Sync { dests, ..} => {
-                for (name, _) in dests.processed_mut() {
-                    *name = f(name);
+                match dests {
+                    FillIn::Initial((name, _)) => {
+                        *name = f(name);
+                    }
+                    FillIn::Processed(dests) => {
+                        for (name, _) in dests {
+                            *name = f(name);
+                        }
+                    }
                 }
             }
             Self::Hole(..)
@@ -978,8 +995,15 @@ impl Hir for HirBody {
                 *encoder = f(encoder, UseType::Read);
             }
             Self::Sync { srcs, ..} => {
-                for src in srcs.processed_mut() {
-                    *src = f(src, UseType::Read);
+                match srcs {
+                    FillIn::Initial(src) => {
+                        *src = f(src, UseType::Read);
+                    }
+                    FillIn::Processed(srcs) => {
+                        for src in srcs {
+                            *src = f(src, UseType::Read);
+                        }
+                    }
                 }
             }
             Self::Hole(..)

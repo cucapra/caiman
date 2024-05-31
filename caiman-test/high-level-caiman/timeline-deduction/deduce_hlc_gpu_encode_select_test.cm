@@ -59,9 +59,11 @@ fn foo_impl(x: &i32, b: bool) -> i32 impls space, foo_time, foo {
     let e = encode-begin gpu;
     encode e.copy[x_gpu <- x];
     let f = if b {
+        // @in { e: none(val) };
         encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
         submit e
     } else {
+        // @in { e: none(val) };
         encode e.call[y_gpu <- simple2'<1, 1, 1>(x_gpu)];
         submit e
     };

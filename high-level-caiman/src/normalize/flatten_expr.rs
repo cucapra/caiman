@@ -923,8 +923,8 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                     is_const,
                 });
             }
-            SchedStmt::Call(..) => {
-                todo!()
+            SchedStmt::Call(info, _) => {
+                todo!("{info}: Non returning calls not implemented yet")
             }
             SchedStmt::Encode {
                 info,

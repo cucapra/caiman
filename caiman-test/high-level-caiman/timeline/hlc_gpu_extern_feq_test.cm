@@ -38,13 +38,18 @@ val foo(x: i32) -> i32 {
 }
 
 tmln foo_time(e: Event) -> Event {
+    returns simple_time(e)
+}
+
+tmln simple_time(e: Event) -> Event {
     returns e
+
 }
 
 sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
 
 fn simple_impl(x: &i32) -> i32 
-    impls simple_loc, foo_time, foo_space
+    impls simple_loc, simple_time, foo_space
 {
     // every function that implements a spec with dimensional arguments
     // must be supplied them when called and have access to them via
