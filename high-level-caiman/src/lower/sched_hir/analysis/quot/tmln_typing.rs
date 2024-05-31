@@ -442,8 +442,15 @@ fn unify_instrs(
                 tags,
                 info,
             } => unify_sync(
-                &dests.initial().0,
-                srcs.initial(),
+                &tuple_id(
+                    &dests
+                        .processed()
+                        .iter()
+                        .map(|x| x.0.clone())
+                        .collect::<Vec<_>>(),
+                ),
+                // fence source is the first source
+                &srcs.processed()[0],
                 tags,
                 *info,
                 env,
@@ -489,17 +496,18 @@ fn unify_terminator(
     implicit_annotations: &mut ImplicitAnnotations,
 ) -> Result<NodeEnv, LocalError> {
     match &bb.terminator {
-        Terminator::CaptureCall { .. } => unreachable!(),
-        Terminator::Call(dests, call, ..) => unify_call(
-            dests,
-            call,
-            &cfg.blocks[&cfg.graph[&bb.id].next().unwrap()],
-            env,
-            last_loc,
-            latest_loc,
-            ctx,
-            dtypes,
-        ),
+        Terminator::CaptureCall { dests, call, .. } | Terminator::Call(dests, call, ..) => {
+            unify_call(
+                dests,
+                call,
+                &cfg.blocks[&cfg.graph[&bb.id].next().unwrap()],
+                env,
+                last_loc,
+                latest_loc,
+                ctx,
+                dtypes,
+            )
+        }
         Terminator::Return {
             dests, rets, info, ..
         } => {
@@ -1048,20 +1056,39 @@ fn fill_tmln_tags(
                 HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
                     for (name, tag) in tags {
                         fill_tmln_quotient(name, tag, env, block.id);
-                        // add_tmln_quotient(&local_event, tag, env, block.id);
+                        if name.contains("::") {
+                            let record_name = name.split("::").next().unwrap();
+                            add_tmln_quotient(record_name, tag, env, block.id);
+                        }
                     }
                 }
-                HirBody::BeginEncoding { encoder, tags, .. } => {
+                HirBody::BeginEncoding {
+                    encoder,
+                    tags,
+                    device_vars,
+                    ..
+                } => {
                     fill_tmln_quotient(&tuple_id(&[encoder.0.clone()]), tags, env, block.id);
                     fill_tmln_quotient(&encoder.0, &mut encoder.1, env, block.id);
+                    for (_, dtag) in device_vars.iter_mut() {
+                        fill_tmln_quotient(&encoder.0, dtag, env, block.id);
+                    }
                 }
                 HirBody::Submit { dest, tags, .. } => {
                     fill_tmln_quotient(dest, tags, env, block.id);
                 }
                 HirBody::Sync { dests, tags, .. } => {
-                    let nm = dests.initial().0.clone();
+                    let nm = tuple_id(
+                        &dests
+                            .processed()
+                            .iter()
+                            .map(|(n, _)| n.clone())
+                            .collect::<Vec<_>>(),
+                    );
                     fill_tmln_quotient(&nm, tags, env, block.id);
-                    fill_tmln_quotient(&nm, &mut dests.initial_mut().1, env, block.id);
+                    for (_, dest_tag) in dests.processed_mut() {
+                        add_tmln_quotient(&nm, dest_tag, env, block.id);
+                    }
                 }
                 HirBody::Phi { .. } => unreachable!(),
                 HirBody::DeviceCopy {
@@ -1073,32 +1100,8 @@ fn fill_tmln_tags(
                 _ => {}
             }
         }
-        let local_event = implicit_events.get_local_name_after_instr(block.id, block.stmts.len());
-        match &mut block.terminator {
-            Terminator::Call(dests, call, ..) => {
-                for (dest, tag) in dests.iter_mut() {
-                    fill_tmln_quotient(dest, tag, env, block.id);
-                    if fill_non_tmln {
-                        add_tmln_quotient(&local_event, tag, env, block.id);
-                    }
-                }
-                fill_tmln_quotient(
-                    &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
-                    &mut call.tag,
-                    env,
-                    block.id,
-                );
-            }
-            Terminator::CaptureCall { .. } => unreachable!(),
-            Terminator::Next(..)
-            | Terminator::Select { .. }
-            | Terminator::None(_)
-            | Terminator::FinalReturn(..)
-            | Terminator::Return { .. }
-            | Terminator::Yield(..) => {}
-        }
+        fill_terminator_tags(block, env, implicit_events, fill_non_tmln);
     }
-
     for (idx, src, info, event_name, block_id) in new_in_annots {
         let mut t = TripleTag::new_unspecified();
         add_tmln_quotient(&event_name, &mut t, env, block_id);
@@ -1123,6 +1126,41 @@ fn fill_tmln_tags(
                 env,
             );
         }
+    }
+}
+
+fn fill_terminator_tags(
+    block: &mut BasicBlock,
+    env: &NodeEnv,
+    implicit_events: &InOutEvents,
+    fill_non_tmln: bool,
+) {
+    let local_event = implicit_events.get_local_name_after_instr(block.id, block.stmts.len());
+    match &mut block.terminator {
+        Terminator::CaptureCall { dests, call, .. } | Terminator::Call(dests, call, ..) => {
+            for (dest, tag) in dests.iter_mut() {
+                fill_tmln_quotient(dest, tag, env, block.id);
+                if dest.contains("::") {
+                    let record_name = dest.split("::").next().unwrap();
+                    add_tmln_quotient(record_name, tag, env, block.id);
+                }
+                if fill_non_tmln {
+                    add_tmln_quotient(&local_event, tag, env, block.id);
+                }
+            }
+            fill_tmln_quotient(
+                &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                &mut call.tag,
+                env,
+                block.id,
+            );
+        }
+        Terminator::Next(..)
+        | Terminator::Select { .. }
+        | Terminator::None(_)
+        | Terminator::FinalReturn(..)
+        | Terminator::Return { .. }
+        | Terminator::Yield(..) => {}
     }
 }
 

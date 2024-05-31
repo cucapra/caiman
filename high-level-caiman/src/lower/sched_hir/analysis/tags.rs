@@ -3,9 +3,9 @@ use std::rc::Rc;
 
 use caiman::ir;
 
-use crate::lower::{
-    sched_hir::{cfg::START_BLOCK_ID, HirBody, HirFuncCall, HirInstr, Terminator, TripleTag},
-    IN_STEM,
+use crate::lower::sched_hir::cfg::FINAL_BLOCK_ID;
+use crate::lower::sched_hir::{
+    cfg::START_BLOCK_ID, HirBody, HirFuncCall, HirInstr, Terminator, TripleTag,
 };
 use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SpecType, Tag};
 
@@ -61,7 +61,7 @@ fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
 /// Tag analysis for determining tags
 /// Top: empty set
 /// Meet: union
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct TagAnalysis {
     tags: HashMap<String, TripleTag>,
@@ -69,11 +69,21 @@ pub struct TagAnalysis {
     input_overrides: HashMap<String, TripleTag>,
     data_types: Rc<HashMap<String, DataType>>,
     flags: Rc<HashMap<String, ir::BufferFlags>>,
+    out_tags: Option<Rc<HashMap<String, TripleTag>>>,
 }
 
 impl PartialEq for TagAnalysis {
     fn eq(&self, other: &Self) -> bool {
         self.tags == other.tags && self.input_overrides == other.input_overrides
+    }
+}
+
+impl std::fmt::Debug for TagAnalysis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TagAnalysis")
+            .field("tags", &self.tags)
+            .field("input_overrides", &self.input_overrides)
+            .finish()
     }
 }
 
@@ -95,11 +105,11 @@ impl TagAnalysis {
     ) {
         for i in 0..num_dims {
             let mut t = TripleTag::new_none_usable();
-            t.value.quot = Some(Quotient::Node);
+            t.value.quot = Some(Quotient::Input);
             t.value.quot_var.spec_var = Some(format!("_dim{i}"));
             tags.insert(format!("_dim{i}"), t.clone());
-            t.value.quot = Some(Quotient::Input);
-            tags.insert(format!("{IN_STEM}_dim{i}"), t);
+            //t.value.quot = Some(Quotient::Input);
+            //tags.insert(format!("{IN_STEM}_dim{i}"), t);
         }
         for (arg_name, arg_type) in input {
             let mut tg = arg_type.clone();
@@ -117,15 +127,10 @@ impl TagAnalysis {
                 }
             }
             let mut in_tg = override_none_usable(tg, &data_types[arg_name], flags.get(arg_name));
-            let mut node_tg = in_tg.clone();
             if in_tg.value.quot.is_none() {
                 in_tg.value.quot = Some(Quotient::Input);
             }
-            if matches!(node_tg.value.quot, Some(Quotient::Input) | None) {
-                node_tg.value.quot = Some(Quotient::Node);
-            }
-            tags.insert(format!("{IN_STEM}{arg_name}"), in_tg);
-            tags.insert(arg_name.clone(), node_tg);
+            tags.insert(arg_name.clone(), in_tg);
         }
     }
     /// Constructs a new top element
@@ -137,23 +142,18 @@ impl TagAnalysis {
         num_dims: usize,
     ) -> Self {
         // create tags for outputs
-        let mut tags = HashMap::new();
+        let mut out_tags = HashMap::new();
         for (out_idx, out_type) in out.iter().enumerate() {
-            tags.insert(
-                format!("{RET_VAR}{out_idx}"),
-                override_none_usable(
-                    out_type.clone(),
-                    &data_types[&format!("{RET_VAR}{out_idx}")],
-                    flags.get(&format!("{RET_VAR}{out_idx}")),
-                ),
-            );
+            out_tags.insert(format!("{RET_VAR}{out_idx}"), out_type.clone());
         }
+        let mut tags = HashMap::new();
         Self::get_input_tags(&mut tags, data_types, flags, input, num_dims);
         Self {
             tags,
             input_overrides: HashMap::new(),
             data_types: Rc::new(data_types.clone()),
             flags: Rc::new(flags.clone()),
+            out_tags: Some(Rc::new(out_tags)),
         }
     }
 
@@ -171,9 +171,37 @@ impl TagAnalysis {
 }
 
 impl TagAnalysis {
+    /// Special processing for the start and final blocks
+    fn special_process_block(&mut self, block_id: usize) {
+        use std::collections::hash_map::Entry;
+        if block_id == START_BLOCK_ID {
+            // the first instruction of the input block effectively turns
+            // all input tags into nodes
+            for v in self.tags.values_mut() {
+                *v = input_to_node(v.clone());
+            }
+        } else if block_id == FINAL_BLOCK_ID {
+            // the final block adds in the output tags
+            // output tags are defined in the final return instruction,
+            // but we set the new types as the types of these will
+            // change in the final basic block
+            if let Some(out_tags) = self.out_tags.take() {
+                for (k, v) in out_tags.iter() {
+                    match self.tags.entry(k.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().set_specified_info(v.clone());
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(v.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
     /// Transfer function for an HIR body statement
     #[allow(clippy::too_many_lines)]
-    fn transfer_stmt(&mut self, stmt: &mut HirBody, block_id: usize) {
+    fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl {
@@ -298,9 +326,6 @@ impl TagAnalysis {
                         }
                     };
                     annotate(v);
-                    if block_id == START_BLOCK_ID {
-                        annotate(&format!("{IN_STEM}{v}"));
-                    }
                 }
             }
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
@@ -375,34 +400,38 @@ fn tag_conflict(t: &TripleTag, other: &TripleTag) -> bool {
         || matches!((t.timeline.flow, other.timeline.flow), (Some(x), Some(y)) if  x != y)
 }
 
+/// Converts all input tags to node tags
+fn input_to_node(mut t: TripleTag) -> TripleTag {
+    if t.value.quot == Some(Quotient::Input) {
+        t.value.quot = Some(Quotient::Node);
+    }
+    if t.timeline.quot == Some(Quotient::Input) {
+        t.timeline.quot = Some(Quotient::Node);
+    }
+    if t.spatial.quot == Some(Quotient::Input) {
+        t.spatial.quot = Some(Quotient::Node);
+    }
+    t
+}
+
 impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
-            let contains = self.tags.contains_key(&format!("{IN_STEM}{k}"));
+            let v = input_to_node(v.clone());
             match self.tags.entry(k.to_string()) {
                 Entry::Occupied(mut old_v) => {
-                    if old_v.get() != v {
+                    if old_v.get() != &v {
                         old_v.get_mut().override_unknown_info(v.clone());
-                        if tag_conflict(old_v.get(), v) {
-                            // TODO: the problem is that _out is used to identify the
-                            // return value, which might change types in the last
-                            // funclet. To avoid overriding the final output type,
-                            // we don't do anything when it meets with a different value
-
-                            // we allow conflicts with outputs, and inputs
-                            assert!(
-                                k.starts_with("_out") || k.starts_with(IN_STEM) || contains,
-                                "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
-                                old_v.get(),
-                            );
-                        }
-                        // TODO: we assume quotient node names are solved and don't worry
-                        // about those conflicts
+                        assert!(
+                            !tag_conflict(old_v.get(), &v),
+                            "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
+                            old_v.get(),
+                        );
                     }
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(v.clone());
+                    entry.insert(v);
                 }
             }
         }
@@ -410,6 +439,7 @@ impl Fact for TagAnalysis {
     }
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize) {
+        self.special_process_block(block_id);
         match stmt {
             HirInstr::Tail(Terminator::Select { dests, tag, .. }) => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
@@ -465,7 +495,7 @@ impl Fact for TagAnalysis {
                 | Terminator::Yield(..),
             ) => (),
             HirInstr::Tail(Terminator::Call(..)) => panic!("Call should be eliminated"),
-            HirInstr::Stmt(stmt) => self.transfer_stmt(stmt, block_id),
+            HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }
 

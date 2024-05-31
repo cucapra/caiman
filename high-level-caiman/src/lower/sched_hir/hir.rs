@@ -187,6 +187,7 @@ impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn initial_mut(&mut self) -> &mut T {
         match self {
             Self::Initial(t) => t,

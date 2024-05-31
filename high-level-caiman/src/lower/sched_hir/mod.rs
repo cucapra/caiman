@@ -12,7 +12,6 @@ pub use hir::*;
 
 use crate::{
     error::LocalError,
-    lower::IN_STEM,
     parse::ast::{DataType, FlaggedType, FullType, IntSize, SchedulingFunc},
     typing::{
         Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
@@ -222,23 +221,21 @@ impl<'a> Funclet<'a> {
         let template_args = (0..self.num_dims()).map(|i| asm::FuncletArgument {
             name: Some(asm::NodeId(format!("_dim{i}"))),
             typ: DataType::Int(IntSize::I32).asm_type(),
-            tags: self
-                .get_input_tag(&format!("{IN_STEM}_dim{i}"))
-                .unwrap()
-                .tags_vec(),
+            tags: self.get_input_tag(&format!("_dim{i}")).unwrap().tags_vec(),
         });
         // add on all other input arguments
         template_args
-            .chain(self.parent.finfo.input.iter().map(|(name, _)| {
-                asm::FuncletArgument {
-                    name: Some(asm::NodeId(name.clone())),
-                    typ: self.get_asm_type(name).unwrap(),
-                    tags: self
-                        .get_input_tag(&format!("{IN_STEM}{name}"))
-                        .unwrap()
-                        .tags_vec(),
-                }
-            }))
+            .chain(
+                self.parent
+                    .finfo
+                    .input
+                    .iter()
+                    .map(|(name, _)| asm::FuncletArgument {
+                        name: Some(asm::NodeId(name.clone())),
+                        typ: self.get_asm_type(name).unwrap(),
+                        tags: self.get_input_tag(name).unwrap().tags_vec(),
+                    }),
+            )
             .collect()
     }
 
@@ -595,17 +592,6 @@ impl Funclets {
             .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
             .collect();
         let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
-        deduce_tmln_quots(
-            &mut hir_inputs,
-            &mut hir_outputs,
-            &output_dtypes,
-            &mut cfg,
-            &ctx.specs[&specs.timeline.0],
-            ctx,
-            &data_types,
-            f.info,
-            num_dims,
-        )?;
 
         transform_encode_pass(&mut cfg, &data_types, ctx, &f.output);
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
@@ -615,6 +601,17 @@ impl Funclets {
         let specs_rc = Rc::new(specs.clone());
 
         if !no_inference {
+            deduce_tmln_quots(
+                &mut hir_inputs,
+                &mut hir_outputs,
+                &output_dtypes,
+                &mut cfg,
+                &ctx.specs[&specs.timeline.0],
+                ctx,
+                &data_types,
+                f.info,
+                num_dims,
+            )?;
             cfg = transform_to_ssa(cfg, &live_vars);
 
             deduce_val_quots(
@@ -630,7 +627,7 @@ impl Funclets {
 
             cfg = transform_out_ssa(cfg);
         }
-        let type_info = analyze(
+        let type_info = bft_transform(
             &mut cfg,
             &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
         );
