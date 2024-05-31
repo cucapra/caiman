@@ -1,0 +1,37 @@
+// implements:
+// main() -> i64 {
+//   return 4
+// }
+
+version 0.0.2
+
+ffi i64;
+event %event0;
+buffer_space %buffspace;
+native_value %i64 : i64;
+
+function @main() -> %i64;
+
+value[impl default @main] %value() -> %i64 {
+    %x = constant %i64 4;
+    return %x;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
+%foo<$time-usable, $time-usable>() ->
+[%out : $val.%x-usable $time-usable $space-usable %i64] {
+    %x_ref = alloc-temporary local [] i64;
+    ???;
+    %result = read-ref i64 %x_ref;
+    return %result;
+}
+
+pipeline "main" = %foo;
