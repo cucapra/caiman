@@ -1,3 +1,7 @@
+//! Builds a cfg from the AST. The CFG will have a unique start and end block,
+//! and be constructed in breadth-first order so that every block knows
+//! its continuation when its constructed.
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
@@ -9,7 +13,7 @@ use crate::{
 
 use super::{
     analysis::{compute_continuations, Succs},
-    stmts_to_hir, HirBody, HirFuncCall, Terminator, TripleTag,
+    stmts_to_hir, Hir, HirBody, HirFuncCall, Terminator, TripleTag,
 };
 
 /// The id of the final block of the canonicalized CFG.
@@ -33,6 +37,17 @@ pub struct BasicBlock {
     pub src_loc: Info,
 }
 
+impl BasicBlock {
+    /// Gets the source location of the first statement in the block
+    pub fn get_starting_info(&self) -> Info {
+        self.stmts.first().map_or(self.src_loc, Hir::get_info)
+    }
+
+    pub fn get_final_info(&self) -> Info {
+        self.terminator.get_info()
+    }
+}
+
 /// An edge in the CFG
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Edge {
@@ -54,6 +69,14 @@ impl Edge {
                 false_branch,
             } => vec![*true_branch, *false_branch],
             Self::None => vec![],
+        }
+    }
+
+    /// Gets the single target of the edge, if it exists
+    pub const fn next(&self) -> Option<usize> {
+        match self {
+            Self::Next(id) => Some(*id),
+            _ => None,
         }
     }
 }
@@ -156,49 +179,46 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
                 dests,
                 block,
                 is_const,
-            } => {
-                match *block {
-                    SchedStmt::Block(_, mut stmts) => {
-                        if !stmts.is_empty()
-                            && matches!(stmts.last().as_ref().unwrap(), SchedStmt::Return(..))
-                        {
-                            // TODO: rename to avoid redeclaration of variables
-                            if let SchedStmt::Return(info, ret_expr) = stmts.pop().unwrap() {
-                                res.extend(flatten_stmts(stmts));
-                                res.push(SchedStmt::Decl {
-                                    info,
-                                    lhs: dests,
-                                    is_const,
-                                    expr: Some(ret_expr),
-                                });
-                            } else {
-                                unreachable!()
-                            }
+            } => match *block {
+                SchedStmt::Block(_, mut stmts) => {
+                    if !stmts.is_empty()
+                        && matches!(stmts.last().as_ref().unwrap(), SchedStmt::Return(..))
+                    {
+                        if let SchedStmt::Return(info, ret_expr) = stmts.pop().unwrap() {
+                            res.extend(flatten_stmts(stmts));
+                            res.push(SchedStmt::Decl {
+                                info,
+                                lhs: dests,
+                                is_const,
+                                expr: Some(ret_expr),
+                            });
                         } else {
-                            panic!("{info}: Empty block assigned to variables {dests:?}");
+                            unreachable!()
                         }
+                    } else {
+                        panic!("{info}: Empty block assigned to variables {dests:?}");
                     }
-                    SchedStmt::If {
+                }
+                SchedStmt::If {
+                    guard,
+                    tag,
+                    true_block,
+                    false_block,
+                    info: if_info,
+                } => res.push(SchedStmt::Seq {
+                    info,
+                    dests,
+                    block: Box::new(SchedStmt::If {
                         guard,
                         tag,
-                        true_block,
-                        false_block,
+                        true_block: flatten_stmts(true_block),
+                        false_block: flatten_stmts(false_block),
                         info: if_info,
-                    } => res.push(SchedStmt::Seq {
-                        info,
-                        dests,
-                        block: Box::new(SchedStmt::If {
-                            guard,
-                            tag,
-                            true_block: flatten_stmts(true_block),
-                            false_block: flatten_stmts(false_block),
-                            info: if_info,
-                        }),
-                        is_const,
                     }),
-                    _ => panic!("{info}: Sequence block is neither a Block or If"),
-                }
-            }
+                    is_const,
+                }),
+                _ => panic!("{info}: Sequence block is neither a Block or If"),
+            },
             other => res.push(other),
         }
     }
@@ -277,7 +297,6 @@ fn handle_return(
 /// * `end_info` - The source location of the select statement.
 /// * `children` - The list of pending children to add to that will queue up the
 ///  children of this block to be processed in the next BFS level.
-// TODO: cleanup
 #[allow(clippy::too_many_arguments)]
 fn handle_select(
     cur_id: &mut usize,
@@ -540,7 +559,7 @@ fn make_blocks(
                 block,
                 is_const: _,
             } => {
-                // TODO: handle variable writes
+                // TODO: handle mutable destinations
                 handle_seq(
                     block,
                     &mut cur_stmts,
@@ -754,6 +773,40 @@ impl Cfg {
         self.transpose_graph
             .get(&block_id)
             .map_or(vec![], |x| x.iter().copied().collect())
+    }
+
+    /// Return true if `block_id` is the sole predecessor of `FINAL_BLOCK_ID`.
+    pub fn is_final_return(&self, block_id: usize) -> bool {
+        let preds = self.predecessors(FINAL_BLOCK_ID);
+        preds.len() == 1 && preds.first() == Some(&block_id)
+    }
+
+    /// Gets the block id of the block whose outputs must match the given block.
+    /// The returned block is the continuation of the given block, unless the given
+    /// block returns control flow back to a parent such as the children of a
+    /// select. In this, case, the returned block is the given block.
+    ///
+    /// See also logic in `Funclets::output_vars`
+    pub fn get_continuation_output_block(&self, block_id: usize) -> usize {
+        if block_id == FINAL_BLOCK_ID {
+            return FINAL_BLOCK_ID;
+        }
+        match &self.blocks[&block_id].terminator {
+            Terminator::Call(..)
+            | Terminator::CaptureCall { .. }
+            | Terminator::Select { .. }
+            | Terminator::Yield(..) => {
+                self.get_continuation_output_block(self.blocks[&block_id].ret_block.unwrap())
+            }
+            Terminator::Return { .. } if self.is_final_return(block_id) => {
+                // final return is a jump to final basic block
+                self.get_continuation_output_block(self.blocks[&block_id].ret_block.unwrap())
+            }
+            Terminator::FinalReturn(..)
+            | Terminator::None(..)
+            | Terminator::Next(..)
+            | Terminator::Return { .. } => block_id,
+        }
     }
 
     /// Removes unreachable blocks from the CFG

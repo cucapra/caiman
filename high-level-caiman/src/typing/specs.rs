@@ -5,7 +5,8 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::tuple_id,
     parse::ast::{
-        Binop, DataType, FlaggedType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TemplateArgs,
+        Binop, DataType, FlaggedType, IntSize, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
+        TemplateArgs,
     },
 };
 
@@ -21,6 +22,12 @@ fn collect_spec_names(
     ctx: &SpecInfo,
 ) -> Result<HashSet<String>, LocalError> {
     let mut res = HashSet::new();
+    for (name, _) in &ctx.sig.input {
+        if res.contains(name) {
+            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
+        }
+        res.insert(name.clone());
+    }
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, info, .. } => {
@@ -34,11 +41,8 @@ fn collect_spec_names(
             SpecStmt::Returns(..) => (),
         }
     }
-    for (name, _) in &ctx.sig.input {
-        if res.contains(name) {
-            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
-        }
-        res.insert(name.clone());
+    for i in 0..ctx.sig.num_dims {
+        res.insert(format!("_dim{i}"));
     }
     Ok(res)
 }
@@ -119,6 +123,13 @@ fn get_target_signature(
     Ok((input_types, output_types))
 }
 
+/// Returns true if `fn_name` is the name of a builtin function which returns
+/// a single argument. If this function returns true, then `fn_name` doesn't
+/// need extract nodes
+fn is_single_return_builtin(fn_name: &str) -> bool {
+    fn_name == "sync_event" || fn_name == "submit_event"
+}
+
 /// Gets a list of arguments (regular arguments + non-type template args)
 /// to a function call.
 /// # Panics
@@ -148,6 +159,7 @@ fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Ve
 }
 
 /// Collects types and nodes for a given assignment `lhs :- function(args)`.
+#[allow(clippy::too_many_arguments)]
 fn collect_spec_assign_call(
     lhs: &[(String, Option<DataType>)],
     function: &SpecExpr,
@@ -155,8 +167,9 @@ fn collect_spec_assign_call(
     templates: &Option<TemplateArgs>,
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
+    dimensions: &HashMap<String, usize>,
     info: Info,
-) -> Result<(), LocalError> {
+) -> Result<String, LocalError> {
     if let SpecExpr::Term(SpecTerm::Var {
         name: func_name, ..
     }) = function
@@ -164,14 +177,36 @@ fn collect_spec_assign_call(
         let (input_types, output_types) =
             get_target_signature(func_name, signatures, args, lhs.len(), info)?;
         let arg_nodes = get_call_arguments(args, templates);
-        let tuple_name = tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>());
-        ctx.nodes.add_quotient(
-            &tuple_name,
-            ValQuot::Call(
-                func_name.clone(),
-                arg_nodes.iter().map(MetaVar::new_class_name).collect(),
-            ),
-        );
+        let single_ret_builtin = is_single_return_builtin(func_name);
+        assert!(!single_ret_builtin || lhs.len() == 1);
+        let tuple_name = if single_ret_builtin {
+            lhs[0].0.clone()
+        } else {
+            tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>())
+        };
+        if single_ret_builtin {
+            ctx.nodes.add_quotient(
+                &tuple_name,
+                ValQuot::CallOne(
+                    func_name.clone(),
+                    arg_nodes
+                        .iter()
+                        .map(|x| MetaVar::new_class_name(x))
+                        .collect(),
+                ),
+            );
+        } else {
+            ctx.nodes.add_quotient(
+                &tuple_name,
+                ValQuot::Call(
+                    func_name.clone(),
+                    arg_nodes
+                        .iter()
+                        .map(|x| MetaVar::new_class_name(x))
+                        .collect(),
+                ),
+            );
+        }
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
                 if a != &typ.base {
@@ -183,16 +218,23 @@ fn collect_spec_assign_call(
             }
             ctx.types
                 .add_dtype_constraint(name, typ.base.clone(), info)?;
-            ctx.nodes.add_quotient(
-                name,
-                ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
-            );
+            if !single_ret_builtin {
+                ctx.nodes.add_quotient(
+                    name,
+                    ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
+                );
+            }
         }
-        for (arg_name, arg_type) in arg_nodes.iter().zip(input_types.iter()) {
+        let num_dims = dimensions.get(func_name).copied().unwrap_or(0);
+        for arg_name in arg_nodes.iter().take(num_dims) {
+            ctx.types
+                .add_dtype_constraint(arg_name, DataType::Int(IntSize::I32), info)?;
+        }
+        for (arg_name, arg_type) in arg_nodes.iter().skip(num_dims).zip(input_types.iter()) {
             ctx.types
                 .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
         }
-        Ok(())
+        Ok(func_name.clone())
     } else {
         panic!("Not lowered")
     }
@@ -207,6 +249,8 @@ fn collect_spec_assign_term(
     lhs: &[(String, Option<DataType>)],
     ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
+    dimensions: &HashMap<String, usize>,
+    called_specs: &mut HashSet<String>,
 ) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
@@ -216,33 +260,38 @@ fn collect_spec_assign_term(
                     SpecLiteral::Int(i) => ValQuot::Int(i.clone()),
                     SpecLiteral::Bool(b) => ValQuot::Bool(*b),
                     SpecLiteral::Float(f) => ValQuot::Float(f.clone()),
-                    _ => todo!(),
+                    _ => todo!("Unimplemented literal type in spec"),
                 },
             );
             if let Some(annot) = lhs[0].1.as_ref() {
                 ctx.types
-                    .add_dtype_constraint(&lhs[0].0, annot.clone(), *info)
-            } else {
-                ctx.types.add_constraint(
-                    &lhs[0].0,
-                    match lit {
-                        SpecLiteral::Int(_) => DTypeConstraint::Int(None),
-                        SpecLiteral::Bool(_) => DTypeConstraint::Bool,
-                        SpecLiteral::Float(_) => DTypeConstraint::Float(None),
-                        _ => todo!(),
-                    },
-                    *info,
-                )
+                    .add_dtype_constraint(&lhs[0].0, annot.clone(), *info)?;
             }
+            ctx.types.add_constraint(
+                &lhs[0].0,
+                match lit {
+                    SpecLiteral::Int(_) => DTypeConstraint::Int(None),
+                    SpecLiteral::Bool(_) => DTypeConstraint::Bool,
+                    SpecLiteral::Float(_) => DTypeConstraint::Float(None),
+                    _ => todo!("Unimplemented literal type in spec"),
+                },
+                *info,
+            )
         }
-        SpecTerm::Var { .. } => todo!(),
+        SpecTerm::Var { .. } => unimplemented!("Variable assignment in spec"),
         SpecTerm::Call {
             function,
             args,
             templates,
             info,
             ..
-        } => collect_spec_assign_call(lhs, function, args, templates, ctx, signatures, *info),
+        } => {
+            let r = collect_spec_assign_call(
+                lhs, function, args, templates, ctx, signatures, dimensions, *info,
+            )?;
+            called_specs.insert(r);
+            Ok(())
+        }
     }
 }
 
@@ -388,6 +437,12 @@ fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError
         env.types.add_dtype_constraint(&arg, typ.base, info)?;
         env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
     }
+    for i in 0..ctx.sig.num_dims {
+        let name = format!("_dim{i}");
+        env.types
+            .add_dtype_constraint(&name, DataType::Int(IntSize::I32), info)?;
+        env.nodes.add_quotient(&name, ValQuot::Input(name.clone()));
+    }
     Ok(())
 }
 
@@ -481,15 +536,26 @@ pub(super) fn collect_spec(
     stmts: &Vec<SpecStmt>,
     ctx: &mut SpecInfo,
     signatures: &HashMap<String, Signature>,
-) -> Result<HashSet<TypedBinop>, LocalError> {
+    dimensions: &HashMap<String, usize>,
+) -> Result<(HashSet<TypedBinop>, HashSet<String>), LocalError> {
     let mut unresolved_externs = HashSet::new();
     let names = collect_spec_names(stmts, ctx)?;
     let mut env = SpecEnvs::new();
+    let mut called_specs = HashSet::new();
     collect_spec_sig(&mut env, ctx)?;
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, rhs, .. } => match rhs {
-                SpecExpr::Term(t) => collect_spec_assign_term(t, lhs, &mut env, signatures)?,
+                SpecExpr::Term(t) => {
+                    collect_spec_assign_term(
+                        t,
+                        lhs,
+                        &mut env,
+                        signatures,
+                        dimensions,
+                        &mut called_specs,
+                    )?;
+                }
                 SpecExpr::Conditional {
                     if_true,
                     guard,
@@ -518,13 +584,16 @@ pub(super) fn collect_spec(
     }
     resolve_types(&env.types, &names, ctx)?;
     ctx.nodes = env.nodes;
-    Ok(unresolved_externs
-        .into_iter()
-        .map(|u| TypedBinop {
-            op: u.op,
-            op_l: ctx.types[&u.op_l].clone(),
-            op_r: ctx.types[&u.op_r].clone(),
-            ret: ctx.types[&u.ret].clone(),
-        })
-        .collect::<HashSet<_>>())
+    Ok((
+        unresolved_externs
+            .into_iter()
+            .map(|u| TypedBinop {
+                op: u.op,
+                op_l: ctx.types[&u.op_l].clone(),
+                op_r: ctx.types[&u.op_r].clone(),
+                ret: ctx.types[&u.ret].clone(),
+            })
+            .collect::<HashSet<_>>(),
+        called_specs,
+    ))
 }

@@ -1,4 +1,6 @@
 #version 0.1.0
+type foo = i32;
+
 val foo() {
     x: i32 :- 10
     x: [foo; N] :- alloc()

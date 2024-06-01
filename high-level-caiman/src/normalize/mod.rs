@@ -1,5 +1,6 @@
 mod flatten_expr;
 mod if_to_seq;
+mod record_expansion;
 mod sched_rename;
 mod yields;
 
@@ -33,9 +34,14 @@ pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
             }
             TopLevel::FunctionClass { members, .. } => {
                 for member in members {
-                    if let ClassMembers::ValueFunclet(SpecFunclet { statements, .. }) = member {
-                        let stmts = std::mem::take(statements);
-                        *statements = flatten_spec(stmts);
+                    match member {
+                        ClassMembers::ValueFunclet(SpecFunclet { statements, .. })
+                        | ClassMembers::TimelineFunclet(SpecFunclet { statements, .. })
+                        | ClassMembers::SpatialFunclet(SpecFunclet { statements, .. }) => {
+                            let stmts = std::mem::take(statements);
+                            *statements = flatten_spec(stmts);
+                        }
+                        ClassMembers::Extern { .. } => {}
                     }
                 }
             }
@@ -45,4 +51,16 @@ pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
     let mut cg = CallGraph::new(&mut p);
     cg.insert_yields();
     Ok(p)
+}
+
+/// Performs a second pass of normalization on the AST that require type information.
+#[must_use]
+#[allow(clippy::module_name_repetitions)]
+pub fn post_typecheck_norm(mut p: Program) -> Program {
+    for decl in &mut p {
+        if let TopLevel::SchedulingFunc { input, output, .. } = decl {
+            record_expansion::expand_record_io(input, output);
+        }
+    }
+    p
 }

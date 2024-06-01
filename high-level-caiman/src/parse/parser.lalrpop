@@ -2,10 +2,9 @@
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
-use std::collections::BTreeMap;
 
 
-grammar(astf: &ASTFactory);
+grammar(astf: &mut ASTFactory);
 
 extern {
     type Error = CustomParsingError;
@@ -16,11 +15,12 @@ match {
   r"[a-zA-Z][a-zA-Z0-9_]*", // Id
   r"[0-9]+[.][0-9]+",   // Float Constant
   r"[0-9]+",            // Integer Constant (we parse negatives as unary ops)
+  r"_dim[0-9]",         // Dimension arguments
 
   // Keywords (omitting things with symbols in here is ok for some reason)
   "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
   "let", "returns", "return", "var", "if", "else",
-  "i32", "i64", "bool", "Event", "BufferSpace", "Encoder", "Fence",
+  "i32", "i64", "bool", "Event", "BufferSpace", "Encoder", "Fence", "Future",
   "true", "false", "import",
   "pure",
   "node","none","input","output","usable","saved","need","dead",
@@ -65,7 +65,7 @@ TopLevel: TopLevel = {
     "}" <@R> => astf.sched_function(<>),
 
     <l: @L>
-    "type" <n: Id> "=" <t: FlaggedType> <u: (";")?>
+    "type" <n: Id> "=" <t: BaseType> <u: (";")?>
     <r: @R> => astf.type_def(l, n, t, r),
 
     <l: @L> "import" <i: Id> <u: (";")?> <r: @R> => astf.import(l, i, r),
@@ -140,18 +140,15 @@ BaseType: DataType = {
     "BufferSpace" => DataType::BufferSpace,
     "Encoder" => DataType::Encoder(None),
     "Fence" => DataType::Fence(None),
-    <n: Id> => DataType::UserDefined(String::from(n)),
+    // TODO separate this so the future and fence cannot be interchanged
+    "Future" => DataType::Fence(None),
+    // TODO: user defined flagged types
+    <@L> <Id> <@R> =>? astf.user_defined_type(<>),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
     "&" <BaseType> => DataType::Ref(Box::new(<>)),
-    "{" <v: CommaList<Arg<FlaggedType>>> "}" => {
-        let mut map = BTreeMap::new();
-        for (k, v) in v {
-            map.insert(k, v);
-        }
-        DataType::Record(map)
-    },
+    <@L> "{" <CommaList<Arg<FlaggedType>>> "}" <@R> =>? astf.class_type(<>),
 }
 
 MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
@@ -249,6 +246,10 @@ QuotRef: QuotientReference = {
     <a: SpecType> "." <b: Id> => QuotientReference {
         spec_type: a,
         spec_var: Some(String::from(b)),
+    },
+    <a: SpecType> "." <s: r"_dim[0-9]"> => QuotientReference {
+        spec_type: a,
+        spec_var: Some(s.to_string()),
     },
     <a: SpecType> "." "(" <b: TupleCommaList<Id>> ")" => QuotientReference {
         spec_type: a,
@@ -366,7 +367,7 @@ MatchedIf: SchedStmt = {
 TimelineTerm: SchedTerm = {
     <@L> "submit" <TagOp?> <UpperTerm> <@R> => astf.sched_submit(<>),
     <@L> "await" <TagOp?> <UpperTerm> <@R> => astf.sched_await(<>),
-    <@L> "encode-begin" <TagOp?> <("{" <CommaList<MaybeArgFullType>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
+    <@L> "encode-begin" <TagOp?> <Id> <@R> => astf.sched_begin_encode(<>),
 }
 
 #[inline]
@@ -387,6 +388,7 @@ SchedCallStmt: SchedFuncCall = {
 SchedAtom<L>: SchedTerm = {
     <@L> "?" <@R> => astf.sched_hole_expr(<>),
     <@L> <Id> <TagOp?> <@R> => astf.sched_var(<>),
+    <l: @L> <s: r"_dim[0-9]"> <k: TagOp?> <r: @R> => astf.sched_var(l, s.to_string(), k, r),
     <@L> <L> <TagOp?> <@R> => astf.sched_lit(<>),
 }
 
@@ -419,7 +421,9 @@ Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
 InOutArg<T>: Arg<T> = {
     "input" ":" <t: T> => (String::from("input"), t),
     "output" ":" <t: T> => (String::from("output"), t),
+    <i: Id> "." <d: Id> ":" <t: T> => (format!("{}::{}", i, d), t),
     <i: Id> ":" <t: T> => (i, t),
+    <s: r"_dim[0-9]"> ":" <t: T> => (s.to_string(), t),
 }
 
 // argument with optional type

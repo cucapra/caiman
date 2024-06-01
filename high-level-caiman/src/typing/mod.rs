@@ -1,5 +1,8 @@
 pub mod context;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    hash::Hash,
+};
 mod specs;
 
 use crate::{
@@ -7,9 +10,10 @@ use crate::{
     parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Tag, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
+use types::constraint_to_wildcard_vq;
 
 use self::{
-    types::{ADataType, CDataType, DTypeConstraint},
+    types::{ADataType, CDataType, DTypeConstraint, RecordConstraint},
     unification::{Constraint, Env},
 };
 mod sched;
@@ -30,7 +34,8 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_src: true,
 };
 
-/// WGPU flags for sources to encoded GPU calls
+/// WGPU flags for destinations for encoded GPU copies. Input variables
+/// so to speak.
 pub const ENCODE_SRC_FLAGS: ir::BufferFlags = ir::BufferFlags {
     map_read: false,
     map_write: false,
@@ -39,13 +44,34 @@ pub const ENCODE_SRC_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_dst: true,
     copy_src: false,
 };
-/// WGPU flags for destinations of encoded GPU calls
+/// WGPU flags for variables copied back from the GPU. Output variables
+/// of an encoding so to speak.
 pub const ENCODE_DST_FLAGS: ir::BufferFlags = ir::BufferFlags {
     map_read: true,
     map_write: false,
     storage: true,
     uniform: false,
     copy_dst: false,
+    copy_src: false,
+};
+
+/// WGPU flags for regular encoded variables that are neither input nor output.
+pub const ENCODE_STORAGE_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: false,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: false,
+    copy_src: false,
+};
+
+/// WGPU flags for regular encoded variables that are both inputs and outputs.
+pub const ENCODE_IO_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: true,
+    map_write: false,
+    storage: true,
+    uniform: false,
+    copy_dst: true,
     copy_src: false,
 };
 
@@ -62,6 +88,8 @@ pub struct NodeEnv {
     outputs: Vec<Option<String>>,
     /// List of spec output node class names, without the leading `$` symbol.
     spec_outputs: Vec<String>,
+    /// Set of variables in the schedule
+    sched_vars: HashSet<String>,
 }
 
 impl Default for NodeEnv {
@@ -72,6 +100,7 @@ impl Default for NodeEnv {
             inputs: Vec::new(),
             outputs: Vec::new(),
             spec_outputs: Vec::new(),
+            sched_vars: HashSet::new(),
         }
     }
 }
@@ -137,48 +166,40 @@ impl NodeEnv {
 
     /// Overrides the output classes with the output classes annotated at the
     /// scheduling function.
+    /// # Arguments
+    /// * `outputs` - An iterator over the output types and their tags.
+    /// * `filter` - A filter function that returns true if the output should
+    /// be considered.
+    /// * `offset` - The number of spec outputs to skip when matching function outputs.
+    /// This is for implicit output parameters.
     pub fn override_output_classes<'a, T: Iterator<Item = (&'a DataType, &'a Tag)>>(
         &mut self,
         outputs: T,
+        filter: &dyn Fn(&DataType) -> bool,
+        offset: usize,
     ) {
-        for (id, (_, tag)) in outputs.filter(|(dt, _)| is_value_dtype(dt)).enumerate() {
-            if id >= self.outputs.len() {
+        for (id, (_, tag)) in outputs.filter(|(dt, _)| filter(dt)).enumerate() {
+            if id + offset >= self.outputs.len() {
                 self.outputs.push(None);
             }
             if let Some(annotated_quot) = &tag.quot_var.spec_var {
-                self.outputs[id] = Some(annotated_quot.clone());
+                self.outputs[id + offset] = Some(annotated_quot.clone());
             }
         }
+    }
+
+    /// Returns true if the spec has a match for the constraint type. That is if there
+    /// is at least one spec node that has the same form as the constraint.
+    /// This function returning true is necessary for unification without
+    /// annotation overrides to succeed, but not sufficient.
+    #[must_use]
+    pub fn spec_has_match(&self, constraint: &ValQuot) -> bool {
+        self.spec_nodes.contains_key(&constraint.get_type())
     }
 
     /// Returns true if the name is a wildcard name
     fn is_wildcard_name(name: &MetaVar) -> bool {
         !name.starts_with('$')
-    }
-
-    /// Checks if the constraint uniquely identifies a quotient class and
-    /// unifies the class with the type variable if it does.
-    fn check_for_unique_match(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
-        if let Some(matches) = self.spec_nodes.get(&constraint.get_type()) {
-            let mut last_match_classes = None;
-            for (possible_match, match_classes) in matches {
-                if possible_match.matches(constraint, Self::is_wildcard_name) {
-                    if last_match_classes.is_some() {
-                        return Ok(()); // Not a unique match
-                    }
-                    last_match_classes = Some(match_classes);
-                }
-            }
-            if let Some(last_match_classes) = last_match_classes {
-                if last_match_classes.len() == 1 {
-                    self.env.add_class_constraint(
-                        last_match_classes.iter().next().unwrap(),
-                        &Constraint::Var(name.to_string()),
-                    )?;
-                }
-            }
-        }
-        Ok(())
     }
 
     /// Adds a constraint to the type variable `name`. If the constraint
@@ -191,7 +212,8 @@ impl NodeEnv {
     pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
         assert!(!name.contains('$'));
         self.env.add_constraint(name, &From::from(constraint))?;
-        self.check_for_unique_match(name, constraint)
+        self.sched_vars.insert(name.to_string());
+        Ok(())
     }
 
     /// Adds a constraint to the type variable `name` with another variable.
@@ -202,6 +224,8 @@ impl NodeEnv {
     pub fn add_var_eq(&mut self, name: &str, equiv: &str) -> Result<(), String> {
         assert!(!name.contains('$'));
         assert!(!equiv.contains('$'));
+        self.sched_vars.insert(name.to_string());
+        self.sched_vars.insert(equiv.to_string());
         self.env
             .add_constraint(name, &Constraint::Var(equiv.to_string()))
     }
@@ -219,6 +243,7 @@ impl NodeEnv {
             format!("${class_name}")
         };
         assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
+        self.sched_vars.insert(name.to_string());
         self.env
             .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
     }
@@ -250,6 +275,49 @@ impl NodeEnv {
         }
         res
     }
+
+    /// Iterates until convergence of all types. Keeps iterating and unifying
+    /// types with unique matches until no more unique matches can be found.
+    /// # Errors
+    /// Returns an error if unification fails on a unique match.
+    /// # Panics
+    pub fn converge_types(&mut self) -> Result<(), String> {
+        loop {
+            let mut to_merge = Vec::new();
+            for var in &self.sched_vars {
+                if let Some(constraint) = self.env.get_type(var) {
+                    if constraint.is_var() || self.env.get_class_id(var).is_some() {
+                        continue;
+                    }
+                    let vq = constraint_to_wildcard_vq(&constraint);
+                    if let Some(matches) = self.spec_nodes.get(&vq.get_type()) {
+                        let to_check = matches
+                            .iter()
+                            .filter(|(x, _)| x.matches(&vq, Self::is_wildcard_name))
+                            .flat_map(|(_, x)| x.iter());
+                        let mut matches = Vec::new();
+                        for class in to_check {
+                            if let Some(constraint2) = self.env.get_type(class) {
+                                if constraint2.matches(&constraint) {
+                                    matches.push(class);
+                                }
+                            }
+                        }
+                        if matches.len() == 1 {
+                            to_merge.push((var.to_string(), matches.pop().unwrap().clone()));
+                        }
+                    }
+                }
+            }
+            if to_merge.is_empty() {
+                break;
+            }
+            for (var, class) in to_merge {
+                self.add_node_eq(&var, &class)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// A data type typing environment.
@@ -257,6 +325,8 @@ impl NodeEnv {
 pub struct DTypeEnv {
     env: Env<CDataType, ADataType>,
     flags: HashMap<String, ir::BufferFlags>,
+    /// A side condition that `(sub, sup)` must be an element of the subtype relation.
+    side_conditions: HashSet<(String, String)>,
 }
 
 impl Default for DTypeEnv {
@@ -264,6 +334,7 @@ impl Default for DTypeEnv {
         Self {
             env: Env::new(),
             flags: HashMap::new(),
+            side_conditions: HashSet::new(),
         }
     }
 }
@@ -288,7 +359,60 @@ impl DTypeEnv {
                 info,
                 &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
-        })
+        })?;
+        self.check_side_conds(info)
+    }
+
+    /// Adds a side condition that `(subtype, supertype)` must be an element of the subtype relation.
+    pub fn add_var_side_cond(&mut self, subtype: &str, supertype: &str) {
+        self.side_conditions
+            .insert((subtype.to_string(), supertype.to_string()));
+    }
+
+    /// Returns ok if all side conditions are satisfied.
+    /// # Errors
+    /// Returns an error if a side condition is not satisfied.
+    fn check_side_conds(&self, info: Info) -> Result<(), LocalError> {
+        for (subtype, supertype) in &self.side_conditions {
+            let sub_c = self.env.get_type(subtype).map(DTypeConstraint::try_from);
+            let super_c = self.env.get_type(supertype).map(DTypeConstraint::try_from);
+            if !match (&sub_c, &super_c) {
+                (
+                    Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
+                        fields: sub_fields,
+                        ..
+                    }))),
+                    Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
+                        fields: super_fields,
+                        ..
+                    }))),
+                ) => !super_fields
+                    .iter()
+                    .any(|(n, _)| !sub_fields.contains_key(n)),
+                (
+                    Some(Ok(
+                        DTypeConstraint::Record { .. }
+                        | DTypeConstraint::Any
+                        | DTypeConstraint::Var(_),
+                    )),
+                    Some(Ok(
+                        DTypeConstraint::Record { .. }
+                        | DTypeConstraint::Any
+                        | DTypeConstraint::Var(_),
+                    )),
+                )
+                | (Some(_), None)
+                | (None, Some(_))
+                | (Some(Err(_)), Some(Err(_))) => true,
+                _ => false,
+            } {
+                return Err(type_error(
+                    info,
+                    &format!("Constraint caused violation of condition that {subtype} is a subtype of {supertype}\n{sub_c:#?} \n !<: \n{super_c:#?}"),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Adds a constraint that a device variable is used in a particular way.
@@ -317,7 +441,8 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         let constraint = DTypeConstraint::from(constraint);
-        self.add_constraint(name, constraint, info)
+        self.add_constraint(name, constraint, info)?;
+        self.check_side_conds(info)
     }
 
     /// Adds a constraint that two variables are equivalent.
@@ -331,7 +456,8 @@ impl DTypeEnv {
                     info,
                     &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
                 )
-            })
+            })?;
+        self.check_side_conds(info)
     }
 
     /// Adds a constraint that a variable must adhere to.
@@ -348,7 +474,8 @@ impl DTypeEnv {
                 info,
                 &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
             )
-        })
+        })?;
+        self.check_side_conds(info)
     }
 }
 
@@ -365,20 +492,20 @@ pub struct SpecInfo {
     pub types: HashMap<String, DataType>,
     /// Source-level starting and ending line and column number.
     pub info: Info,
-    /// The function class if the spec is a value spec.
-    pub feq: Option<String>,
+    /// The function class.
+    pub feq: String,
 }
 
 impl SpecInfo {
     #[must_use]
-    pub fn new(typ: SpecType, sig: NamedSignature, info: Info, class_name: Option<&str>) -> Self {
+    pub fn new(typ: SpecType, sig: NamedSignature, info: Info, class_name: &str) -> Self {
         Self {
             typ,
             sig,
             types: HashMap::new(),
             info,
             nodes: NodeEnv::new(),
-            feq: class_name.map(ToString::to_string),
+            feq: class_name.to_string(),
         }
     }
 }
@@ -416,6 +543,7 @@ pub enum SchedOrExtern {
 }
 
 impl SchedOrExtern {
+    /// The signature of the schedule or extern.
     #[must_use]
     pub const fn sig(&self) -> &Signature {
         match self {
@@ -530,11 +658,15 @@ impl SchedInfo {
 pub struct Signature {
     pub input: Vec<FlaggedType>,
     pub output: Vec<FlaggedType>,
+    /// The number of non-type template arguments to the function
+    /// conveying the grid size of the kernel. All of these
+    /// arguments are `i32` and are not included in `input`
+    pub num_dims: usize,
 }
 
 impl Signature {
     #[must_use]
-    pub fn new(input: Vec<DataType>, output: Vec<DataType>) -> Self {
+    pub fn new(input: Vec<DataType>, output: Vec<DataType>, num_dims: usize) -> Self {
         Self {
             input: input
                 .into_iter()
@@ -554,6 +686,7 @@ impl Signature {
                     settings: BTreeSet::new(),
                 })
                 .collect(),
+            num_dims,
         }
     }
 }
@@ -563,6 +696,10 @@ impl Signature {
 pub struct NamedSignature {
     pub input: Vec<(String, FlaggedType)>,
     pub output: Vec<(String, FlaggedType)>,
+    /// The number of non-type template arguments to the function
+    /// conveying the grid size of the kernel. All of these
+    /// arguments are `i32` and are not included in `input`
+    pub num_dims: usize,
 }
 
 impl NamedSignature {
@@ -571,6 +708,7 @@ impl NamedSignature {
     pub fn new<'a, I: Iterator<Item = &'a (Option<String>, DataType)>>(
         input: &[(String, DataType)],
         output: I,
+        num_dims: usize,
     ) -> Self {
         Self {
             input: input
@@ -586,6 +724,7 @@ impl NamedSignature {
                     )
                 })
                 .collect::<Vec<_>>(),
+            num_dims,
         }
     }
 }
@@ -595,6 +734,7 @@ impl From<&NamedSignature> for Signature {
         Self {
             input: sig.input.iter().cloned().map(|(_, t)| t).collect(),
             output: sig.output.iter().cloned().map(|(_, t)| t).collect(),
+            num_dims: sig.num_dims,
         }
     }
 }
@@ -607,6 +747,7 @@ impl PartialEq for NamedSignature {
                 .iter()
                 .map(|(_, x)| x)
                 .eq(other.input.iter().map(|(_, x)| x))
+            && self.num_dims == other.num_dims
     }
 }
 
@@ -617,10 +758,12 @@ fn sig_match(sig1: &Signature, sig2: &NamedSignature) -> bool {
     sig1.input.len() == sig2.input.len()
         && sig1.input.iter().eq(sig2.input.iter().map(|(_, t)| t))
         && sig1.output.iter().eq(sig2.output.iter().map(|(_, t)| t))
+        && sig1.num_dims == sig2.num_dims
 }
 
 /// A global context for a caiman program. This contains information about constants,
 /// type aliases, and function signatures.
+#[derive(Debug, Clone)]
 pub struct Context {
     /// Required type declarations for the program.
     pub type_decls: Vec<asm::Declaration>,
@@ -634,6 +777,12 @@ pub struct Context {
     pub externs: HashSet<String>,
     /// User defined types. Map from type name to type.
     pub user_types: HashMap<String, FlaggedType>,
+    /// Map from class name to the class's dimensions (number of value template arguments)
+    pub class_dimensions: HashMap<String, usize>,
+    /// The set of spec classes which are called from another spec.
+    pub called_specs: HashSet<String>,
+    /// The set of specs which are trivial timelines.
+    pub trivial_tmlns: HashSet<String>,
 }
 
 /// A typed binary operation.
@@ -705,7 +854,7 @@ fn binop_to_contraints(
             let a = a.instantiate(env);
             (a.clone(), a.clone(), a)
         }
-        Binop::Dot | Binop::Range | Binop::Index | Binop::Cons => todo!(),
+        Binop::Dot | Binop::Range | Binop::Index | Binop::Cons => panic!("Operator not lowered"),
     }
 }
 
@@ -789,16 +938,4 @@ pub const fn is_value_dtype(t: &DataType) -> bool {
             | DataType::Ref(_)
             | DataType::Array(_, _)
     )
-}
-
-/// Returns `true` if the type can be represented in the value spec.
-/// If this function returns false, then the argument or return value can be
-/// ignored for the purpose of inferring value quotients.
-#[must_use]
-pub const fn is_value_fulltype(t: &FullType) -> bool {
-    if let Some(t) = &t.base {
-        is_value_dtype(&t.base)
-    } else {
-        false
-    }
 }

@@ -148,10 +148,52 @@ pub enum DataMovement {
     HostToDevice,
 }
 
-#[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
-pub enum FenceOp {
-    Submit,
-    Sync
+/// A type that represents information that changes due to an analysis pass.
+/// # Parameters
+/// - `T`: The initial type
+/// - `U`: The type after the analysis pass
+#[derive(Debug)]
+pub enum FillIn<T: std::fmt::Debug, U: std::fmt::Debug> {
+    Initial(T),
+    Processed(U),
+}
+
+impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
+    pub fn processed(&self) -> &U {
+        match self {
+            Self::Processed(u) => u,
+            Self::Initial(_) => panic!("Unprocessed value"),
+        }
+    }
+
+    pub fn processed_mut(&mut self) -> &mut U {
+        match self {
+            Self::Processed(u) => u,
+            Self::Initial(_) => panic!("Unprocessed value"),
+        }
+    }
+
+    pub fn process(&mut self, f: impl Fn(&mut T) -> U) {
+        match self {
+            Self::Initial(t) => *self = Self::Processed(f(t)),
+            Self::Processed(_) => (),
+        }
+    }
+
+    pub fn initial(&self) -> &T {
+        match self {
+            Self::Initial(t) => t,
+            Self::Processed(_) => panic!("Processed value"),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn initial_mut(&mut self) -> &mut T {
+        match self {
+            Self::Initial(t) => t,
+            Self::Processed(_) => panic!("Processed value"),
+        }
+    }
 }
 
 /// High-level caiman IR, excluding tail edges.
@@ -195,7 +237,7 @@ pub enum HirBody {
         device: String,
         device_vars: Vec<(Name, TripleTag)>,
         tags: TripleTag,
-        encoder: String,
+        encoder: (String, TripleTag),
         /// The active fences that haven't been consumed yet at the time of the encoding
         /// Filled via analysis
         active_fences: Vec<String>,
@@ -208,11 +250,23 @@ pub enum HirBody {
         func: HirFuncCall,
         encoder: Name,
     },
-    FenceOp {
+    Submit {
         info: Info,
-        dest: Option<Name>,
-        op: FenceOp,
-        src: SchedTerm,
+        dest: Name,
+        src: Name,
+        // only one tag since a submit does not require an extraction
+        tags: TripleTag,
+    },
+    /// A sync-fence folowed by copying all the encoded variables in `src` to
+    /// local ones in `dests`. 
+    Sync {
+        info: Info,
+        /// the local versions of the encoded variables or the name of the record
+        /// destination.
+        dests: FillIn<(Name, TripleTag), Vec<(Name, TripleTag)>>,
+        /// fence name or fence followed by all the variables being copied to the local device
+        srcs: FillIn<Name, Vec<Name>>, 
+        // sync does not require an extraction
         tags: TripleTag,
     },
     /// Declaration of an immutable variable
@@ -292,12 +346,20 @@ pub struct HirFuncCall {
     pub target: String,
     pub args: Vec<String>,
     pub tag: TripleTag,
+    /// The number of value template arguments that occur in `args` before the 
+    /// normal arguments
+    pub num_dims: usize,
 }
 
 impl HirFuncCall {
     pub fn new(value: SchedFuncCall) ->Self {
         if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
             let mut starting_args = vec![];
+            let num_dims = value.templates.as_ref().map_or(0, |t| if let TemplateArgs::Vals(v) = t {
+                v.len()
+            } else {
+                0
+            });
             match value.templates {
                 Some(TemplateArgs::Vals(vs)) => {
                     for v in vs {
@@ -308,7 +370,7 @@ impl HirFuncCall {
                         }
                     }
                 },
-                Some(TemplateArgs::Type(_)) => todo!(),
+                Some(TemplateArgs::Type(_)) => unimplemented!("Type template arguments"),
                 None => (),
 
             }
@@ -327,6 +389,7 @@ impl HirFuncCall {
                 target: name,
                 args,
                 tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
+                num_dims,
             };
         }
         panic!("Invalid internal function call")
@@ -604,7 +667,6 @@ impl HirBody {
                 }
             }
             SchedStmt::Encode { info, stmt, encoder, cmd, .. } => {
-                // TODO: encoder scoping
                 match cmd {
                     EncodedCommand::Copy => {
                         assert_eq!(stmt.lhs.len(), 1);  
@@ -661,19 +723,23 @@ impl HirBody {
                             args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
                         }
                     },
-                    SchedTerm::TimelineOperation { info, op, arg, tag } => {
-                        Self::FenceOp { info, dest: Some(lhs[0].0.clone()), 
-                            op: if op == TimelineOperation::Submit { FenceOp::Submit } else { FenceOp::Sync }, 
-                            src: enum_cast!(SchedExpr::Term, *arg), 
+                    SchedTerm::TimelineOperation { info, op: TimelineOperation::Submit, arg, tag } => 
+                        Self::Submit { info, dest: lhs[0].0.clone(),
+                            src: enum_cast!(SchedTerm::Var {name, .. }, name, enum_cast!(SchedExpr::Term, *arg)), 
                             tags: TripleTag::from_opt(&tag) }
-                        },
+                        ,
+                    SchedTerm::TimelineOperation { info, op: TimelineOperation::Await, arg, tag } => {
+                        let arg_name = enum_cast!(SchedTerm::Var {name, .. }, name, enum_cast!(SchedExpr::Term, *arg));
+                        Self::Sync { info, dests: FillIn::Initial((lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))), 
+                            srcs: FillIn::Initial(arg_name), tags: TripleTag::from_opt(&tag) }
+                    },
                     SchedTerm::EncodeBegin { info, device, tag, defs } => {
                         Self::BeginEncoding {
                             info,
                             device,
                             device_vars: defs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                             tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
-                            encoder: lhs[0].0.clone(),
+                            encoder: (lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1)),
                             active_fences: vec![],
                         }
                     },
@@ -685,14 +751,19 @@ impl HirBody {
                     }
                 }
             },
-            SchedExpr::Binop { info, op: Binop::Dot, lhs: _, rhs: op_rhs} => {
+            SchedExpr::Binop { info, op: Binop::Dot, lhs: op_lhs, rhs: op_rhs} => {
                 assert_eq!(lhs.len(), 1);
-                // TODO: encoder scope naming
+                let op_lhs_name = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *op_lhs));
+                let rhs_name = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *op_rhs));
                 Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
                     lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                    rhs: enum_cast!(SchedExpr::Term, op_rhs.as_ref().clone()),
+                    rhs: SchedTerm::Var {
+                        name: format!("{op_lhs_name}::{rhs_name}"),
+                        tag: None,
+                        info,
+                    }
                 }
             }
             SchedExpr::Binop {
@@ -731,7 +802,13 @@ impl HirBody {
 impl Hir for HirBody {
     fn get_info(&self) -> Info {
         match self {
-            Self::RefStore { info, .. } | Self::RefLoad { info, .. } | Self::DeviceCopy { info, .. } | Self::BeginEncoding { info, .. } | Self::EncodeDo { info, .. } | Self::FenceOp { info, .. } | Self::ConstDecl { info, .. } | Self::VarDecl { info, .. } | Self::Hole(info) | Self::Op { info, .. } | Self::InAnnotation(info, ..) | Self::OutAnnotation(info, ..) | Self::Phi { info, .. } => *info,
+            Self::RefStore { info, .. } | Self::RefLoad { info, .. } 
+            | Self::DeviceCopy { info, .. } | Self::BeginEncoding { info, .. } 
+            | Self::EncodeDo { info, .. } 
+            | Self::Submit { info, .. } | Self::ConstDecl { info, .. } 
+            | Self::VarDecl { info, .. } | Self::Hole(info) | Self::Op { info, .. } 
+            | Self::InAnnotation(info, ..) | Self::OutAnnotation(info, ..) 
+            | Self::Phi { info, .. } | Self::Sync { info, ..} => *info,
         }
     }
     fn get_uses(&self, res: &mut BTreeSet<String>) {
@@ -750,7 +827,7 @@ impl Hir for HirBody {
                 // is a use
                 res.insert(lhs.clone());
             }
-            Self::RefLoad { src, .. } => {
+            Self::RefLoad { src, .. } | Self::Submit { src, .. } => {
                 res.insert(src.clone());
             }
             Self::Op { args, .. } => {
@@ -776,8 +853,16 @@ impl Hir for HirBody {
                 res.insert(src.clone());
                 res.insert(encoder.clone());
             }
-            Self::FenceOp { src, .. } => 
-                term_get_uses(src, res),
+            Self::Sync { srcs, .. } => {
+                match srcs {
+                    FillIn::Initial(name) => {
+                        res.insert(name.clone());
+                    }
+                    FillIn::Processed(srcs) => {
+                        res.extend(srcs.iter().cloned());
+                    }
+                }
+            }
             
         }
     }
@@ -791,7 +876,8 @@ impl Hir for HirBody {
             | Self::Op { .. } | Self::Hole(..) | Self::InAnnotation(..) 
             | Self::OutAnnotation(..) | Self::BeginEncoding { .. } 
             | Self::Phi { .. }
-            | Self::FenceOp { .. } => None,
+            | Self::Submit { .. } 
+            |Self::Sync { .. } => None,
         }
     }
 
@@ -807,13 +893,15 @@ impl Hir for HirBody {
             }
             Self::BeginEncoding { device_vars, encoder, .. } => {
                 let mut res = device_vars.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>();
-                res.push(encoder.clone());
+                res.push(encoder.0.clone());
                 Some(res)
                 
             }
-            Self::FenceOp { dest, ..} => dest.as_ref().map(|d| vec![d.clone()]),
-            // TODO: re-evaluate the move instruction.
-            // Viewing it as a write to a reference, then it had no defs
+            Self::Submit { dest, ..} => Some(vec![dest.clone()]),
+            Self::Sync { dests, .. } => match dests {
+                FillIn::Initial((name, _)) => Some(vec![name.clone()]),
+                FillIn::Processed(dests) => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
+            }
             Self::Hole(..)
             // RefStore doesn't have a def bc it's a store to a reference
             | Self::RefStore { .. }
@@ -840,11 +928,22 @@ impl Hir for HirBody {
                 for (name, _) in device_vars {
                     *name = f(name);
                 }
-                *encoder = f(encoder);
+                *encoder = (f(&encoder.0), encoder.1.clone());
             }
-            Self::FenceOp { dest, ..} => {
-                if let Some(dest) = dest {
-                    *dest = f(dest);
+            Self::Submit { dest, ..} => {
+                *dest = f(dest);
+                
+            }
+            Self::Sync { dests, ..} => {
+                match dests {
+                    FillIn::Initial((name, _)) => {
+                        *name = f(name);
+                    }
+                    FillIn::Processed(dests) => {
+                        for (name, _) in dests {
+                            *name = f(name);
+                        }
+                    }
                 }
             }
             Self::Hole(..)
@@ -870,7 +969,7 @@ impl Hir for HirBody {
                     term_rename_uses(arg, &mut |name| f(name, UseType::Read));
                 }
             }
-            Self::RefLoad { src, .. } => {
+            Self::RefLoad { src, .. } | Self::Submit { src, ..} => {
                 *src = f(src, UseType::Read);
             }
             Self::Phi { .. } => {
@@ -895,8 +994,17 @@ impl Hir for HirBody {
                 }
                 *encoder = f(encoder, UseType::Read);
             }
-            Self::FenceOp { src, ..} => {
-                term_rename_uses(src, &mut |name| f(name, UseType::Read));
+            Self::Sync { srcs, ..} => {
+                match srcs {
+                    FillIn::Initial(src) => {
+                        *src = f(src, UseType::Read);
+                    }
+                    FillIn::Processed(srcs) => {
+                        for src in srcs {
+                            *src = f(src, UseType::Read);
+                        }
+                    }
+                }
             }
             Self::Hole(..)
             | Self::VarDecl { rhs: None, .. } 
@@ -919,7 +1027,7 @@ fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
         }
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
         SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } 
-        | SchedTerm::EncodeBegin { .. } => todo!(),
+        | SchedTerm::EncodeBegin { .. } => panic!("Unexpected term"),
     }
 }
 
@@ -929,6 +1037,6 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
         SchedTerm::Var { name, .. } => *name = f(name),
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
         SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } |
-        SchedTerm::EncodeBegin{ ..} => todo!(),
+        SchedTerm::EncodeBegin{ ..} => panic!("Unexpected term"),
     }
 }

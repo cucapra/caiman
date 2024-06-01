@@ -42,21 +42,17 @@ val foo(x: i32, z: i32) -> out: i32 {
 
 fn foo_impl(x: &i32, z: &i32) -> i32 impls foo, space, time {
     @in { input: node(tmln.e), output: node(tmln.out) };
-    let e1 = encode-begin @ node(tmln.(loc1, rem1)) {
-        x1, y1
-    } gpu;
+    let e1 = encode-begin @ node(tmln.(loc1, rem1)) gpu;
     encode e1.copy[x1 <- x];
     encode e1.call[y1 <- simple'<1, 1, 1>(x1) @ node(val.y)];
     let f = submit @ node(tmln.sub1) e1;
 
-    let e2 = encode-begin @ node(tmln.(loc2, rem2)) {
-        x2, y2
-    } gpu;
+    let e2 = encode-begin @ node(tmln.(loc2, rem2)) gpu;
     encode e2.copy[x2 <- z];
     encode e2.call[y2 <- simple'<1, 1, 1>(x2) @ node(val.y2)];
     let f2 = submit @ node(tmln.sub2) e2;
     let y = (await @ node(tmln.snc1) f).y1;
-    @out {input: node(tmln.out), output: node(tmln.out)};
+    @out {input: node(tmln.snc2), output: node(tmln.out)};
     y + (await @ node(tmln.snc2) f2).y2
 }
 

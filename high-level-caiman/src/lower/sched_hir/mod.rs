@@ -7,13 +7,16 @@ use std::{
     rc::Rc,
 };
 
+use analysis::{bft_transform, deduce_tmln_quots};
 pub use hir::*;
 
 use crate::{
     error::LocalError,
-    lower::IN_STEM,
-    parse::ast::{DataType, FlaggedType, FullType, SchedulingFunc},
-    typing::{Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_SRC_FLAGS},
+    parse::ast::{DataType, FlaggedType, FullType, IntSize, SchedulingFunc},
+    typing::{
+        Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
+        ENCODE_STORAGE_FLAGS,
+    },
 };
 use caiman::assembly::ast::{self as asm};
 use caiman::explication::Hole;
@@ -21,8 +24,8 @@ use caiman::ir;
 
 use self::{
     analysis::{
-        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
-        transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
+        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
+        transform_out_ssa, transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
@@ -69,6 +72,8 @@ pub struct Funclets {
     variables: HashSet<String>,
     /// Mapping from device variable to its buffer flags
     flags: HashMap<String, ir::BufferFlags>,
+    /// Number of dimensional template arguments
+    num_dims: usize,
 }
 
 /// A specific funclet in a scheduling function.
@@ -142,7 +147,13 @@ impl<'a> Funclet<'a> {
 
     /// Gets the output arguments of this funclet based on the live out variables
     /// of this block. The returned vector of strings do not contain duplicates and
-    /// contains captures **and** non-captures. The entire result is sorted
+    /// contains captures **and** non-captures. The entire result is sorted.
+    ///
+    /// The outputs of a given funclet is the outputs of the continuation if
+    /// the block is terminated in a call, select, or final return, otherwise,
+    /// they are the live outs of the current block if the block is terminated
+    /// in a way to returns control back to a parent (such as final blocks in
+    /// child paths of a select)
     #[allow(clippy::option_if_let_else)]
     fn output_vars(&self) -> Vec<(String, TripleTag)> {
         // Schedule call and select occurs "before" funclet ends.
@@ -204,23 +215,35 @@ impl<'a> Funclet<'a> {
         }
     }
 
+    /// Gets the input arguments for the start block
+    fn start_block_inputs(&self) -> Vec<asm::FuncletArgument> {
+        // gets the inputs for the special dimensional template arguments
+        let template_args = (0..self.num_dims()).map(|i| asm::FuncletArgument {
+            name: Some(asm::NodeId(format!("_dim{i}"))),
+            typ: DataType::Int(IntSize::I32).asm_type(),
+            tags: self.get_input_tag(&format!("_dim{i}")).unwrap().tags_vec(),
+        });
+        // add on all other input arguments
+        template_args
+            .chain(
+                self.parent
+                    .finfo
+                    .input
+                    .iter()
+                    .map(|(name, _)| asm::FuncletArgument {
+                        name: Some(asm::NodeId(name.clone())),
+                        typ: self.get_asm_type(name).unwrap(),
+                        tags: self.get_input_tag(name).unwrap().tags_vec(),
+                    }),
+            )
+            .collect()
+    }
+
     /// Gets the input arguments for each block based on the block's live in variables
     pub fn inputs(&self) -> Vec<asm::FuncletArgument> {
         #[allow(clippy::map_unwrap_or)]
         if self.id() == cfg::START_BLOCK_ID {
-            self.parent
-                .finfo
-                .input
-                .iter()
-                .map(|(name, _)| asm::FuncletArgument {
-                    name: Some(asm::NodeId(name.clone())),
-                    typ: self.get_asm_type(name).unwrap(),
-                    tags: self
-                        .get_input_tag(&format!("{IN_STEM}{name}"))
-                        .unwrap()
-                        .tags_vec(),
-                })
-                .collect()
+            self.start_block_inputs()
         } else if self.id() == FINAL_BLOCK_ID {
             // final block is just for type conversion
             // final block input and output are the same as the function
@@ -259,6 +282,7 @@ impl<'a> Funclet<'a> {
     }
 
     /// Gets the input tag of the specified variable, handling input overrides
+    /// specified in the block via in annotations
     pub fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
@@ -305,7 +329,6 @@ impl<'a> Funclet<'a> {
                 })
                 .collect()
         } else {
-            // TODO: re-evaluate if this is correct for the general case
             self.output_vars()
                 .into_iter()
                 .map(|(var, tag)| asm::FuncletArgument {
@@ -333,6 +356,14 @@ impl<'a> Funclet<'a> {
     #[inline]
     pub fn stmts(&self) -> &[hir::HirBody] {
         &self.block.stmts
+    }
+
+    /// Gets the number of dimensions of the scheduling function.
+    /// That is, get the number of template value arguments of the function,
+    /// template value arguments are passed first and are always i32. They
+    /// control the grid size of external gpu functions.
+    pub const fn num_dims(&self) -> usize {
+        self.parent.num_dims
     }
 
     #[inline]
@@ -374,8 +405,7 @@ impl<'a> Funclet<'a> {
     /// In other words, this funclet is a top level funclet with a `return`
     /// terminator.
     pub fn is_final_return(&self) -> bool {
-        self.parent.cfg.predecessors(FINAL_BLOCK_ID).len() == 1
-            && self.parent.cfg.predecessors(FINAL_BLOCK_ID).first() == Some(&self.id())
+        self.parent.cfg.is_final_return(self.id())
     }
 
     /// Gets the tag of the specified variable at the end of the funclet
@@ -405,6 +435,10 @@ impl<'a> Funclet<'a> {
                 "::gs"
             } else if *flags == ENCODE_DST_FLAGS {
                 "::gd"
+            } else if *flags == ENCODE_STORAGE_FLAGS {
+                "::g"
+            } else if *flags == ENCODE_IO_FLAGS {
+                "::gds"
             } else {
                 return Err(format!("{}: Invalid flags for {var}", self.block.src_loc));
             };
@@ -517,45 +551,17 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Result<Self, LocalError> {
+    pub fn new(
+        f: SchedulingFunc,
+        specs: &Specs,
+        ctx: &Context,
+        no_inference: bool,
+    ) -> Result<Self, LocalError> {
         let mut cfg = Cfg::new(f.statements, &f.output, ctx);
         let (mut data_types, variables, flags) =
-            Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
+            Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
-        deref_transform_pass(&mut cfg, &mut data_types, &variables);
-        op_transform_pass(&mut cfg, &data_types);
-        let live_vars = analyze(&mut cfg, &LiveVars::top());
-        let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        cfg = transform_to_ssa(cfg, &live_vars);
-        let specs_rc = Rc::new(specs.clone());
-        let mut hir_inputs: Vec<_> = f
-            .input
-            .iter()
-            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
-            .collect();
-        let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
-        let output_dtypes: Vec<_> = f
-            .output
-            .iter()
-            .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
-            .collect();
-
-        deduce_val_quots(
-            &mut hir_inputs,
-            &mut hir_outputs,
-            &output_dtypes,
-            &mut cfg,
-            &ctx.specs[&specs.value.0],
-            ctx,
-            &data_types,
-            f.info,
-        )?;
-        cfg = transform_out_ssa(cfg);
-        let type_info = analyze(
-            &mut cfg,
-            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
-        );
-        let _ = analyze(
+        bft_transform(
             &mut cfg,
             &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
                 if let Some(FullType {
@@ -573,6 +579,66 @@ impl Funclets {
                 }
             })),
         );
+        let mut hir_inputs: Vec<_> = f
+            .input
+            .iter()
+            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
+            .collect();
+        let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
+        let output_dtypes: Vec<_> = f
+            .output
+            .iter()
+            .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
+            .collect();
+        let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
+
+        transform_encode_pass(
+            &mut cfg,
+            &data_types,
+            ctx,
+            // the unexpanded output types
+            &ctx.scheds[&f.name].unwrap_sched().dtype_sig.output,
+        );
+        deref_transform_pass(&mut cfg, &mut data_types, &variables);
+        op_transform_pass(&mut cfg, &data_types);
+        let live_vars = analyze(&mut cfg, &LiveVars::top());
+        let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
+        let specs_rc = Rc::new(specs.clone());
+
+        if !no_inference {
+            deduce_tmln_quots(
+                &mut hir_inputs,
+                &mut hir_outputs,
+                &output_dtypes,
+                &mut cfg,
+                &ctx.specs[&specs.timeline.0],
+                ctx,
+                &data_types,
+                f.info,
+                num_dims,
+                &specs.timeline.0,
+                &live_vars,
+            )?;
+            cfg = transform_to_ssa(cfg, &live_vars);
+
+            deduce_val_quots(
+                &mut hir_inputs,
+                &mut hir_outputs,
+                &output_dtypes,
+                &mut cfg,
+                &ctx.specs[&specs.value.0],
+                ctx,
+                &data_types,
+                f.info,
+            )?;
+
+            cfg = transform_out_ssa(cfg);
+        }
+        let type_info = bft_transform(
+            &mut cfg,
+            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
+        );
+
         let finfo = FuncInfo {
             name: f.name,
             input: hir_inputs,
@@ -589,6 +655,7 @@ impl Funclets {
             literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
             variables,
             flags,
+            num_dims,
         })
     }
 
@@ -603,6 +670,7 @@ impl Funclets {
     #[allow(clippy::type_complexity)]
     fn collect_types(
         f: &SchedInfo,
+        cur_outputs: &[FullType],
     ) -> (
         HashMap<String, DataType>,
         HashSet<String>,
@@ -617,7 +685,8 @@ impl Funclets {
                 variables.insert(var.to_string());
             }
         }
-        for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
+        for (id, out_ty) in cur_outputs.iter().enumerate() {
+            let out_ty = out_ty.base.as_ref().unwrap();
             let out_name = format!("{RET_VAR}{id}");
             data_types.insert(out_name.clone(), out_ty.base.clone());
             if !out_ty.flags.is_empty() {

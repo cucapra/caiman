@@ -1,6 +1,11 @@
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    vec,
+};
+
 use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
 
-use super::unification::{Constraint, Env, Kind};
+use super::unification::{Constraint, Env, Kind, SubtypeConstraint};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CDataType {
@@ -8,6 +13,10 @@ pub enum CDataType {
     Int,
     Float,
     Ref,
+    Record,
+    Encoder,
+    Fence,
+    RemoteObj,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,13 +27,24 @@ pub enum ADataType {
     Bool,
     BufferSpace,
     Event,
-    // TODO: records for encoders and fences?
-    Encoder,
-    Fence,
+    SpecEncoder,
+    SpecFence,
 }
 
 impl Kind for CDataType {}
 impl Kind for ADataType {}
+
+/// A constraint on a record type. Either a map from field names to data type constraints
+/// or a metavariable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordConstraint {
+    Record {
+        fields: BTreeMap<String, DTypeConstraint>,
+        constraint_kind: SubtypeConstraint,
+    },
+    Var(String),
+    Any,
+}
 
 /// A high-level data type constraint. Holes in a data type
 /// constraint are universally quantified. To get multiple
@@ -48,8 +68,64 @@ pub enum DTypeConstraint {
     /// A reference constraint which contains a dtype constraint
     /// that will be instantiated to a new inner data type constraint.
     RefN(Box<DTypeConstraint>),
-    Encoder,
-    Fence,
+    // Encoder(Constraint<CDataType, ADataType>),
+    //Fence(Constraint<CDataType, ADataType>),
+    Encoder(Box<DTypeConstraint>),
+    Fence(Box<DTypeConstraint>),
+    Record(RecordConstraint),
+    RemoteObj {
+        /// record of all remote variables (have the storage flag)
+        all: RecordConstraint,
+        /// record of all readable variables (map_read)
+        read: RecordConstraint,
+        /// record of all writable variables (copy_dst)
+        write: RecordConstraint,
+    },
+    SpecEncoder,
+    SpecFence,
+    Var(String),
+}
+
+impl DTypeConstraint {
+    fn record_into_subtypeable(r: RecordConstraint) -> RecordConstraint {
+        match r {
+            RecordConstraint::Var(_) | RecordConstraint::Any => r,
+            RecordConstraint::Record { fields, .. } => RecordConstraint::Record {
+                fields: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into_subtypeable()))
+                    .collect(),
+                constraint_kind: SubtypeConstraint::Any,
+            },
+        }
+    }
+    /// Converts the constraint into one which allows subtypes.
+    /// Used when we generate a constraint from a data type but we want to allow
+    /// subtypes of the data type.
+    pub fn into_subtypeable(self) -> Self {
+        match self {
+            Self::Int(_)
+            | Self::Float(_)
+            | Self::Bool
+            | Self::BufferSpace
+            | Self::Event
+            | Self::Num
+            | Self::Any
+            | Self::Ref(_)
+            | Self::Var(_)
+            | Self::SpecEncoder
+            | Self::SpecFence => self,
+            Self::RefN(x) => Self::RefN(Box::new(x.into_subtypeable())),
+            Self::Encoder(x) => Self::Encoder(Box::new(x.into_subtypeable())),
+            Self::Fence(x) => Self::Fence(Box::new(x.into_subtypeable())),
+            Self::Record(r) => Self::Record(Self::record_into_subtypeable(r)),
+            Self::RemoteObj { all, read, write } => Self::RemoteObj {
+                all: Self::record_into_subtypeable(all),
+                read: Self::record_into_subtypeable(read),
+                write: Self::record_into_subtypeable(write),
+            },
+        }
+    }
 }
 
 impl From<IntSize> for ADataType {
@@ -91,6 +167,28 @@ impl TryFrom<ADataType> for FloatSize {
 }
 
 impl DTypeConstraint {
+    fn instantiate_record(
+        r: RecordConstraint,
+        env: &mut Env<CDataType, ADataType>,
+    ) -> Constraint<CDataType, ADataType> {
+        match r {
+            RecordConstraint::Record {
+                fields,
+                constraint_kind,
+            } => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in fields {
+                    mp.insert(k, v.instantiate(env));
+                }
+                Constraint::DynamicTerm(CDataType::Record, mp, constraint_kind)
+            }
+            RecordConstraint::Var(s) => Constraint::Var(s),
+            RecordConstraint::Any => {
+                let t = env.new_temp_type();
+                Constraint::Var(t)
+            }
+        }
+    }
     /// Instantiates a high-level type constraint into a unification-level
     /// constraint.
     pub fn instantiate(
@@ -139,8 +237,26 @@ impl DTypeConstraint {
             Self::Event => Constraint::Atom(ADataType::Event),
             Self::Ref(x) => Constraint::Term(CDataType::Ref, vec![x]),
             Self::RefN(x) => Constraint::Term(CDataType::Ref, vec![x.instantiate(env)]),
-            Self::Encoder => Constraint::Atom(ADataType::Encoder),
-            Self::Fence => Constraint::Atom(ADataType::Fence),
+            Self::Encoder(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
+            Self::Fence(public) => {
+                Constraint::Term(CDataType::Fence, vec![public.instantiate(env)])
+            }
+            Self::Record(r) => Self::instantiate_record(r, env),
+            Self::RemoteObj { all, read, write } => Constraint::Term(
+                CDataType::RemoteObj,
+                vec![
+                    Self::instantiate_record(all, env),
+                    Self::instantiate_record(read, env),
+                    Self::instantiate_record(write, env),
+                ],
+            ),
+            // Self::EncoderN(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
+            // Self::FenceN(public) => {
+            //     Constraint::Term(CDataType::Fence, vec![public.instantiate(env)])
+            // }
+            Self::SpecEncoder => Constraint::Atom(ADataType::SpecEncoder),
+            Self::SpecFence => Constraint::Atom(ADataType::SpecFence),
+            Self::Var(s) => Constraint::Var(s),
         }
     }
 }
@@ -150,6 +266,9 @@ const DEFAULT_FLOAT_SIZE: FloatSize = FloatSize::F64;
 
 impl TryFrom<DTypeConstraint> for DataType {
     type Error = ();
+    /// Tries to convert a data type constraint into a concrete data type.
+    /// If the high-level data type constraint is not constrained enough to be converted
+    /// into a concrete data type, an error is returned.
     fn try_from(dt: DTypeConstraint) -> Result<Self, ()> {
         match dt {
             DTypeConstraint::Int(Some(x)) => Ok(Self::Int(x)),
@@ -161,13 +280,44 @@ impl TryFrom<DTypeConstraint> for DataType {
             DTypeConstraint::Bool => Ok(Self::Bool),
             DTypeConstraint::BufferSpace => Ok(Self::BufferSpace),
             DTypeConstraint::Event => Ok(Self::Event),
-            DTypeConstraint::Any => Err(()),
             DTypeConstraint::Ref(x) => Ok(Self::Ref(Box::new(Self::try_from(
                 DTypeConstraint::try_from(x).map_err(|_| ())?,
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
-            DTypeConstraint::Encoder => Ok(Self::Encoder(None)),
-            DTypeConstraint::Fence => Ok(Self::Fence(None)),
+            DTypeConstraint::Record(RecordConstraint::Record { fields, .. }) => {
+                let mut mp = Vec::new();
+                for (k, v) in fields {
+                    mp.push((k, Self::try_from(v)?));
+                }
+                Ok(Self::Record(mp))
+            }
+            DTypeConstraint::RemoteObj {
+                all: RecordConstraint::Record { fields, .. },
+                read: RecordConstraint::Record { fields: read, .. },
+                write: RecordConstraint::Record { fields: write, .. },
+            } => {
+                let mut mp = Vec::new();
+                for (k, v) in fields {
+                    mp.push((k, Self::try_from(v)?));
+                }
+                let read = read.into_keys().collect();
+                let write = write.into_keys().collect();
+                Ok(Self::RemoteObj {
+                    all: mp,
+                    read,
+                    write,
+                })
+            }
+            DTypeConstraint::Encoder(typ) => {
+                Ok(Self::Encoder(Some(Box::new(Self::try_from(*typ)?))))
+            }
+            DTypeConstraint::Fence(vars) => Ok(Self::Fence(Some(Box::new(Self::try_from(*vars)?)))),
+            DTypeConstraint::SpecEncoder => Ok(Self::Encoder(None)),
+            DTypeConstraint::SpecFence => Ok(Self::Fence(None)),
+            DTypeConstraint::Any
+            | DTypeConstraint::Var(_)
+            | DTypeConstraint::Record(RecordConstraint::Var(_) | RecordConstraint::Any)
+            | DTypeConstraint::RemoteObj { .. } => Err(()),
         }
     }
 }
@@ -188,7 +338,9 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                         match d {
                             Constraint::Atom(x) => Ok(Self::Int(Some(x.try_into()?))),
                             Constraint::Var(_) => Ok(Self::Int(None)),
-                            Constraint::Term(..) => unreachable!(),
+                            Constraint::Term(..)
+                            | Constraint::DynamicTerm(..)
+                            | Constraint::DropTerm(..) => unreachable!(),
                         }
                     }
                     Constraint::Term(CDataType::Float, mut v) => {
@@ -196,7 +348,9 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                         match d {
                             Constraint::Atom(x) => Ok(Self::Float(Some(x.try_into()?))),
                             Constraint::Var(_) => Ok(Self::Float(None)),
-                            Constraint::Term(..) => unreachable!(),
+                            Constraint::Term(..)
+                            | Constraint::DynamicTerm(..)
+                            | Constraint::DropTerm(..) => unreachable!(),
                         }
                     }
                     _ => unreachable!(),
@@ -208,11 +362,72 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                 Ok(Self::Ref(d))
             }
             Constraint::Var(_) => Ok(Self::Any),
-            Constraint::Atom(ADataType::Encoder) => Ok(Self::Encoder),
-            Constraint::Atom(ADataType::Fence) => Ok(Self::Fence),
-            _ => todo!(),
+            Constraint::Term(CDataType::Encoder, mut v) => {
+                assert_eq!(
+                    v.len(),
+                    1,
+                    "Encoder constraint should have exactly one child"
+                );
+                let d = v.swap_remove(0);
+                Ok(Self::Encoder(Box::new(d.try_into()?)))
+            }
+            Constraint::Term(CDataType::Fence, mut v) => {
+                assert_eq!(v.len(), 1, "Fence constraint should have exactly one child");
+                let d = v.swap_remove(0);
+                Ok(Self::Fence(Box::new(d.try_into()?)))
+            }
+            Constraint::DynamicTerm(CDataType::Record, fields, constraint_kind) => {
+                let mut mp = BTreeMap::new();
+                for (k, v) in fields {
+                    mp.insert(k, Self::try_from(v)?);
+                }
+                Ok(Self::Record(RecordConstraint::Record {
+                    fields: mp,
+                    constraint_kind,
+                }))
+            }
+            Constraint::Term(CDataType::RemoteObj, mut v) => {
+                assert_eq!(
+                    v.len(),
+                    3,
+                    "Remote obj constraint should have exactly two children"
+                );
+                let write = Self::try_from(v.pop().unwrap())?;
+                let read = Self::try_from(v.pop().unwrap())?;
+                let all = Self::try_from(v.pop().unwrap())?;
+                if let (Self::Record(all), Self::Record(read), Self::Record(write)) =
+                    (all, read, write)
+                {
+                    Ok(Self::RemoteObj { all, read, write })
+                } else {
+                    Err("RemoteObj constraint should have record children".to_string())
+                }
+            }
+            Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
+            Constraint::Atom(ADataType::SpecFence) => Ok(Self::SpecFence),
+            _ => todo!("Cannot convert {c:?} to DTypeConstraint"),
         }
     }
+}
+
+/// Converts a map of string to data types to a map of string to data type constraints
+fn record_dtypes_to_constraints(
+    fields: Vec<(String, DataType)>,
+) -> BTreeMap<String, DTypeConstraint> {
+    let mut mp = BTreeMap::new();
+    for (k, v) in fields {
+        mp.insert(k, DTypeConstraint::from(v));
+    }
+    mp
+}
+
+/// Converts a set of strings to a map of string to the Any data type constraint
+fn set_dtypes_to_constraints(set: BTreeSet<String>) -> BTreeMap<String, DTypeConstraint> {
+    let mut mp = BTreeMap::new();
+    for k in set {
+        mp.insert(k, DTypeConstraint::Any);
+    }
+    mp
 }
 
 impl From<DataType> for DTypeConstraint {
@@ -225,9 +440,31 @@ impl From<DataType> for DTypeConstraint {
             DataType::BufferSpace => Self::BufferSpace,
             DataType::Event => Self::Event,
             DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
-            DataType::Encoder(None) => Self::Encoder,
-            DataType::Fence(None) => Self::Fence,
-            _ => todo!(),
+            DataType::Encoder(None) => Self::SpecEncoder,
+            DataType::Fence(None) => Self::SpecFence,
+            DataType::Encoder(Some(x)) => Self::Encoder(Box::new(Self::from(*x))),
+            DataType::Fence(Some(x)) => Self::Fence(Box::new(Self::from(*x))),
+            DataType::Record(fields) => Self::Record(RecordConstraint::Record {
+                fields: record_dtypes_to_constraints(fields),
+                // when annotated, we cannot deduce a subtype of the annotation
+                constraint_kind: SubtypeConstraint::Contravariant,
+            }),
+            DataType::RemoteObj { all, read, write } => Self::RemoteObj {
+                // annotations cannot be deduced to be lower types in the lattice then the annotation
+                all: RecordConstraint::Record {
+                    fields: record_dtypes_to_constraints(all),
+                    constraint_kind: SubtypeConstraint::Contravariant,
+                },
+                read: RecordConstraint::Record {
+                    fields: set_dtypes_to_constraints(read),
+                    constraint_kind: SubtypeConstraint::Contravariant,
+                },
+                write: RecordConstraint::Record {
+                    fields: set_dtypes_to_constraints(write),
+                    constraint_kind: SubtypeConstraint::Contravariant,
+                },
+            },
+            _ => todo!("Cannot convert {dt:?} to DTypeConstraint"),
         }
     }
 }
@@ -245,13 +482,13 @@ impl MetaVar {
 
     /// Creates a type equivalence class name
     #[must_use]
-    pub fn new_class_name(s: &String) -> Self {
+    pub fn new_class_name(s: &str) -> Self {
         Self(format!("${s}"))
     }
 
     /// Creates a type variable name
     #[must_use]
-    pub fn new_var_name(s: &String) -> Self {
+    pub fn new_var_name(s: &str) -> Self {
         Self(s.to_string())
     }
 
@@ -260,6 +497,11 @@ impl MetaVar {
     #[allow(clippy::missing_const_for_fn)]
     pub fn into_string(self) -> String {
         self.0
+    }
+
+    #[must_use]
+    pub fn get(&self) -> &str {
+        &self.0
     }
 }
 
@@ -271,7 +513,12 @@ pub enum ValQuot {
     Bool(bool),
     Input(String),
     Output(MetaVar),
+    /// A call in the spec, or a call in the schedule where unconstrained
+    /// arguments cannot be dropped.
     Call(String, Vec<MetaVar>),
+    /// A call with a single return that does not need an extraction.
+    /// Unconstrained arguments are not dropped.
+    CallOne(String, Vec<MetaVar>),
     Extract(MetaVar, usize),
     Bop(Binop, MetaVar, MetaVar),
     Select {
@@ -279,6 +526,9 @@ pub enum ValQuot {
         true_id: MetaVar,
         false_id: MetaVar,
     },
+    /// A call in the schedule, where unmatching unconstrained arguments
+    /// can be ignored.
+    SchedCall(String, Vec<MetaVar>),
 }
 
 impl ValQuot {
@@ -295,7 +545,9 @@ impl ValQuot {
             | (Self::Input(x), Self::Input(y)) => x == y,
             (Self::Output(x), Self::Output(y)) => x == y,
             (Self::Bool(x), Self::Bool(y)) => x == y,
-            (Self::Call(f1, args1), Self::Call(f2, args2)) => {
+            (Self::Call(f1, args1) | Self::SchedCall(f1, args1), Self::Call(f2, args2))
+            | (Self::CallOne(f1, args1), Self::CallOne(f2, args2))
+            | (Self::Call(f1, args1), Self::SchedCall(f2, args2)) => {
                 f1 == f2
                     && args1.len() == args2.len()
                     && args1
@@ -351,6 +603,7 @@ pub enum VQType {
     Extract(usize),
     Bop(Binop),
     Select,
+    CallBuiltin(String),
 }
 
 impl std::fmt::Debug for VQType {
@@ -365,6 +618,7 @@ impl std::fmt::Debug for VQType {
             Self::Extract(i) => write!(f, "Extract({i})"),
             Self::Bop(op) => write!(f, "Bop({op:?})"),
             Self::Select => write!(f, "Select"),
+            Self::CallBuiltin(i) => write!(f, "{i}"),
         }
     }
 }
@@ -377,10 +631,11 @@ impl From<&ValQuot> for VQType {
             ValQuot::Bool(b) => Self::Bool(*b),
             ValQuot::Input(i) => Self::Input(i.clone()),
             ValQuot::Output(_) => Self::Output,
-            ValQuot::Call(f, _) => Self::Call(f.clone()),
+            ValQuot::Call(f, _) | ValQuot::SchedCall(f, _) => Self::Call(f.clone()),
             ValQuot::Extract(_, j) => Self::Extract(*j),
             ValQuot::Bop(op, _, _) => Self::Bop(*op),
             ValQuot::Select { .. } => Self::Select,
+            ValQuot::CallOne(s, _) => Self::CallBuiltin(s.clone()),
         }
     }
 }
@@ -397,6 +652,14 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
             ValQuot::Input(i) => Self::Term(VQType::Input(i.clone()), vec![]),
             ValQuot::Output(o) => Self::Term(VQType::Output, vec![Self::Var(o.0.clone())]),
             ValQuot::Call(f, args) => Self::Term(
+                VQType::Call(f.clone()),
+                args.iter().map(|x| Self::Var(x.0.clone())).collect(),
+            ),
+            ValQuot::CallOne(f, args) => Self::Term(
+                VQType::CallBuiltin(f.clone()),
+                args.iter().map(|x| Self::Var(x.0.clone())).collect(),
+            ),
+            ValQuot::SchedCall(f, args) => Self::DropTerm(
                 VQType::Call(f.clone()),
                 args.iter().map(|x| Self::Var(x.0.clone())).collect(),
             ),
@@ -420,5 +683,42 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
                 ],
             ),
         }
+    }
+}
+
+/// Converts a constraint to a value quotient with wildcard metavariables.
+/// This value quotient will have all metavariables with `?` as the name.
+///
+/// This intention is for the returned value quotient to be used in a situation
+/// that operates modulo metavariable names.
+pub fn constraint_to_wildcard_vq(value: &Constraint<VQType, ()>) -> ValQuot {
+    match value {
+        Constraint::Term(VQType::Int(i), _) => ValQuot::Int(i.clone()),
+        Constraint::Term(VQType::Float(f), _) => ValQuot::Float(f.clone()),
+        Constraint::Term(VQType::Bool(b), _) => ValQuot::Bool(*b),
+        Constraint::Term(VQType::Input(i), _) => ValQuot::Input(i.clone()),
+        Constraint::Term(VQType::Output, _) => ValQuot::Output(MetaVar(String::from("?"))),
+        Constraint::Term(VQType::Call(f), args) => ValQuot::Call(
+            f.clone(),
+            args.iter().map(|_| MetaVar(String::from("?"))).collect(),
+        ),
+        Constraint::Term(VQType::CallBuiltin(f), args) => ValQuot::CallOne(
+            f.clone(),
+            args.iter().map(|_| MetaVar(String::from("?"))).collect(),
+        ),
+        Constraint::DropTerm(VQType::Call(f), args) => ValQuot::SchedCall(
+            f.clone(),
+            args.iter().map(|_| MetaVar(String::from("?"))).collect(),
+        ),
+        Constraint::Term(VQType::Extract(j), _) => ValQuot::Extract(MetaVar(String::from("?")), *j),
+        Constraint::Term(VQType::Bop(op), _) => {
+            ValQuot::Bop(*op, MetaVar(String::from("?")), MetaVar(String::from("?")))
+        }
+        Constraint::Term(VQType::Select, _) => ValQuot::Select {
+            guard: MetaVar(String::from("?")),
+            true_id: MetaVar(String::from("?")),
+            false_id: MetaVar(String::from("?")),
+        },
+        _ => unreachable!(),
     }
 }

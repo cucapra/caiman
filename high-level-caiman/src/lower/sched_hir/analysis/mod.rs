@@ -1,24 +1,25 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 mod continuations;
 mod dominators;
 mod op_transform;
-mod quot_typing;
+mod quot;
+mod record_expansion;
 mod refs;
 mod ssa;
 mod tags;
 
-use crate::{enum_cast, parse::ast::SchedTerm};
-
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
     hir::HirInstr,
-    FenceOp, HirBody,
+    HirBody,
 };
 
 pub use continuations::{compute_continuations, Succs};
 pub use op_transform::op_transform_pass;
-pub use quot_typing::deduce_val_quots;
+pub use quot::deduce_tmln_quots;
+pub use quot::deduce_val_quots;
+pub use record_expansion::transform_encode_pass;
 pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;
 pub use ssa::transform_to_ssa;
@@ -159,6 +160,39 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
     }
 }
 
+/// Performs a breadth first traversal, only performing a dataflow analysis
+/// once per block. Similar to `analyze`, but we won't ever reanalyze a block.
+///
+/// Furthermore, we don't meet with top. Only the input fact of the initial block
+/// is initialized to top.
+pub fn bft_transform<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
+    let mut in_facts: HashMap<usize, T> = HashMap::new();
+    let mut out_facts: HashMap<usize, T> = HashMap::new();
+    let mut worklist: VecDeque<usize> = VecDeque::new();
+    let mut visited: HashSet<usize> = HashSet::new();
+    let adj_lst = T::Dir::get_adj_list(cfg);
+    in_facts.insert(T::Dir::root_id(), top.clone());
+    worklist.push_back(T::Dir::root_id());
+
+    while let Some(block) = worklist.pop_front() {
+        if !visited.insert(block) {
+            continue;
+        }
+        let in_fact = in_facts.get(&block).unwrap();
+        let out_fact = analyze_basic_block(cfg, block, in_fact);
+        let add_neighbors = out_facts.get(&block) != Some(&out_fact);
+        if add_neighbors {
+            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
+            worklist.extend(adj_lst.get(&block).unwrap());
+        }
+        out_facts.insert(block, out_fact);
+    }
+    InOutFacts {
+        in_facts,
+        out_facts,
+    }
+}
+
 /// Broadcasts the output facts to the neighbors
 /// If there is one output fact, it is broadcasted to all neighbors
 /// Otherwise, the number of output facts must be equal to the number of neighbors
@@ -184,7 +218,10 @@ fn broadcast_out_facts<T: Fact>(
         for neighbor in adj_lst.get(&block).unwrap() {
             in_facts.insert(
                 *neighbor,
-                in_facts.get(neighbor).cloned().unwrap().meet(out_fact[0]),
+                in_facts
+                    .get(neighbor)
+                    .cloned()
+                    .map_or_else(|| out_fact[0].clone(), |x| x.meet(out_fact[0])),
             );
         }
     }
@@ -372,20 +409,11 @@ impl Fact for ActiveFences {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();
             }
-            HirInstr::Stmt(HirBody::FenceOp {
-                dest: Some(dest),
-                op: FenceOp::Submit,
-                ..
-            }) => {
+            HirInstr::Stmt(HirBody::Submit { dest, .. }) => {
                 self.active_fences.insert((*dest).to_string());
             }
-            HirInstr::Stmt(HirBody::FenceOp {
-                op: FenceOp::Sync,
-                src,
-                ..
-            }) => {
-                self.active_fences
-                    .remove(enum_cast!(SchedTerm::Var { name, .. }, name, src));
+            HirInstr::Stmt(HirBody::Sync { srcs, .. }) => {
+                self.active_fences.remove(srcs.initial());
             }
             _ => {}
         }

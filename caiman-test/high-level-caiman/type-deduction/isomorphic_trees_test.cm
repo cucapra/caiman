@@ -1,0 +1,34 @@
+#version 0.1.0
+
+// one spec implemented with multiple functions, breaking
+// the injectivity of the function to spec mapping. Also
+// a function has more returns than the spec it implements.
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(s: BufferSpace) -> BufferSpace {
+    returns s
+}
+
+val foo(x: i64) -> i64 {
+    a :- 1
+    b :- 1
+    c :- 1
+    returns x
+}
+
+fn foo_impl(z: i64) -> i64 impls foo, time, space {
+    // no way to tell which `1` we mean, so we need annotations
+    
+    // type inference will not make arbitrary choices
+    // (except for assuming that inputs and outputs match up with the spec
+    // unless otherwise specified)
+    let x @ node(val.a) = 1;
+    let y = 1 @ node(val.b);
+    let h = 1 @ node(val.c);
+    z
+}
+
+pipeline main { foo_impl }

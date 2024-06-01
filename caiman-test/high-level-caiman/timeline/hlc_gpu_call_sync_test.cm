@@ -17,13 +17,15 @@ extern(gpu) simple(x : i32) -> out: i32
     }
 }
 
+type R = { u: i32'<storage, map_read> };
+
 val foo(x : i32) -> out: i32 {
     y :- simple'<1, 1, 1>(x)
     y2 :- bar(y)
     returns y2
 }
 
-val bar(x : i32) -> out: i32 {
+val bar(x: i32) -> out: i32 {
     y :- simple'<1, 1, 1>(3)
     returns x + y
 }
@@ -50,29 +52,27 @@ sptl space(bs: BufferSpace) -> BufferSpace {
 
 fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
     @in { input: input(tmln.e), output: node(tmln.out) };
-    let e = encode-begin @ node(tmln.(loc, rem)) { x_gpu, y_gpu } gpu;
-    encode e.copy[x_gpu <- x];
-    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+    let e = encode-begin @ node(tmln.(loc, rem)) gpu;
+    encode e.copy[v <- x];
+    encode e.call[u <- simple'<1, 1, 1>(v)];
     let f = submit @ node(tmln.sub) e;
-    let r = bar_impl(f, y_gpu) @ node(tmln.ret);
+    let r = bar_impl(f) @ node(tmln.ret);
     @in {input: node(tmln.ret), output: node(tmln.out) };
-    @out {input: node(tmln.out), output: node(tmln.out) };
     r
 }
 
-fn bar_impl(f: Fence @ [input(tmln.f), none(val)], 
-            x: i32'<storage, map_read> @ [input(tmln.f), none(sptl)-saved]) -> i32 
+fn bar_impl(f: Future'R @ input(tmln.f)) -> i32 
             impls bar_time, bar, space 
 {
     @in { input: input(tmln.e), output: node(tmln.out) };
-    let e = encode-begin @ node(tmln.(loc, rem)) { x_gpu, y_gpu } gpu;
-    let t: i32 = 3;
-    encode e.copy[x_gpu <- t];
+    let e = encode-begin @ node(tmln.(loc, rem)) gpu;
+    var t: i32 = 3;
+    encode e.copy[x_gpu <- &t];
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
     let f2 = submit @ node(tmln.sub) e;
     let y = (await @ node(tmln.snc1) f2).y_gpu;
-    let x2 = (await @ node(tmln.snc2) f).x;
-    @out { input: node(tmln.out), output: node(tmln.out) };
+    let x2 = (await @ node(tmln.snc2) f).u;
+    @out { input: node(tmln.snc2), output: node(tmln.out) };
     x2 + y
 }
 

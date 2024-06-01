@@ -41,19 +41,39 @@
 //! the algorithm will immediately unify those two nodes.
 //!
 //! Unification is technically Big-O exponential, but in practice with path
-//! compression, it's linear.
-//! TODO: once explication is added, add a timeout that will chuck anything
-//! that takes too long to unify to the explicator.
-//!
-//! Right now, the algorithm will keep trying for eternity to unify the trees.
-//! Also, although not implemented right now, any thing that doesn't get a
-//! concrete type after unification (perhaps due to future black-box operations)
-//! will be sent to the explicator.
+//! compression, it's linear. Actually, we don't have generics right now,
+//! so I think it's polynomial. (The added unification to convergence makes
+//! this non-linear)
 //!
 //! The way we do unification is to add *class names* to the equivalence classes
-//! in the union-find data structure. The class names are the names of the
+//! in the union-find data structure. (Ie. construct an e-graph).
+//! The class names are the names of the
 //! value spec nodes that the schedule nodes are equivalent to. This allows us
 //! to get the canonical representative (spec node id) of any equivalence class.
+//!
+//! Class names are prefixed with a `$` to distinguish them from regular variable.
+//! In this implementation, all spec nodes would be class names. As such, two
+//! "equivalent" things that are specified independently in the spec would not be
+//! part of the same equivalence class. For example:
+//!
+//! ```text
+//! a :- 1
+//! b :- 1
+//! returns a + b
+//! ```
+//!
+//! CANNOT be implemented with the following schedule:
+//!
+//! ```text
+//! let c = 1;
+//! c + c
+//! ```
+//!
+//! This is because two different `1`s are used in the schedule, and the algorithm
+//! treats them as different equivalence classes. This particular example could
+//! work with a small tweak to the algorithm, but we decided it's doesn't really
+//! preserve the meaning of the spec.
+//!
 
 use std::collections::HashMap;
 
@@ -72,7 +92,10 @@ use crate::{
     typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
-use super::{continuations::compute_pretinuations, ssa};
+use super::{
+    super::{continuations::compute_pretinuations, ssa},
+    add_constraint, add_node_eq, add_var_constraint, fill_quotient,
+};
 
 /// Deduces the quotients for the value specification. Returns an error
 /// if unification fails, otherwise, writes the deduced quotients to the tags
@@ -89,8 +112,25 @@ pub fn deduce_val_quots(
     info: Info,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
-    let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes, info)?;
-    let (env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
+    let mut overrides = Vec::new();
+    for i in &cfg.blocks[&START_BLOCK_ID].stmts {
+        if let HirBody::InAnnotation(_, tags) = i {
+            overrides.extend(tags.iter().cloned());
+        }
+    }
+    let env = add_io_constraints(
+        env,
+        inputs,
+        &overrides,
+        outputs,
+        output_dtypes,
+        dtypes,
+        info,
+        spec_info.sig.num_dims,
+    )?;
+    let (mut env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
+    env.converge_types()
+        .map_err(|e| type_error(Info::default(), &format!("Convergence failure: {e}")))?;
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, output_dtypes, &env);
     Ok(())
@@ -100,20 +140,40 @@ pub fn deduce_val_quots(
 /// Any unspecified annotations are going to be assumed to match up with the
 /// spec. Requires that the input and output variables of a given dimension
 /// (timeline, value, etc.) are kept in the same relative order as the spec.
+#[allow(clippy::too_many_arguments)]
 fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],
+    input_overrides: &[(String, TripleTag)],
     outputs: &mut [TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,
+    num_dims: usize,
 ) -> Result<NodeEnv, LocalError> {
-    env.override_output_classes(output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)));
+    env.override_output_classes(
+        output_dtypes.iter().zip(outputs.iter().map(|t| &t.value)),
+        &is_value_dtype,
+        0,
+    );
+    for (name, tag) in input_overrides {
+        for (n2, t2) in inputs.iter_mut() {
+            if n2 == name {
+                t2.set_specified_info(tag.clone());
+            }
+        }
+    }
+    for i in 0..num_dims {
+        env = super::add_node_eq(&format!("_dim{i}"), &format!("_dim{i}"), info, env)?;
+    }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
         .filter(|(arg, _)| is_value_dtype(&dtypes[&ssa::original_name(arg)]))
         .enumerate()
     {
+        if fn_in_tag.value.quot == Some(Quotient::None) {
+            continue;
+        }
         let class_name = if let Some(annoted_quot) = &fn_in_tag.value.quot_var.spec_var {
             annoted_quot.clone()
         } else {
@@ -124,31 +184,8 @@ fn add_io_constraints(
                 continue;
             }
         };
-        env = add_node_eq(arg_name, &class_name, info, env)?;
+        env = super::add_node_eq(arg_name, &class_name, info, env)?;
     }
-    Ok(env)
-}
-/// Adds a type constraint to the environment
-/// # Arguments
-/// * `lhs` - The name of the variable to constrain
-/// * `rhs` - The constraint to apply to the type variable
-/// * `info` - The source info for the constraint
-/// * `env` - The current environment
-/// # Returns
-/// The updated environment
-#[allow(clippy::unnecessary_wraps)]
-fn add_constraint(
-    lhs: &str,
-    rhs: &ValQuot,
-    info: Info,
-    mut env: NodeEnv,
-) -> Result<NodeEnv, LocalError> {
-    env.add_constraint(lhs, rhs).map_err(|e| {
-        type_error(
-            info,
-            &format!("Failed to unify node constraints of {lhs}:\n {e}"),
-        )
-    })?;
     Ok(env)
 }
 
@@ -169,61 +206,7 @@ fn add_overrideable_constraint(
     info: Info,
     env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    if matches!(lhs_tag.value.quot, Some(Quotient::None)) {
-        return Ok(env);
-    }
-    if let Some(annot) = &lhs_tag.value.quot_var.spec_var {
-        if let Some(class_constraint) = env.get_spec_node(annot) {
-            if !class_constraint.alpha_equiv(&From::from(rhs)) {
-                return Ok(env);
-            }
-        }
-    }
-    add_constraint(lhs, rhs, info, env)
-}
-
-/// Constrains two type variables to be equal
-/// # Arguments
-/// * `lhs` - The name of the first variable
-/// * `rhs` - The name of the second variable
-/// * `info` - The source info for the constraint
-/// * `env` - The current environment
-/// # Returns
-/// The updated environment
-#[allow(clippy::unnecessary_wraps)]
-fn add_var_constraint(
-    lhs: &str,
-    var: &str,
-    info: Info,
-    mut env: NodeEnv,
-) -> Result<NodeEnv, LocalError> {
-    env.add_var_eq(lhs, var)
-        .map_err(|e| type_error(info, &format!("Failed to unify {lhs} with {var}:\n {e}")))?;
-    Ok(env)
-}
-
-/// Adds a node with the given name to match the class name (spec node id)
-/// # Arguments
-/// * `name` - The name of the type variable
-/// * `class_name` - The name of the class that the type variable must match with
-/// * `info` - The source info for the constraint
-/// * `env` - The current environment
-/// # Returns
-/// The updated environment
-#[allow(clippy::unnecessary_wraps)]
-fn add_node_eq(
-    name: &str,
-    class_name: &str,
-    info: Info,
-    mut env: NodeEnv,
-) -> Result<NodeEnv, LocalError> {
-    env.add_node_eq(name, class_name).map_err(|e| {
-        type_error(
-            info,
-            &format!("Failed to unify {name} with node {class_name}:\n {e}"),
-        )
-    })?;
-    Ok(env)
+    super::add_overrideable_constraint(lhs, lhs_tag, rhs, info, env, &|dt| &dt.value)
 }
 
 /// Adds a type annotation for `name` to the environement if the given annotation
@@ -240,11 +223,7 @@ fn add_type_annot(
     info: Info,
     env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    if let Some(class_name) = &annot.value.quot_var.spec_var {
-        add_node_eq(name, class_name, info, env)
-    } else {
-        Ok(env)
-    }
+    super::add_type_annot(name, annot, info, env, &|dt| &dt.value)
 }
 
 /// Unifies an assignment to the variable `lhs` with the given rhs.
@@ -379,7 +358,7 @@ fn unify_op(
         }
         HirOp::FFI(target, OpType::External) => {
             // The name of an external function is the name of its value spec
-            let f_class = ctx.specs[target].feq.clone().unwrap();
+            let f_class = ctx.specs[target].feq.clone();
             let dest_tuple = tuple_id(
                 &dests
                     .iter()
@@ -390,7 +369,7 @@ fn unify_op(
                 &format!("!{dest_tuple}"),
                 &ValQuot::Call(
                     f_class,
-                    arg_names.iter().map(MetaVar::new_var_name).collect(),
+                    arg_names.iter().map(|x| MetaVar::new_var_name(x)).collect(),
                 ),
                 info,
                 env,
@@ -404,7 +383,7 @@ fn unify_op(
                 )?;
             }
         }
-        HirOp::FFI(..) => todo!(),
+        HirOp::FFI(..) => todo!("Unimplemented operator"),
         _ => unreachable!(),
     }
     for (dest, dest_tag) in dests {
@@ -441,7 +420,6 @@ fn unify_phi(
             false_branch,
         } = cfg.graph[&split_point]
         {
-            // TODO: Info
             let incoming_edges: Vec<_> = incoming_edges.iter().collect();
             assert_eq!(incoming_edges.len(), 2);
             if cfg.succs.succs[&true_branch].contains(incoming_edges[0].0) {
@@ -505,7 +483,7 @@ fn unify_call(
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     let val_spec = value_name(&call.target, ctx);
-    let f_class = ctx.specs[&val_spec].feq.clone().unwrap();
+    let f_class = ctx.specs[&val_spec].feq.clone();
     let tuple_name = tuple_id(
         &dests
             .iter()
@@ -516,7 +494,7 @@ fn unify_call(
     env = add_overrideable_constraint(
         &tuple_name,
         &call.tag,
-        &ValQuot::Call(
+        &ValQuot::SchedCall(
             f_class,
             call.args
                 .iter()
@@ -646,8 +624,15 @@ fn unify_nodes(
                     env,
                 )?,
                 HirBody::EncodeDo { dests, func, info, .. } => unify_call(dests, func, ctx, dtypes, *info, env)?,
+                HirBody::Sync { dests, srcs, info, ..} => {
+                    assert_eq!(dests.processed().len() + 1, srcs.processed().len());
+                    for ((dest, dest_tag), src) in dests.processed().iter().zip(srcs.processed().iter().skip(1)) {
+                        env = unify_decl(dest, dest_tag, &SchedTerm::Var { name: src.clone(), info: *info, tag: None }, fn_info, env)?;
+                    }
+                    env
+                }
                 HirBody::BeginEncoding { .. }
-                | HirBody::FenceOp { .. }
+                | HirBody::Submit { .. }
                 | HirBody::Hole(..)
                 // ignore PHIs for non-value types
                 | HirBody::Phi { .. } => env,
@@ -687,7 +672,7 @@ fn unify_terminator(
                 .iter()
                 .filter(|rname| {
                     is_value_dtype(dtypes.get(&ssa::original_name(rname)).unwrap_or_else(|| {
-                        panic!("Missing dtype for {}", ssa::original_name(rname))
+                        panic!("{info}: Missing dtype for {}", ssa::original_name(rname))
                     }))
                 })
                 .zip(output_classes.into_iter())
@@ -732,30 +717,9 @@ fn unify_terminator(
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
 fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
-    if let Some(node) = env.get_node_name(name) {
-        let quot = tag.value.quot;
-        let flow = tag.value.flow;
-        let old_spec_var = tag.value.quot_var.spec_var.as_ref();
-        assert!(
-            old_spec_var.is_none() || old_spec_var.unwrap() == &node,
-            "Cannot unify class {name} with unequal nodes {node} and {}",
-            old_spec_var.unwrap()
-        );
-        tag.value = Tag {
-            quot: Some(quot.unwrap_or_else(|| {
-                if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
-                    Quotient::Input
-                } else {
-                    Quotient::Node
-                }
-            })),
-            quot_var: QuotientReference {
-                spec_var: Some(node),
-                spec_type: SpecType::Value,
-            },
-            flow,
-        };
-    }
+    fill_quotient(name, tag, env, block_id, SpecType::Value, false, &|dt| {
+        &mut dt.value
+    });
 }
 
 /// Constructs a new triple tag based on information from the environment.
@@ -835,7 +799,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 HirBody::Hole(_)
                 | HirBody::RefLoad { .. }
                 | HirBody::BeginEncoding { .. }
-                | HirBody::FenceOp { .. } => {}
+                | HirBody::Submit { .. } => {}
                 HirBody::Phi { dest, info, .. } => {
                     insertions.push((
                         idx,
@@ -844,6 +808,11 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                             vec![(dest.clone(), construct_new_tag(dest, env, block.id))],
                         ),
                     ));
+                }
+                HirBody::Sync { dests, .. } => {
+                    for (dest, dest_tag) in dests.processed_mut() {
+                        fill_val_quotient(dest, dest_tag, env, block.id);
+                    }
                 }
             }
         }
@@ -866,7 +835,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 fill_val_quotient(&selects[&block.id], tag, env, block.id);
             }
             Terminator::Call(..) | Terminator::None(..) => unreachable!(),
-            // TODO: check the return, I think this is right bc returns should be handled
+            // I think this is right bc returns to parents should be handled
             // by Phi nodes
             Terminator::Next(..)
             | Terminator::FinalReturn(..)

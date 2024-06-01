@@ -1,17 +1,21 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     parse::ast::{
-        Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType, FullType, SchedExpr,
-        SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, TimelineOperation, Uop, WGPUFlags,
+        Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType, FullType, IntSize, SchedExpr,
+        SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecTerm, TemplateArgs,
+        TimelineOperation, Uop, WGPUFlags,
     },
 };
 use std::iter::once;
 
 use super::{
-    binop_to_contraints, types::DTypeConstraint, uop_to_contraints, Context, DTypeEnv, Mutability,
+    binop_to_contraints,
+    types::{DTypeConstraint, RecordConstraint},
+    unification::SubtypeConstraint,
+    uop_to_contraints, Context, DTypeEnv, Mutability,
 };
 
 /// Collects all defined names in a spec and errors if any constants
@@ -322,12 +326,21 @@ fn collect_if(
 }
 
 /// Collects constraints for a function call.
+/// # Arguments
+/// * `ctx` - The context of the program.
+/// * `env` - The current environment.
+/// * `dest` - The destination variables of the call.
+/// * `call_info` - The information about the call.
+/// * `info` - The source info of the call.
+/// * `arg_dest_prefix` - The prefix to add to the destination variables and arguments
+/// of the call. None if the call is not an encoded call.
 fn collect_assign_call(
     ctx: &Context,
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
     call_info: &SchedFuncCall,
     info: Info,
+    arg_dest_prefix: Option<&str>,
 ) -> Result<(), LocalError> {
     let mut arg_names = Vec::new();
     for arg in &call_info.args {
@@ -336,18 +349,22 @@ fn collect_assign_call(
             name,
             enum_cast!(SchedExpr::Term, arg)
         );
-        arg_names.push(arg_name);
+        if let Some(pre) = arg_dest_prefix {
+            arg_names.push(format!("{pre}::{arg_name}"));
+        } else {
+            arg_names.push(arg_name.clone());
+        }
     }
     let fn_name = enum_cast!(
         SchedTerm::Var { name, .. },
         name,
         enum_cast!(SchedExpr::Term, &*call_info.target)
     );
-    let sig = ctx
+    let func = ctx
         .scheds
         .get(fn_name)
-        .ok_or_else(|| type_error(info, &format!("{info}: Function {fn_name} not found")))?
-        .sig();
+        .ok_or_else(|| type_error(info, &format!("{info}: Function {fn_name} not found")))?;
+    let sig = func.sig();
     if arg_names.len() != sig.input.len() {
         return Err(type_error(
             info,
@@ -368,8 +385,37 @@ fn collect_assign_call(
             ),
         ));
     }
+    if let Some(TemplateArgs::Vals(ts)) = &call_info.templates {
+        if ts.len() != sig.num_dims {
+            return Err(type_error(
+                info,
+                &format!(
+                    "{info}: Expected {} template arguments, found {}",
+                    sig.num_dims,
+                    ts.len()
+                ),
+            ));
+        }
+        for t_arg in ts {
+            let t_name = enum_cast!(
+                SpecTerm::Var { name, .. },
+                name,
+                enum_cast!(SpecExpr::Term, t_arg)
+            );
+            env.add_dtype_constraint(t_name, DataType::Int(IntSize::I32), info)?;
+        }
+    } else if sig.num_dims != 0 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Expected {} template arguments, found 0",
+                sig.num_dims
+            ),
+        ));
+    }
     for (arg, arg_type) in arg_names.iter().zip(sig.input.iter()) {
-        env.add_dtype_constraint(arg, arg_type.base.clone(), info)?;
+        let dc: DTypeConstraint = arg_type.base.clone().into();
+        env.add_constraint(arg, dc.into_subtypeable(), info)?;
     }
     for ((dest_name, dest_annot), typ) in dest.iter().zip(sig.output.iter()) {
         if let Some(FullType {
@@ -385,7 +431,9 @@ fn collect_assign_call(
                 ));
             }
         }
-        env.add_dtype_constraint(dest_name, typ.base.clone(), info)?;
+        let dest =
+            arg_dest_prefix.map_or_else(|| dest_name.clone(), |pre| format!("{pre}::{dest_name}"));
+        env.add_dtype_constraint(&dest, typ.base.clone(), info)?;
     }
     Ok(())
 }
@@ -411,7 +459,7 @@ fn collect_null_decl(
 fn collect_dot(
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
-    _lhs: &SchedExpr,
+    lhs: &SchedExpr,
     rhs: &SchedExpr,
     info: Info,
 ) -> Result<(), LocalError> {
@@ -419,6 +467,11 @@ fn collect_dot(
         SchedTerm::Var { name, .. },
         name,
         enum_cast!(SchedExpr::Term, rhs)
+    );
+    let lhs_name = enum_cast!(
+        SchedTerm::Var { name, .. },
+        name,
+        enum_cast!(SchedExpr::Term, lhs)
     );
     if dest.len() != 1 {
         return Err(type_error(
@@ -436,8 +489,15 @@ fn collect_dot(
     {
         env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
     }
-    env.add_var_equiv(dest_name, rhs_name, info)?;
-    env.add_usage(rhs_name, WGPUFlags::MapRead);
+    let lhs_constraint = DTypeConstraint::Record(RecordConstraint::Record {
+        fields: {
+            let mut fields = BTreeMap::new();
+            fields.insert(rhs_name.clone(), DTypeConstraint::Var(dest_name.clone()));
+            fields
+        },
+        constraint_kind: SubtypeConstraint::Any,
+    });
+    env.add_constraint(lhs_name, lhs_constraint, info)?;
     Ok(())
 }
 
@@ -466,13 +526,31 @@ fn collect_timeline_op(
     let dest_name = &dest[0].0;
     match op {
         TimelineOperation::Submit => {
-            env.add_dtype_constraint(dest_name, DataType::Fence(None), info)?;
-            env.add_dtype_constraint(arg_name, DataType::Encoder(None), info)
+            let inner = format!("!{dest_name}");
+            env.add_constraint(&inner, DTypeConstraint::Any, info)?;
+            env.add_constraint(
+                dest_name,
+                DTypeConstraint::Fence(Box::new(DTypeConstraint::Var(inner.clone()))),
+                info,
+            )?;
+            env.add_constraint(
+                arg_name,
+                DTypeConstraint::Encoder(Box::new(DTypeConstraint::Var(inner))),
+                info,
+            )
         }
         TimelineOperation::Await => {
-            // TODO
             env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
-            env.add_dtype_constraint(arg_name, DataType::Fence(None), info)
+            env.add_var_side_cond(&format!("{dest_name}-defined_fields"), dest_name);
+            env.add_constraint(
+                arg_name,
+                DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
+                    all: RecordConstraint::Var(format!("{dest_name}-defined_fields")),
+                    read: RecordConstraint::Var(dest_name.clone()),
+                    write: RecordConstraint::Any,
+                })),
+                info,
+            )
         }
     }
 }
@@ -481,7 +559,7 @@ fn collect_timeline_op(
 fn collect_begin_encode(
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
-    defs: &[(String, Option<FullType>)],
+    _defs: &[(String, Option<FullType>)],
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
@@ -494,15 +572,17 @@ fn collect_begin_encode(
         ));
     }
     let dest_name = &dest[0].0;
-    env.add_dtype_constraint(dest_name, DataType::Encoder(None), info)?;
-    for (def_name, def_annot) in defs {
-        if let Some(FullType {
-            base: Some(anot), ..
-        }) = def_annot
-        {
-            env.add_dtype_constraint(def_name, anot.base.clone(), info)?;
-        }
+    if let Some(FullType {
+        base: Some(anot), ..
+    }) = &dest[0].1
+    {
+        env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
     }
+    env.add_constraint(
+        dest_name,
+        DTypeConstraint::Encoder(Box::new(DTypeConstraint::Any)),
+        info,
+    )?;
     Ok(())
 }
 
@@ -565,7 +645,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 info,
                 ..
             } => {
-                collect_assign_call(ctx, env, dest, call_info, *info)?;
+                collect_assign_call(ctx, env, dest, call_info, *info, None)?;
             }
             SchedStmt::Assign {
                 lhs: SchedExpr::Term(SchedTerm::Var { name: dest, .. }),
@@ -596,7 +676,6 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 info,
                 ..
             } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
-            // TODO: implement timeline operations
             SchedStmt::Decl {
                 lhs,
                 expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { op, arg, info, .. })),
@@ -615,7 +694,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
             SchedStmt::Call(info, call_info) => {
-                collect_assign_call(ctx, env, &[], call_info, *info)?;
+                collect_assign_call(ctx, env, &[], call_info, *info, None)?;
             }
             SchedStmt::Return(_, e) => {
                 assert_eq!(num_stmts, 0);
@@ -642,17 +721,91 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 }
             }
             SchedStmt::Encode {
-                stmt, cmd, info, ..
-            } => collect_encode(ctx, env, stmt, *cmd, *info)?,
+                stmt,
+                cmd,
+                info,
+                encoder,
+                ..
+            } => collect_encode(ctx, env, encoder, stmt, *cmd, *info)?,
             _ => unreachable!("{:#?}", stmt),
         }
     }
     Ok(vec![])
 }
 
-fn collect_encode(
-    _ctx: &Context,
+/// Constructs a constraint for a subtypeable remote object which contains the
+/// variable `var` with the constraint `var_constraint`. `flag` is used to
+/// determine whether we should also constrain `var` to be a member of the read
+/// or write fields of the remote object.
+fn get_singleton_remote_obj_constraint(
+    var: &str,
+    var_constraint: DTypeConstraint,
+    flag: WGPUFlags,
+) -> DTypeConstraint {
+    let populated_record = RecordConstraint::Record {
+        fields: {
+            let mut fields = BTreeMap::new();
+            fields.insert(var.to_string(), var_constraint.clone());
+            fields
+        },
+        constraint_kind: SubtypeConstraint::Any,
+    };
+    let empty_record = RecordConstraint::Record {
+        fields: BTreeMap::new(),
+        constraint_kind: SubtypeConstraint::Any,
+    };
+    let (read, write) = if flag == WGPUFlags::MapRead {
+        (populated_record, empty_record)
+    } else if flag == WGPUFlags::CopyDst {
+        (empty_record, populated_record)
+    } else {
+        assert_eq!(flag, WGPUFlags::Storage, "TODO: Unimplemented flag");
+        (empty_record.clone(), empty_record)
+    };
+    DTypeConstraint::RemoteObj {
+        all: RecordConstraint::Record {
+            fields: {
+                let mut fields = BTreeMap::new();
+                fields.insert(var.to_string(), var_constraint);
+                fields
+            },
+            constraint_kind: SubtypeConstraint::Any,
+        },
+        read,
+        write,
+    }
+}
+
+/// Adds a constraint that `var` must be a member of the remote object stored in
+/// `encoder` with the constraint `var_constraint`. `flag` is used to determine
+/// whether we should also constrain `var` to be a member of the read or write
+/// fields of the remote object.
+///
+/// This function has the effect of adding the constraint that `encoder` defines
+/// `var`.
+fn add_singleton_encoder_contraint(
     env: &mut DTypeEnv,
+    encoder: &str,
+    var: &str,
+    var_constraint: DTypeConstraint,
+    flag: WGPUFlags,
+    info: Info,
+) -> Result<(), LocalError> {
+    env.add_constraint(
+        encoder,
+        DTypeConstraint::Encoder(Box::new(get_singleton_remote_obj_constraint(
+            var,
+            var_constraint,
+            flag,
+        ))),
+        info,
+    )
+}
+
+fn collect_encode(
+    ctx: &Context,
+    env: &mut DTypeEnv,
+    encoder: &str,
     stmt: &EncodedStmt,
     cmd: EncodedCommand,
     info: Info,
@@ -664,29 +817,71 @@ fn collect_encode(
                 name,
                 enum_cast!(SchedExpr::Term, &stmt.rhs)
             );
+            let inner = format!("!{src}!");
+            // force copy from ref
+            env.add_constraint(&inner, DTypeConstraint::Any, info)?;
+            env.add_constraint(
+                src,
+                DTypeConstraint::RefN(Box::new(DTypeConstraint::Var(inner.clone()))),
+                info,
+            )?;
             let dest = stmt.lhs[0].0.clone();
-            env.add_var_equiv(src, &dest, info)?;
-            env.add_usage(&dest, WGPUFlags::CopyDst);
-            Ok(())
+            add_singleton_encoder_contraint(
+                env,
+                encoder,
+                &dest,
+                DTypeConstraint::Var(inner),
+                WGPUFlags::CopyDst,
+                info,
+            )
         }
         EncodedCommand::Invoke => {
-            // TODO: typing encode-do (should GPU args be refs or values?)
-            // if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
-            //     collect_assign_call(
-            //         ctx,
-            //         env,
-            //         &stmt
-            //             .lhs
-            //             .iter()
-            //             .map(|(x, _)| (x.clone(), None))
-            //             .collect::<Vec<_>>(),
-            //         call,
-            //         *info,
-            //     )
-            // } else {
-            //     unreachable!();
-            // }
-            env.add_usage(&stmt.lhs[0].0, WGPUFlags::MapRead);
+            if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
+                collect_assign_call(
+                    ctx,
+                    env,
+                    &stmt
+                        .lhs
+                        .iter()
+                        .map(|(x, _)| (x.clone(), None))
+                        .collect::<Vec<_>>(),
+                    call,
+                    *info,
+                    Some(encoder),
+                )?;
+                // we now have constraints on all of the arguments and destinations,
+                // which we can use
+                for (dest, _) in &stmt.lhs {
+                    add_singleton_encoder_contraint(
+                        env,
+                        encoder,
+                        dest,
+                        DTypeConstraint::Var(format!("{encoder}::{dest}")),
+                        WGPUFlags::Storage,
+                        *info,
+                    )?;
+                }
+                for arg in &call.args {
+                    let arg_name = enum_cast!(
+                        SchedTerm::Var { name, .. },
+                        name,
+                        enum_cast!(SchedExpr::Term, arg)
+                    );
+                    // TODO: have another category of variables in a remote obj
+                    // so we can check if someone uses an argument in a call that
+                    // isn't defined
+                    add_singleton_encoder_contraint(
+                        env,
+                        encoder,
+                        arg_name,
+                        DTypeConstraint::Var(format!("{encoder}::{arg_name}")),
+                        WGPUFlags::Storage,
+                        *info,
+                    )?;
+                }
+            } else {
+                unreachable!();
+            }
             Ok(())
         }
     }
@@ -731,7 +926,8 @@ pub fn collect_schedule(
             ..
         } = fn_t
         {
-            env.add_dtype_constraint(ret_name, base.clone(), info)?;
+            let dtc = DTypeConstraint::from(base.clone());
+            env.add_constraint(ret_name, dtc.into_subtypeable(), info)?;
             for flag in flags {
                 env.add_usage(ret_name, *flag);
             }

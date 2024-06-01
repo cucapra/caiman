@@ -2,13 +2,13 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::unused_self, clippy::option_option)]
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};
 
 use super::ast::*;
-use crate::error::{Info, CustomParsingError};
+use crate::error::{CustomParsingError, HasInfo, Info};
 use crate::custom_parse_error;
 
 const MAJOR_VERSION: &str = "0";
@@ -88,18 +88,18 @@ macro_rules! struct_variant_factory {
             }
         }
     };
-    ($f:ident<$($templates:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
+    ($f:ident<$($templates:ident : $constraint:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
         #[must_use]
-        pub fn $f<$($templates,)*>(&self, l : usize, $($x : $t,)* r : usize) -> $rt {
+        pub fn $f<$($templates:$constraint,)*>(&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
                 $($x,)*
             }
         }
     };
-    ($f:ident<$($templates:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path{$($g:ident:$e:expr),*}) => {
+    ($f:ident<$($templates:ident: $constraint:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path{$($g:ident:$e:expr),*}) => {
         #[must_use]
-        pub fn $f<$($templates,)*> (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
+        pub fn $f<$($templates:$constraint,)*> (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
                 $($g: $e,)*
@@ -119,6 +119,9 @@ macro_rules! struct_variant_factory {
 /// same passing along of source location information
 pub struct ASTFactory {
     line_ending_byte_offsets: Vec<usize>,
+    /// mapping of user-defined types. Handling this here
+    /// requires that we declare a typedef before we use it
+    type_map: HashMap<String, DataType>,
 }
 
 /// `LALRpop` parsing error using our custom error type, `CustomParsingError`
@@ -138,6 +141,7 @@ impl ASTFactory {
                 .enumerate()
                 .filter_map(|(idx, b)| if *b == b'\n' { Some(idx) } else { None })
                 .collect(),
+            type_map: HashMap::new(),
         }
     }
 
@@ -299,11 +303,23 @@ impl ASTFactory {
         sanitize_expr(&expr).map(|_| expr)
     }
 
+    /// Finalizes a datatype used as the base type of a flagged type. Flagged types
+    /// are the annotatiions and input/output arguments for the schedules.
+    #[allow(clippy::missing_const_for_fn)]
+    fn finalize_data_type(t: DataType) -> DataType {
+        if let DataType::RemoteObj { all, ..} = t {
+            DataType::Record(all)
+        } else {
+            t
+        }
+    }
+
     /// Constructs a flagged type from a data type and a list of flags/settings
     /// Flags/settings are optional
     /// # Errors
     /// Returns an error if the flags/settings are invalid
-    pub fn flagged_type(&self, l: usize, t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
+    pub fn flagged_type(&self, l: usize, mut t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
+        t = Self::finalize_data_type(t);
         // are there a limited set of WGPU flags/setting we should check for?
         Ok(match flags {
             Some(flags) => {
@@ -438,21 +454,21 @@ impl ASTFactory {
 
     // Nested Exprs
 
-    struct_variant_factory!(binop<T>(lhs: NestedExpr<T>, op: Binop, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop {
+    struct_variant_factory!(binop<T: HasInfo>(lhs: NestedExpr<T>, op: Binop, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop {
         op: op,
         lhs: Box::new(lhs),
         rhs: Box::new(rhs)
     });
-    struct_variant_factory!(range<T>(lhs: NestedExpr<T>, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop { 
+    struct_variant_factory!(range<T: HasInfo>(lhs: NestedExpr<T>, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop { 
         op: Binop::Range,
         lhs: Box::new(lhs),
         rhs: Box::new(rhs)
     });
-    struct_variant_factory!(uop<T>(op: Uop, expr: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Uop {
+    struct_variant_factory!(uop<T: HasInfo>(op: Uop, expr: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Uop {
         op: op,
         expr: Box::new(expr)
     });
-    struct_variant_factory!(conditional<T>(if_true: NestedExpr<T>, guard: NestedExpr<T>, 
+    struct_variant_factory!(conditional<T: HasInfo>(if_true: NestedExpr<T>, guard: NestedExpr<T>, 
         if_false: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Conditional 
     {
         guard: Box::new(guard),
@@ -530,10 +546,10 @@ impl ASTFactory {
         SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
         SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag });
-    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, defs: Option<Vec<MaybeArg<FullType>>>, device: Name) ->
+    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, device: Name) ->
         SchedTerm:SchedTerm::EncodeBegin { 
             device: device,
-            defs: defs.unwrap_or_default(),
+            defs: vec![],
             tag: tag 
         });
 
@@ -699,7 +715,19 @@ impl ASTFactory {
 
     struct_variant_factory!(pipeline(name: String, entry: String) -> TopLevel:TopLevel::Pipeline);
 
-    struct_variant_factory!(type_def(name: Name, typ: FlaggedType) -> TopLevel:TopLevel::Typedef);
+    pub fn type_def(&mut self, l: usize, name: Name, typ: DataType, r:usize) -> TopLevel {
+        self.type_map.insert(name.clone(), typ.clone());
+        TopLevel::Typedef { info: self.info(l, r), name, typ: typ.into() }
+    }
+
+    /// Replaces a user-defined type with a concrete type
+    /// # Errors
+    /// Returns an error if the user-defined type is not found
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn user_defined_type(&self, l: usize, name: String, r:usize, ) -> Result<DataType, ParserError> {
+        let info = self.info(l, r);
+        self.type_map.get(&name).cloned().ok_or_else(|| custom_parse_error!(info, "Undefined type {name}"))
+    }
 
     /// Constructs a constant definition from a name and expression. Checks that
     /// the expression is a valid constant expression and returns an error if not
@@ -732,5 +760,33 @@ impl ASTFactory {
                 MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, maj, min, patch));
         }
         Ok(prog)
+    }
+
+    /// Parses a remote object. We parse all records as remote objects to preserve
+    /// flag information, and if
+    /// we find a remote object as a base type in the schedule, we convert it
+    /// back to a record. See `finalize_data_type`.
+    /// # Errors
+    /// Returns an error if the remote object has invalid settings or flags
+    pub fn class_type(&self, l:usize, v: Vec<Arg<FlaggedType>>, r:usize) -> Result<DataType, ParserError> {
+        let mut all = Vec::new();
+        let mut read = BTreeSet::new();
+        let mut write = BTreeSet::new();
+        let info = self.info(l, r);
+        for (name, typ) in v {
+            all.push((name.clone(), typ.base));
+            if !typ.settings.is_empty() {
+                return Err(custom_parse_error!(info, "Settings are not implemented yet"));
+            }
+            for f in typ.flags {
+                match f {
+                    WGPUFlags::MapRead => { read.insert(name.clone()); },
+                    WGPUFlags::CopyDst => { write.insert(name.clone()); },
+                    WGPUFlags::Storage => {},
+                    _ => return Err(custom_parse_error!(info, "Unimplemented flag {f:?}")),
+                };
+            }
+        }
+        Ok(DataType::RemoteObj { all, read, write })
     }
 }

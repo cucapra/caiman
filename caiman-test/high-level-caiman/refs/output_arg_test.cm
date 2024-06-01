@@ -1,0 +1,28 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> i64 {
+    returns one()
+}
+
+val one() -> i64 {
+    returns 10
+}
+
+
+fn main_func() -> i64 impls main, time, space  
+{
+    var x;
+    *one_func(&x)
+}
+
+fn one_func(a: &i64 @ none(val)-dead) -> &i64 
+    impls one, time, space
+{
+    *a = 10;
+    a
+}
+
+pipeline main { main_func }
