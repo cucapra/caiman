@@ -1,0 +1,37 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> i64 {
+    c :- 1
+    b :- 2
+    returns one(b)
+}
+
+val one(a: i64) -> i64 {
+    c :- 1
+    returns 2 if c == 1 else 3
+}
+
+
+fn main_func() -> i64 impls main, time, space  
+{
+    var x = 1;
+    let y = &x;
+    *y = 2;
+    one_func(y)
+}
+
+fn one_func(a: &i64) -> i64 
+    impls one, time, space
+{
+    *a = 1;
+    if *a == 1 {
+        2
+    } else {
+        3
+    }
+}
+
+pipeline main { main_func }
