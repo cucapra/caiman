@@ -13,7 +13,7 @@ use std::{
 };
 
 use crate::{
-    error::{Info, LocalError},
+    error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
             analysis::{InOutFacts, LiveVars},
@@ -226,6 +226,12 @@ fn unify_nodes(
             }
         }
     }
+    env.converge_types().map_err(|e| {
+        type_error(
+            Info::default(),
+            &format!("Failed to converge node types:\n {e}"),
+        )
+    })?;
     let io_evs = into_input_output_annotations(cfg, &env, &block_loc_events);
     Ok((env, io_evs))
 }

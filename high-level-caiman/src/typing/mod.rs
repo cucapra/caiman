@@ -10,6 +10,7 @@ use crate::{
     parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Tag, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
+use types::constraint_to_wildcard_vq;
 
 use self::{
     types::{ADataType, CDataType, DTypeConstraint, RecordConstraint},
@@ -87,6 +88,8 @@ pub struct NodeEnv {
     outputs: Vec<Option<String>>,
     /// List of spec output node class names, without the leading `$` symbol.
     spec_outputs: Vec<String>,
+    /// Set of variables in the schedule
+    sched_vars: HashSet<String>,
 }
 
 impl Default for NodeEnv {
@@ -97,6 +100,7 @@ impl Default for NodeEnv {
             inputs: Vec::new(),
             outputs: Vec::new(),
             spec_outputs: Vec::new(),
+            sched_vars: HashSet::new(),
         }
     }
 }
@@ -198,31 +202,6 @@ impl NodeEnv {
         !name.starts_with('$')
     }
 
-    /// Checks if the constraint uniquely identifies a quotient class and
-    /// unifies the class with the type variable if it does.
-    fn check_for_unique_match(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
-        if let Some(matches) = self.spec_nodes.get(&constraint.get_type()) {
-            let mut last_match_classes = None;
-            for (possible_match, match_classes) in matches {
-                if possible_match.matches(constraint, Self::is_wildcard_name) {
-                    if last_match_classes.is_some() {
-                        return Ok(()); // Not a unique match
-                    }
-                    last_match_classes = Some(match_classes);
-                }
-            }
-            if let Some(last_match_classes) = last_match_classes {
-                if last_match_classes.len() == 1 {
-                    self.env.add_class_constraint(
-                        last_match_classes.iter().next().unwrap(),
-                        &Constraint::Var(name.to_string()),
-                    )?;
-                }
-            }
-        }
-        Ok(())
-    }
-
     /// Adds a constraint to the type variable `name`. If the constraint
     /// uniquely identifies a quotient class, unifies the quotient class with
     /// the type variable.
@@ -233,7 +212,8 @@ impl NodeEnv {
     pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
         assert!(!name.contains('$'));
         self.env.add_constraint(name, &From::from(constraint))?;
-        self.check_for_unique_match(name, constraint)
+        self.sched_vars.insert(name.to_string());
+        Ok(())
     }
 
     /// Adds a constraint to the type variable `name` with another variable.
@@ -244,6 +224,8 @@ impl NodeEnv {
     pub fn add_var_eq(&mut self, name: &str, equiv: &str) -> Result<(), String> {
         assert!(!name.contains('$'));
         assert!(!equiv.contains('$'));
+        self.sched_vars.insert(name.to_string());
+        self.sched_vars.insert(equiv.to_string());
         self.env
             .add_constraint(name, &Constraint::Var(equiv.to_string()))
     }
@@ -261,6 +243,7 @@ impl NodeEnv {
             format!("${class_name}")
         };
         assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
+        self.sched_vars.insert(name.to_string());
         self.env
             .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
     }
@@ -291,6 +274,44 @@ impl NodeEnv {
             }
         }
         res
+    }
+
+    /// Iterates until convergence of all types. Keeps iterating and unifying
+    /// types with unique matches until no more unique matches can be found.
+    /// # Errors
+    /// Returns an error if unification fails on a unique match.
+    pub fn converge_types(&mut self) -> Result<(), String> {
+        loop {
+            let mut to_merge = Vec::new();
+            for var in &self.sched_vars {
+                if let Some(constraint) = self.env.get_type(var) {
+                    if constraint.is_var() || self.env.get_class_id(var).is_some() {
+                        continue;
+                    }
+                    let vq = constraint_to_wildcard_vq(&constraint);
+                    if let Some(matches) = self.spec_nodes.get(&vq.get_type()) {
+                        let to_check = matches
+                            .iter()
+                            .filter(|(x, _)| x.matches(&vq, Self::is_wildcard_name))
+                            .flat_map(|(_, x)| x.iter().cloned());
+                        for class in to_check {
+                            if let Some(constraint2) = self.env.get_type(&class) {
+                                if constraint == constraint2 {
+                                    to_merge.push((var.clone(), class));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if to_merge.is_empty() {
+                break;
+            }
+            for (var, class) in to_merge {
+                self.add_node_eq(&var, &class)?;
+            }
+        }
+        Ok(())
     }
 }
 

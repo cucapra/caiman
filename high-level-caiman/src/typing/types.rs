@@ -685,3 +685,36 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
         }
     }
 }
+
+/// Converts a constraint to a value quotient with wildcard metavariables
+pub fn constraint_to_wildcard_vq(value: &Constraint<VQType, ()>) -> ValQuot {
+    match value {
+        Constraint::Term(VQType::Int(i), _) => ValQuot::Int(i.clone()),
+        Constraint::Term(VQType::Float(f), _) => ValQuot::Float(f.clone()),
+        Constraint::Term(VQType::Bool(b), _) => ValQuot::Bool(*b),
+        Constraint::Term(VQType::Input(i), _) => ValQuot::Input(i.clone()),
+        Constraint::Term(VQType::Output, _) => ValQuot::Output(MetaVar(String::from("?"))),
+        Constraint::Term(VQType::Call(f), args) => ValQuot::Call(
+            f.clone(),
+            args.iter().map(|_| MetaVar(String::from("?"))).collect(),
+        ),
+        Constraint::Term(VQType::CallBuiltin(f), args) => ValQuot::CallOne(
+            f.clone(),
+            args.iter().map(|_| MetaVar(String::from("?"))).collect(),
+        ),
+        Constraint::DropTerm(VQType::Call(f), args) => ValQuot::SchedCall(
+            f.clone(),
+            args.iter().map(|_| MetaVar(String::from("?"))).collect(),
+        ),
+        Constraint::Term(VQType::Extract(j), _) => ValQuot::Extract(MetaVar(String::from("?")), *j),
+        Constraint::Term(VQType::Bop(op), _) => {
+            ValQuot::Bop(*op, MetaVar(String::from("?")), MetaVar(String::from("?")))
+        }
+        Constraint::Term(VQType::Select, _) => ValQuot::Select {
+            guard: MetaVar(String::from("?")),
+            true_id: MetaVar(String::from("?")),
+            false_id: MetaVar(String::from("?")),
+        },
+        _ => unreachable!(),
+    }
+}

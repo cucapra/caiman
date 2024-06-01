@@ -58,7 +58,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::{Info, LocalError},
+    error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
             cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
@@ -108,7 +108,9 @@ pub fn deduce_val_quots(
         info,
         spec_info.sig.num_dims,
     )?;
-    let (env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
+    let (mut env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
+    env.converge_types()
+        .map_err(|e| type_error(Info::default(), &format!("Convergence failure: {e}")))?;
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, output_dtypes, &env);
     Ok(())

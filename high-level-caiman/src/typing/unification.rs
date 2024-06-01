@@ -893,7 +893,15 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .map(|a| Self::node_to_constraint(a))
                     .collect::<Vec<_>>(),
             ),
-            Node::Var { id, .. } => Constraint::Var(format!("%{id}")),
+            Node::Var { id, parent, .. } =>
+            {
+                #[allow(clippy::option_if_let_else)]
+                if let Some(parent) = parent {
+                    Self::node_to_constraint(parent)
+                } else {
+                    Constraint::Var(format!("%{id}"))
+                }
+            }
             Node::DynamicTerm {
                 op,
                 args,

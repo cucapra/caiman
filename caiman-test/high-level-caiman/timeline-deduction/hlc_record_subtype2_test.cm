@@ -64,11 +64,7 @@ fn foo_impl(x: &i32) -> T impls foo_time, foo, space {
     encode e.copy[x_gpu <- x];
     encode e.call[foo <- simple'<1, 1, 1>(x_gpu)];
     encode e.call[baz <- simple'<1, 1, 1>(x_gpu)];
-    let r = combine_impl(await bar_impl(e));
-    // TODO: we currently need to constrain all roots of the expression tree,
-    // our deduction can probably be improved to avoid this
-    @in { r.foo: node(val.res1) };
-    r
+    combine_impl(await bar_impl(e))
 }
 
 fn combine_impl(r: R) -> R impls combine_time, space, combine {
