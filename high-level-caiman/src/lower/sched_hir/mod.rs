@@ -329,7 +329,6 @@ impl<'a> Funclet<'a> {
                 })
                 .collect()
         } else {
-            // TODO: re-evaluate if this is correct for the general case
             self.output_vars()
                 .into_iter()
                 .map(|(var, tag)| asm::FuncletArgument {

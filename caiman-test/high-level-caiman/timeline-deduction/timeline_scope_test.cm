@@ -1,0 +1,53 @@
+#version 0.1.0
+extern(gpu) simple(x: i32) -> out: i32 {
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x: i32) -> i32 {
+    c :- 1
+    r :- simple'<c, c, c>(x)
+    returns r
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    enc1, enc2 :- encode_event(e)
+    sub :- submit_event(enc2)
+    snc :- sync_event(enc1, sub)
+    returns snc
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+fn foo_main(x: &i32) -> i32 
+    impls foo, foo_time, foo_space
+{
+    let e = encode-begin gpu;
+    encode e.copy[x <- x];
+
+
+    // I don't reccomend writing code this way but this `x` is e.x, not
+    // the argument `x`
+    encode e.call[y <- simple'<1, 1, 1>(x)];
+    let f = submit e;
+
+
+    let y = await f;
+    y.y
+
+}
+
+pipeline main {
+    foo_main
+}

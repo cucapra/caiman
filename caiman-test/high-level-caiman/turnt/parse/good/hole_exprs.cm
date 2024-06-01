@@ -1,5 +1,5 @@
 #version 0.1.0
-type gint = i32'<storage>;
+type gint = i32;
 
 fn foo(a: gint'<map_write> @ input(val.x)-?, 
        b: bool @ [],

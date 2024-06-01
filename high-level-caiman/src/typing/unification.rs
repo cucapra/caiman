@@ -699,6 +699,44 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
             _ => false,
         }
     }
+
+    /// Returns true if the constraints are equal, modulo unconstrained variables
+    pub fn matches(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Var(_), _) | (_, Self::Var(_)) => true,
+            (Self::Atom(a), Self::Atom(b)) => a == b,
+            (Self::Term(op_a, args_a), Self::Term(op_b, args_b))
+                if op_a == op_b && args_a.len() == args_b.len() =>
+            {
+                args_a.iter().zip(args_b.iter()).all(|(a, b)| a.matches(b))
+            }
+            (Self::DynamicTerm(..), _) | (_, Self::DynamicTerm(..)) => {
+                panic!("Unexpected constraint type in matches")
+            }
+            (
+                Self::DropTerm(op_a, args_long),
+                Self::Term(op_b, args_short) | Self::DropTerm(op_b, args_short),
+            )
+            | (Self::Term(op_a, args_short), Self::DropTerm(op_b, args_long))
+                if op_a == op_b && args_short.len() <= args_long.len() =>
+            {
+                let mut diff = args_long.len() - args_short.len();
+                args_long
+                    .iter()
+                    .filter(|node| {
+                        if diff > 0 && node.is_var() {
+                            diff -= 1;
+                            false
+                        } else {
+                            true
+                        }
+                    })
+                    .zip(args_short.iter())
+                    .all(|(a, b)| a.matches(b))
+            }
+            _ => false,
+        }
+    }
 }
 
 /// A typing environment.

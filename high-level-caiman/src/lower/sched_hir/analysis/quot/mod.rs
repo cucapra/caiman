@@ -1,3 +1,5 @@
+//! Quotient type checking and type deduction
+
 mod tmln_typing;
 mod val_typing;
 

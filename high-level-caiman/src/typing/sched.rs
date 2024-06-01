@@ -326,12 +326,21 @@ fn collect_if(
 }
 
 /// Collects constraints for a function call.
+/// # Arguments
+/// * `ctx` - The context of the program.
+/// * `env` - The current environment.
+/// * `dest` - The destination variables of the call.
+/// * `call_info` - The information about the call.
+/// * `info` - The source info of the call.
+/// * `arg_dest_prefix` - The prefix to add to the destination variables and arguments
+/// of the call. None if the call is not an encoded call.
 fn collect_assign_call(
     ctx: &Context,
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
     call_info: &SchedFuncCall,
     info: Info,
+    arg_dest_prefix: Option<&str>,
 ) -> Result<(), LocalError> {
     let mut arg_names = Vec::new();
     for arg in &call_info.args {
@@ -340,7 +349,11 @@ fn collect_assign_call(
             name,
             enum_cast!(SchedExpr::Term, arg)
         );
-        arg_names.push(arg_name);
+        if let Some(pre) = arg_dest_prefix {
+            arg_names.push(format!("{pre}::{arg_name}"));
+        } else {
+            arg_names.push(arg_name.clone());
+        }
     }
     let fn_name = enum_cast!(
         SchedTerm::Var { name, .. },
@@ -418,7 +431,9 @@ fn collect_assign_call(
                 ));
             }
         }
-        env.add_dtype_constraint(dest_name, typ.base.clone(), info)?;
+        let dest =
+            arg_dest_prefix.map_or_else(|| dest_name.clone(), |pre| format!("{pre}::{dest_name}"));
+        env.add_dtype_constraint(&dest, typ.base.clone(), info)?;
     }
     Ok(())
 }
@@ -630,7 +645,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 info,
                 ..
             } => {
-                collect_assign_call(ctx, env, dest, call_info, *info)?;
+                collect_assign_call(ctx, env, dest, call_info, *info, None)?;
             }
             SchedStmt::Assign {
                 lhs: SchedExpr::Term(SchedTerm::Var { name: dest, .. }),
@@ -661,7 +676,6 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 info,
                 ..
             } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
-            // TODO: implement timeline operations
             SchedStmt::Decl {
                 lhs,
                 expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { op, arg, info, .. })),
@@ -680,7 +694,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
             SchedStmt::Call(info, call_info) => {
-                collect_assign_call(ctx, env, &[], call_info, *info)?;
+                collect_assign_call(ctx, env, &[], call_info, *info, None)?;
             }
             SchedStmt::Return(_, e) => {
                 assert_eq!(num_stmts, 0);
@@ -745,7 +759,7 @@ fn get_singleton_remote_obj_constraint(
     } else if flag == WGPUFlags::CopyDst {
         (empty_record, populated_record)
     } else {
-        assert_eq!(flag, WGPUFlags::Storage, "TODO");
+        assert_eq!(flag, WGPUFlags::Storage, "TODO: Unimplemented flag");
         (empty_record.clone(), empty_record)
     };
     DTypeConstraint::RemoteObj {
@@ -766,6 +780,9 @@ fn get_singleton_remote_obj_constraint(
 /// `encoder` with the constraint `var_constraint`. `flag` is used to determine
 /// whether we should also constrain `var` to be a member of the read or write
 /// fields of the remote object.
+///
+/// This function has the effect of adding the constraint that `encoder` defines
+/// `var`.
 fn add_singleton_encoder_contraint(
     env: &mut DTypeEnv,
     encoder: &str,
@@ -830,6 +847,7 @@ fn collect_encode(
                         .collect::<Vec<_>>(),
                     call,
                     *info,
+                    Some(encoder),
                 )?;
                 // we now have constraints on all of the arguments and destinations,
                 // which we can use
@@ -838,7 +856,7 @@ fn collect_encode(
                         env,
                         encoder,
                         dest,
-                        DTypeConstraint::Var(dest.clone()),
+                        DTypeConstraint::Var(format!("{encoder}::{dest}")),
                         WGPUFlags::Storage,
                         *info,
                     )?;
@@ -849,11 +867,14 @@ fn collect_encode(
                         name,
                         enum_cast!(SchedExpr::Term, arg)
                     );
+                    // TODO: have another category of variables in a remote obj
+                    // so we can check if someone uses an argument in a call that
+                    // isn't defined
                     add_singleton_encoder_contraint(
                         env,
                         encoder,
                         arg_name,
-                        DTypeConstraint::Var(arg_name.clone()),
+                        DTypeConstraint::Var(format!("{encoder}::{arg_name}")),
                         WGPUFlags::Storage,
                         *info,
                     )?;

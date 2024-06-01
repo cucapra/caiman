@@ -405,7 +405,7 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
             }
             Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
             Constraint::Atom(ADataType::SpecFence) => Ok(Self::SpecFence),
-            _ => todo!(),
+            _ => todo!("Cannot convert {c:?} to DTypeConstraint"),
         }
     }
 }
@@ -464,7 +464,7 @@ impl From<DataType> for DTypeConstraint {
                     constraint_kind: SubtypeConstraint::Contravariant,
                 },
             },
-            _ => todo!(),
+            _ => todo!("Cannot convert {dt:?} to DTypeConstraint"),
         }
     }
 }
@@ -686,7 +686,11 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
     }
 }
 
-/// Converts a constraint to a value quotient with wildcard metavariables
+/// Converts a constraint to a value quotient with wildcard metavariables.
+/// This value quotient will have all metavariables with `?` as the name.
+///
+/// This intention is for the returned value quotient to be used in a situation
+/// that operates modulo metavariable names.
 pub fn constraint_to_wildcard_vq(value: &Constraint<VQType, ()>) -> ValQuot {
     match value {
         Constraint::Term(VQType::Int(i), _) => ValQuot::Int(i.clone()),

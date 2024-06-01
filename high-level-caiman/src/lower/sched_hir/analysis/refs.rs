@@ -28,6 +28,10 @@
 //! ```
 //! However, because this is a local transformation, we can't reuse results
 //! across funclet/block boundaries.
+//!
+//! We also insert loads and stores for variables around function calls to
+//! support capturing references across function calls. We do not do this
+//! for references.
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 

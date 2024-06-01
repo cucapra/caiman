@@ -1,3 +1,7 @@
+//! Builds a cfg from the AST. The CFG will have a unique start and end block,
+//! and be constructed in breadth-first order so that every block knows
+//! its continuation when its constructed.
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
@@ -175,49 +179,46 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
                 dests,
                 block,
                 is_const,
-            } => {
-                match *block {
-                    SchedStmt::Block(_, mut stmts) => {
-                        if !stmts.is_empty()
-                            && matches!(stmts.last().as_ref().unwrap(), SchedStmt::Return(..))
-                        {
-                            // TODO: rename to avoid redeclaration of variables
-                            if let SchedStmt::Return(info, ret_expr) = stmts.pop().unwrap() {
-                                res.extend(flatten_stmts(stmts));
-                                res.push(SchedStmt::Decl {
-                                    info,
-                                    lhs: dests,
-                                    is_const,
-                                    expr: Some(ret_expr),
-                                });
-                            } else {
-                                unreachable!()
-                            }
+            } => match *block {
+                SchedStmt::Block(_, mut stmts) => {
+                    if !stmts.is_empty()
+                        && matches!(stmts.last().as_ref().unwrap(), SchedStmt::Return(..))
+                    {
+                        if let SchedStmt::Return(info, ret_expr) = stmts.pop().unwrap() {
+                            res.extend(flatten_stmts(stmts));
+                            res.push(SchedStmt::Decl {
+                                info,
+                                lhs: dests,
+                                is_const,
+                                expr: Some(ret_expr),
+                            });
                         } else {
-                            panic!("{info}: Empty block assigned to variables {dests:?}");
+                            unreachable!()
                         }
+                    } else {
+                        panic!("{info}: Empty block assigned to variables {dests:?}");
                     }
-                    SchedStmt::If {
+                }
+                SchedStmt::If {
+                    guard,
+                    tag,
+                    true_block,
+                    false_block,
+                    info: if_info,
+                } => res.push(SchedStmt::Seq {
+                    info,
+                    dests,
+                    block: Box::new(SchedStmt::If {
                         guard,
                         tag,
-                        true_block,
-                        false_block,
+                        true_block: flatten_stmts(true_block),
+                        false_block: flatten_stmts(false_block),
                         info: if_info,
-                    } => res.push(SchedStmt::Seq {
-                        info,
-                        dests,
-                        block: Box::new(SchedStmt::If {
-                            guard,
-                            tag,
-                            true_block: flatten_stmts(true_block),
-                            false_block: flatten_stmts(false_block),
-                            info: if_info,
-                        }),
-                        is_const,
                     }),
-                    _ => panic!("{info}: Sequence block is neither a Block or If"),
-                }
-            }
+                    is_const,
+                }),
+                _ => panic!("{info}: Sequence block is neither a Block or If"),
+            },
             other => res.push(other),
         }
     }
@@ -296,7 +297,6 @@ fn handle_return(
 /// * `end_info` - The source location of the select statement.
 /// * `children` - The list of pending children to add to that will queue up the
 ///  children of this block to be processed in the next BFS level.
-// TODO: cleanup
 #[allow(clippy::too_many_arguments)]
 fn handle_select(
     cur_id: &mut usize,
@@ -559,7 +559,7 @@ fn make_blocks(
                 block,
                 is_const: _,
             } => {
-                // TODO: handle variable writes
+                // TODO: handle mutable destinations
                 handle_seq(
                     block,
                     &mut cur_stmts,

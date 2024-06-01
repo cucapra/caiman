@@ -280,6 +280,7 @@ impl NodeEnv {
     /// types with unique matches until no more unique matches can be found.
     /// # Errors
     /// Returns an error if unification fails on a unique match.
+    /// # Panics
     pub fn converge_types(&mut self) -> Result<(), String> {
         loop {
             let mut to_merge = Vec::new();
@@ -293,13 +294,17 @@ impl NodeEnv {
                         let to_check = matches
                             .iter()
                             .filter(|(x, _)| x.matches(&vq, Self::is_wildcard_name))
-                            .flat_map(|(_, x)| x.iter().cloned());
+                            .flat_map(|(_, x)| x.iter());
+                        let mut matches = Vec::new();
                         for class in to_check {
-                            if let Some(constraint2) = self.env.get_type(&class) {
-                                if constraint == constraint2 {
-                                    to_merge.push((var.clone(), class));
+                            if let Some(constraint2) = self.env.get_type(class) {
+                                if constraint2.matches(&constraint) {
+                                    matches.push(class);
                                 }
                             }
+                        }
+                        if matches.len() == 1 {
+                            to_merge.push((var.to_string(), matches.pop().unwrap().clone()));
                         }
                     }
                 }
@@ -369,10 +374,9 @@ impl DTypeEnv {
     /// Returns an error if a side condition is not satisfied.
     fn check_side_conds(&self, info: Info) -> Result<(), LocalError> {
         for (subtype, supertype) in &self.side_conditions {
-            if !match (
-                self.env.get_type(subtype).map(DTypeConstraint::try_from),
-                self.env.get_type(supertype).map(DTypeConstraint::try_from),
-            ) {
+            let sub_c = self.env.get_type(subtype).map(DTypeConstraint::try_from);
+            let super_c = self.env.get_type(supertype).map(DTypeConstraint::try_from);
+            if !match (&sub_c, &super_c) {
                 (
                     Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
                         fields: sub_fields,
@@ -404,7 +408,7 @@ impl DTypeEnv {
             } {
                 return Err(type_error(
                     info,
-                    &format!("Constraint caused violation of condition that {subtype} is a subtype of {supertype}"),
+                    &format!("Constraint caused violation of condition that {subtype} is a subtype of {supertype}\n{sub_c:#?} \n !<: \n{super_c:#?}"),
                 ));
             }
         }
@@ -539,6 +543,7 @@ pub enum SchedOrExtern {
 }
 
 impl SchedOrExtern {
+    /// The signature of the schedule or extern.
     #[must_use]
     pub const fn sig(&self) -> &Signature {
         match self {
@@ -653,6 +658,9 @@ impl SchedInfo {
 pub struct Signature {
     pub input: Vec<FlaggedType>,
     pub output: Vec<FlaggedType>,
+    /// The number of non-type template arguments to the function
+    /// conveying the grid size of the kernel. All of these
+    /// arguments are `i32` and are not included in `input`
     pub num_dims: usize,
 }
 
@@ -688,6 +696,9 @@ impl Signature {
 pub struct NamedSignature {
     pub input: Vec<(String, FlaggedType)>,
     pub output: Vec<(String, FlaggedType)>,
+    /// The number of non-type template arguments to the function
+    /// conveying the grid size of the kernel. All of these
+    /// arguments are `i32` and are not included in `input`
     pub num_dims: usize,
 }
 
@@ -843,7 +854,7 @@ fn binop_to_contraints(
             let a = a.instantiate(env);
             (a.clone(), a.clone(), a)
         }
-        Binop::Dot | Binop::Range | Binop::Index | Binop::Cons => todo!(),
+        Binop::Dot | Binop::Range | Binop::Index | Binop::Cons => panic!("Operator not lowered"),
     }
 }
 

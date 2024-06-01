@@ -1,2 +1,2 @@
-Error: At "hole_in_spec2.cm" 1:0, 
+Error: At "hole_in_spec2.cm" 2:20, 
   Parsing Error: Undefined type f32

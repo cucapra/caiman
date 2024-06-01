@@ -1,3 +1,5 @@
+//! Detects loops in the program call graph and inserts yields to break cycles.
+
 use std::collections::{BTreeMap, HashSet};
 
 use crate::parse::ast::{

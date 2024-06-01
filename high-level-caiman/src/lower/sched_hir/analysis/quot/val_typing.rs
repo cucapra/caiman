@@ -41,19 +41,39 @@
 //! the algorithm will immediately unify those two nodes.
 //!
 //! Unification is technically Big-O exponential, but in practice with path
-//! compression, it's linear.
-//! TODO: once explication is added, add a timeout that will chuck anything
-//! that takes too long to unify to the explicator.
-//!
-//! Right now, the algorithm will keep trying for eternity to unify the trees.
-//! Also, although not implemented right now, any thing that doesn't get a
-//! concrete type after unification (perhaps due to future black-box operations)
-//! will be sent to the explicator.
+//! compression, it's linear. Actually, we don't have generics right now,
+//! so I think it's polynomial. (The added unification to convergence makes
+//! this non-linear)
 //!
 //! The way we do unification is to add *class names* to the equivalence classes
-//! in the union-find data structure. The class names are the names of the
+//! in the union-find data structure. (Ie. construct an e-graph).
+//! The class names are the names of the
 //! value spec nodes that the schedule nodes are equivalent to. This allows us
 //! to get the canonical representative (spec node id) of any equivalence class.
+//!
+//! Class names are prefixed with a `$` to distinguish them from regular variable.
+//! In this implementation, all spec nodes would be class names. As such, two
+//! "equivalent" things that are specified independently in the spec would not be
+//! part of the same equivalence class. For example:
+//!
+//! ```text
+//! a :- 1
+//! b :- 1
+//! returns a + b
+//! ```
+//!
+//! CANNOT be implemented with the following schedule:
+//!
+//! ```text
+//! let c = 1;
+//! c + c
+//! ```
+//!
+//! This is because two different `1`s are used in the schedule, and the algorithm
+//! treats them as different equivalence classes. This particular example could
+//! work with a small tweak to the algorithm, but we decided it's doesn't really
+//! preserve the meaning of the spec.
+//!
 
 use std::collections::HashMap;
 
@@ -363,7 +383,7 @@ fn unify_op(
                 )?;
             }
         }
-        HirOp::FFI(..) => todo!(),
+        HirOp::FFI(..) => todo!("Unimplemented operator"),
         _ => unreachable!(),
     }
     for (dest, dest_tag) in dests {
@@ -400,7 +420,6 @@ fn unify_phi(
             false_branch,
         } = cfg.graph[&split_point]
         {
-            // TODO: Info
             let incoming_edges: Vec<_> = incoming_edges.iter().collect();
             assert_eq!(incoming_edges.len(), 2);
             if cfg.succs.succs[&true_branch].contains(incoming_edges[0].0) {
@@ -816,7 +835,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 fill_val_quotient(&selects[&block.id], tag, env, block.id);
             }
             Terminator::Call(..) | Terminator::None(..) => unreachable!(),
-            // TODO: check the return, I think this is right bc returns should be handled
+            // I think this is right bc returns to parents should be handled
             // by Phi nodes
             Terminator::Next(..)
             | Terminator::FinalReturn(..)

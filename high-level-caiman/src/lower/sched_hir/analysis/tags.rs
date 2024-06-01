@@ -1,3 +1,12 @@
+//! Deduces flows and aggregates deduced quotient information via a dataflow pass.
+//! This pass is designed to work with `bft_transform`, where we don't meet with
+//! top and a block is only analyzed once.
+//!
+//! This pass determines when a quotient should be input or node and
+//! determines flow. At the start of the first block, all tags are
+//! input quotients. At the end of the start block, all tags become
+//! node quotients.
+
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -65,11 +74,15 @@ fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
 #[allow(clippy::module_name_repetitions)]
 pub struct TagAnalysis {
     tags: HashMap<String, TripleTag>,
-    /// For an output fact, thse are the input tags to be overridden
+    /// For an output fact, thse are the input tags to be overridden.
+    /// Input overrides are not carried over between blocks
     input_overrides: HashMap<String, TripleTag>,
     data_types: Rc<HashMap<String, DataType>>,
     flags: Rc<HashMap<String, ir::BufferFlags>>,
+    /// The tags that are added at the start of the final basic block
     out_tags: Option<Rc<HashMap<String, TripleTag>>>,
+    /// The current block this fact is a part of. This is used to
+    /// perform operations once per block
     block: Option<usize>,
 }
 
@@ -104,20 +117,17 @@ impl TagAnalysis {
         input: &[(String, TripleTag)],
         num_dims: usize,
     ) {
+        // input tags all start off as Input quotient and are transformed to node
+        // quotients after the first block
         for i in 0..num_dims {
             let mut t = TripleTag::new_none_usable();
             t.value.quot = Some(Quotient::Input);
             t.value.quot_var.spec_var = Some(format!("_dim{i}"));
             tags.insert(format!("_dim{i}"), t.clone());
-            //t.value.quot = Some(Quotient::Input);
-            //tags.insert(format!("{IN_STEM}_dim{i}"), t);
         }
         for (arg_name, arg_type) in input {
             let mut tg = arg_type.clone();
             if matches!(data_types.get(arg_name), Some(DataType::Ref(_))) {
-                // TODO: the flow itself should be able to be a hole
-                // the the future, also assume that it's save if the flow is not specified
-                // but the quotient is
                 tg.spatial
                     .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
                 if let Some(flow) = &tg.spatial.flow {
@@ -375,7 +385,7 @@ impl TagAnalysis {
                 for (dest, dest_tag) in dests {
                     let t = self.tags.get_mut(dest).unwrap();
                     t.set_specified_info(dest_tag.clone());
-                    // TODO: check this
+                    // TODO: is it always usable?
                     t.value.flow = Some(Flow::Usable);
                 }
             }

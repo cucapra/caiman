@@ -26,7 +26,7 @@ use super::{
 /// Gets a list of type declarations for the base types used in the program.
 #[allow(clippy::too_many_lines)]
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
-    // TODO: collect used types
+    // TODO: collect used types instead of declaring every possible type?
     vec![
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("BufferSpace"),
@@ -116,7 +116,6 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
-        // TODO: type names
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&i32::gs"),
             data: asm::LocalTypeInfo::Ref {

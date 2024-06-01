@@ -260,7 +260,7 @@ fn collect_spec_assign_term(
                     SpecLiteral::Int(i) => ValQuot::Int(i.clone()),
                     SpecLiteral::Bool(b) => ValQuot::Bool(*b),
                     SpecLiteral::Float(f) => ValQuot::Float(f.clone()),
-                    _ => todo!(),
+                    _ => todo!("Unimplemented literal type in spec"),
                 },
             );
             if let Some(annot) = lhs[0].1.as_ref() {
@@ -273,12 +273,12 @@ fn collect_spec_assign_term(
                     SpecLiteral::Int(_) => DTypeConstraint::Int(None),
                     SpecLiteral::Bool(_) => DTypeConstraint::Bool,
                     SpecLiteral::Float(_) => DTypeConstraint::Float(None),
-                    _ => todo!(),
+                    _ => todo!("Unimplemented literal type in spec"),
                 },
                 *info,
             )
         }
-        SpecTerm::Var { .. } => todo!(),
+        SpecTerm::Var { .. } => unimplemented!("Variable assignment in spec"),
         SpecTerm::Call {
             function,
             args,

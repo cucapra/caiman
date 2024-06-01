@@ -257,12 +257,14 @@ pub enum HirBody {
         // only one tag since a submit does not require an extraction
         tags: TripleTag,
     },
+    /// A sync-fence folowed by copying all the encoded variables in `src` to
+    /// local ones in `dests`. 
     Sync {
         info: Info,
         /// the local versions of the encoded variables or the name of the record
         /// destination.
         dests: FillIn<(Name, TripleTag), Vec<(Name, TripleTag)>>,
-        /// fence followed by all the variables being copied to the local device
+        /// fence name or fence followed by all the variables being copied to the local device
         srcs: FillIn<Name, Vec<Name>>, 
         // sync does not require an extraction
         tags: TripleTag,
@@ -368,7 +370,7 @@ impl HirFuncCall {
                         }
                     }
                 },
-                Some(TemplateArgs::Type(_)) => todo!(),
+                Some(TemplateArgs::Type(_)) => unimplemented!("Type template arguments"),
                 None => (),
 
             }
@@ -665,7 +667,6 @@ impl HirBody {
                 }
             }
             SchedStmt::Encode { info, stmt, encoder, cmd, .. } => {
-                // TODO: encoder scoping
                 match cmd {
                     EncodedCommand::Copy => {
                         assert_eq!(stmt.lhs.len(), 1);  
@@ -901,8 +902,6 @@ impl Hir for HirBody {
                 FillIn::Initial((name, _)) => Some(vec![name.clone()]),
                 FillIn::Processed(dests) => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
             }
-            // TODO: re-evaluate the move instruction.
-            // Viewing it as a write to a reference, then it had no defs
             Self::Hole(..)
             // RefStore doesn't have a def bc it's a store to a reference
             | Self::RefStore { .. }
@@ -1028,7 +1027,7 @@ fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
         }
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
         SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } 
-        | SchedTerm::EncodeBegin { .. } => todo!(),
+        | SchedTerm::EncodeBegin { .. } => panic!("Unexpected term"),
     }
 }
 
@@ -1038,6 +1037,6 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
         SchedTerm::Var { name, .. } => *name = f(name),
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
         SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } |
-        SchedTerm::EncodeBegin{ ..} => todo!(),
+        SchedTerm::EncodeBegin{ ..} => panic!("Unexpected term"),
     }
 }

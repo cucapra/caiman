@@ -37,7 +37,7 @@ fn lower_spec_term(t: SpecTerm, dtype: &DataType) -> asm::Node {
         },
         SpecTerm::Call { .. } => panic!("Unexpected call"),
         // we can probably do a local copy propagation here
-        SpecTerm::Var { .. } => todo!(),
+        SpecTerm::Var { .. } => unimplemented!("Cannot assign a variable to a spec node"),
     }
 }
 

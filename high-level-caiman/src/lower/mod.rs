@@ -205,7 +205,8 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Re
                 asm.declarations
                     .extend(res.into_iter().map(asm::Declaration::Funclet));
             }
-            TopLevel::Typedef { .. } => (), // TODO: more than just records
+            // TODO: do something with this instead of handling in the parser to allow out of order uses
+            TopLevel::Typedef { .. } => (), 
             _ => todo!(),
         }
     }

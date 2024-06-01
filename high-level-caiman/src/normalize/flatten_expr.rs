@@ -22,7 +22,7 @@ use crate::{
 ///     * A list of statements that need to be added to the spec
 ///     * The new number of temporary variables
 ///     * The new spec term
-pub fn flatten_top_level<
+fn flatten_top_level<
     T: HasInfo,
     F: Fn(&str) -> T,
     I,

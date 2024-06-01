@@ -1,3 +1,6 @@
+//! Expands records into their respective fields in the inputs and outputs of
+//! function signatures.
+
 use std::collections::BTreeSet;
 
 use crate::{

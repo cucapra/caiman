@@ -1,3 +1,30 @@
+//! Contains logic for expanding records out into their fields and
+//! renaming fields to be scoped with their encoder. When expanding
+//! function call arguments or final returns, we use the unexpanded
+//! signature of the target function to expand the arguments such that
+//! we can return subtypes.
+//!
+//! For example, if we have a function that returns `{x: i32, y: i32}`, then:
+//!
+//! ```text
+//! let res: {g: i32, y: i32, x: i32} = // ...
+//! res
+//! ```
+//!
+//! will expand to:
+//!
+//! ```text
+//! let res::g, res::y, res::x = // ...
+//! (res::x, res::y)
+//! ```
+//!
+//! This file does not expand records in the inputs and outputs of functions.
+//!
+//! We do record expansion here because we need dataflow information. For example,
+//! if we have a fence that is created by submitting an encoder, then its
+//! variables actually belong to the encoder. So we need to expand the variables
+//! using the encoder's name.
+
 use std::collections::HashMap;
 
 use crate::{
@@ -353,8 +380,6 @@ pub fn transform_encode_pass(
     ctx: &Context,
     sig_out: &Vec<FlaggedType>,
 ) {
-    // Map from fence to the encoder that holds its variables
-    // TODO: do all the record expansion here?
     let top = EncodeTransform::top(data_types, ctx, sig_out);
     bft_transform(cfg, &top);
 }

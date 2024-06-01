@@ -737,7 +737,6 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
             },
         ))],
         Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
-        // TODO: review this
         Terminator::None(..) => panic!("None terminator not replaced by Next"),
         Terminator::Call(..) => panic!("Call not replaced by CaptureCall"),
         Terminator::CaptureCall { call, captures, .. } => {
@@ -841,7 +840,6 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         commands.append(&mut new_cmds);
     }
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
-    // TODO: implicit timeline tag deduction
     let get_tag = |name: &str| {
         let t = if name == "input" {
             funclet.get_input_tag(name)

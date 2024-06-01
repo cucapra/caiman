@@ -62,8 +62,8 @@
 use std::collections::HashMap;
 
 use crate::parse::ast::{
-    FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecLiteral,
-    SpecTerm, TemplateArgs,
+    Binop, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr,
+    SpecLiteral, SpecTerm, TemplateArgs,
 };
 
 /// Returns the internal name of a variable, given its original name and id.
@@ -84,7 +84,6 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
 ) {
     for s in stmts {
         match s {
-            //TODO: rename timeline operations
             SchedStmt::Decl { lhs, expr, .. } => {
                 if let Some(expr) = expr {
                     rename_expr_uses(expr, &cur_names);
@@ -157,9 +156,29 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
             SchedStmt::Hole(_) => {}
             SchedStmt::Encode { encoder, stmt, .. } => {
                 // TODO: support encoder aliasing?
-                rename_expr_uses(&mut stmt.rhs, &cur_names);
+                // renaming is handled in record expansion since we need
+                // dataflow information (ie. fences that refer to the encoder)
+                match &mut stmt.rhs {
+                    SchedExpr::Term(SchedTerm::Call(
+                        _,
+                        SchedFuncCall {
+                            templates: Some(targs),
+                            ..
+                        },
+                    )) => {
+                        // we don't rename the encoder variables here,
+                        // only the templates since they're "outside" the encoder
+                        if let TemplateArgs::Vals(tvs) = targs {
+                            for tv in tvs {
+                                rename_spec_expr_uses(tv, &cur_names);
+                            }
+                        }
+                    }
+                    x => {
+                        rename_expr_uses(x, &cur_names);
+                    }
+                }
                 *encoder = get_cur_name(encoder, &cur_names);
-                // TODO: handle renaming dests for multiple encoders?
             }
         }
     }
@@ -204,6 +223,14 @@ fn rename_expr_uses(expr: &mut SchedExpr, cur_names: &HashMap<String, u64>) {
     match expr {
         SchedExpr::Term(SchedTerm::Var { name, .. }) => {
             *name = get_cur_name(name, cur_names);
+        }
+        SchedExpr::Binop {
+            lhs,
+            op: Binop::Dot,
+            ..
+        } => {
+            // we don't rename the field name, only the record name
+            rename_expr_uses(lhs, cur_names);
         }
         SchedExpr::Binop { lhs, rhs, .. } => {
             rename_expr_uses(lhs, cur_names);

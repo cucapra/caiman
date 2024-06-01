@@ -6,6 +6,10 @@
 //! operation has a unique destination. Furthermore, we don't need SSA because
 //! the latest local event can be tracked in a dataflow fashion, and applied
 //! to all the defs and live in variables.
+//!
+//! We keep track of the latest local events that the coordinator knows about
+//! as a linear sequence of events. For each instruction, we keep track of the
+//! local event that is active right after the instruction takes effect.
 
 use std::{
     collections::{hash_map::Entry, HashMap, VecDeque},
@@ -77,8 +81,8 @@ pub fn deduce_tmln_quots(
         num_dims,
     )?;
     let (env, implicit_events) = unify_nodes(cfg, &spec_info.sig.input[0].0, dtypes, ctx, env)?;
-    // sort of a hack to support the previous tests without timeline specs
-    // a timeline spec that is trivial and never called is just not deduced so
+    // sort of a hack to support the previous tests without timeline specs:
+    // A timeline spec that is trivial and never called is just not deduced so
     // it can remain none
     let do_fill =
         ctx.called_specs.contains(&spec_info.feq) || !ctx.trivial_tmlns.contains(spec_name);
@@ -232,17 +236,24 @@ fn unify_nodes(
             &format!("Failed to converge node types:\n {e}"),
         )
     })?;
-    let io_evs = into_input_output_annotations(cfg, &env, &block_loc_events);
+    let io_evs = into_input_output_annotations(cfg, &env, &block_loc_events)?;
     Ok((env, io_evs))
 }
 
-/// Converts a map from block id to the first and last local events of the block
+/// Converts a map from block id to a vector of local events, with an element for
+/// the local event right after the `i + 1` instruction in the block,
 /// to a map from block id to the implicit input and output events of the block.
+/// # Arguments
+/// * `cfg` - The control flow graph
+/// * `env` - The current environment
+/// * `first_last_events` - The map from block id to the list of local events. Index i
+/// of this vector is the local event right after the `i + 1` instruction in the block.
+/// So index 0 is the implicit input and the last index is the implicit output.
 fn into_input_output_annotations(
     cfg: &Cfg,
     env: &NodeEnv,
     first_last_events: &HashMap<usize, Vec<i32>>,
-) -> InOutEvents {
+) -> Result<InOutEvents, LocalError> {
     let mut res = HashMap::new();
     for (block, events) in first_last_events {
         let mut in_ev = TripleTag::new_unspecified();
@@ -253,12 +264,12 @@ fn into_input_output_annotations(
         };
         in_ev.timeline.quot_var.spec_var = Some(
             env.get_node_name(&format!("{LOCAL_STEM}{}", events.first().unwrap()))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{}: Need annotation for implicit in",
-                        cfg.blocks[block].get_starting_info()
+                .ok_or_else(|| {
+                    type_error(
+                        cfg.blocks[block].get_starting_info(),
+                        "Need annotation for implicit in",
                     )
-                }),
+                })?,
         );
         let mut out_ev = TripleTag::new_unspecified();
         let out_block = cfg.get_continuation_output_block(*block);
@@ -267,17 +278,17 @@ fn into_input_output_annotations(
                 "{LOCAL_STEM}{}",
                 first_last_events[&out_block].last().unwrap()
             ))
-            .unwrap_or_else(|| {
-                panic!(
-                    "{}: Need annotation for implicit out",
-                    cfg.blocks[&out_block].get_final_info()
+            .ok_or_else(|| {
+                type_error(
+                    cfg.blocks[&out_block].get_final_info(),
+                    "Need annotation for implicit out",
                 )
-            }),
+            })?,
         );
         out_ev.timeline.quot = Some(Quotient::Node);
         res.insert(*block, (in_ev, out_ev, events.clone()));
     }
-    InOutEvents(res)
+    Ok(InOutEvents(res))
 }
 
 /// A struct to manage the implicit event annotations. Allows adding an annotation
@@ -609,7 +620,7 @@ fn unify_implicit_output(
     let output_annot = out_annotations.iter().rev().find_map(|(tag, _)| {
         tag.timeline.quot.and_then(|t| {
             if t == Quotient::None {
-                todo!("None outputs")
+                todo!("None annotated outputs")
             } else {
                 tag.timeline.quot_var.spec_var.clone()
             }
@@ -632,6 +643,7 @@ fn unify_implicit_output(
             )?;
         }
         (Some(output_annot), _) => {
+            // annotation doesn't match, take the user's word for it
             env = add_var_constraint(&last_loc_event, &output_annot, info, env)?;
         }
         (None, _) => unreachable!(),
@@ -717,7 +729,6 @@ fn unify_sync(
         env,
     )?;
     env = add_var_constraint(dest, &format!("{LOCAL_STEM}{}", *latest_loc + 1), info, env)?;
-    // the annotation is not tupled, so it refers to the fence
     env = add_type_annot(dest, tags, info, env)?;
     *latest_loc += 1;
     *last_loc = *latest_loc;
