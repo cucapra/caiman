@@ -22,6 +22,12 @@ fn collect_spec_names(
     ctx: &SpecInfo,
 ) -> Result<HashSet<String>, LocalError> {
     let mut res = HashSet::new();
+    for (name, _) in &ctx.sig.input {
+        if res.contains(name) {
+            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
+        }
+        res.insert(name.clone());
+    }
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, info, .. } => {
@@ -34,12 +40,6 @@ fn collect_spec_names(
             }
             SpecStmt::Returns(..) => (),
         }
-    }
-    for (name, _) in &ctx.sig.input {
-        if res.contains(name) {
-            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
-        }
-        res.insert(name.clone());
     }
     for i in 0..ctx.sig.num_dims {
         res.insert(format!("_dim{i}"));
@@ -265,19 +265,18 @@ fn collect_spec_assign_term(
             );
             if let Some(annot) = lhs[0].1.as_ref() {
                 ctx.types
-                    .add_dtype_constraint(&lhs[0].0, annot.clone(), *info)
-            } else {
-                ctx.types.add_constraint(
-                    &lhs[0].0,
-                    match lit {
-                        SpecLiteral::Int(_) => DTypeConstraint::Int(None),
-                        SpecLiteral::Bool(_) => DTypeConstraint::Bool,
-                        SpecLiteral::Float(_) => DTypeConstraint::Float(None),
-                        _ => todo!(),
-                    },
-                    *info,
-                )
+                    .add_dtype_constraint(&lhs[0].0, annot.clone(), *info)?;
             }
+            ctx.types.add_constraint(
+                &lhs[0].0,
+                match lit {
+                    SpecLiteral::Int(_) => DTypeConstraint::Int(None),
+                    SpecLiteral::Bool(_) => DTypeConstraint::Bool,
+                    SpecLiteral::Float(_) => DTypeConstraint::Float(None),
+                    _ => todo!(),
+                },
+                *info,
+            )
         }
         SpecTerm::Var { .. } => todo!(),
         SpecTerm::Call {

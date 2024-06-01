@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     enum_cast,
     lower::sched_hir::{cfg::Cfg, DataMovement, HirBody, HirInstr, Terminator, TripleTag},
-    parse::ast::{DataType, FlaggedType, FullType},
+    parse::ast::{DataType, FlaggedType},
     typing::{Context, SchedOrExtern},
 };
 
@@ -17,6 +17,7 @@ struct EncodeTransform<'a> {
     fence_map: HashMap<String, String>,
     data_types: &'a HashMap<String, DataType>,
     ctx: &'a Context,
+    // the unexpanded output of the current function
     sig_out: &'a Vec<FlaggedType>,
 }
 
@@ -59,9 +60,9 @@ impl<'a> EncodeTransform<'a> {
         for (id, (arg, arg_t)) in args.enumerate() {
             let mut new_tag = TripleTag::new_unspecified();
             new_tag.timeline = arg_t.timeline.clone();
-            new_args.push((arg.clone(), arg_t));
             match dt_getter(&arg, id) {
                 DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) => {
+                    new_args.push((arg.clone(), arg_t));
                     if let DataType::RemoteObj { all, .. } = &**t {
                         new_args.extend(all.iter().map(|(x, _)| {
                             (
@@ -79,7 +80,7 @@ impl<'a> EncodeTransform<'a> {
                         )
                     }));
                 }
-                _ => {}
+                _ => new_args.push((arg.clone(), arg_t)),
             }
         }
         new_args
@@ -171,11 +172,7 @@ impl<'a> EncodeTransform<'a> {
             Terminator::Return { dests, rets, .. } => {
                 // we want to expand the final return in the program and NOT the final return
                 // in the special final basic block
-                if dests.iter().all(|(x, _)| x.starts_with("_out")) && dests.len() > rets.len() {
-                    // if we're the final return with something to expand, then the outputs
-                    // should outnumber the return arguments since the IO is already
-                    // expanded
-
+                if dests.iter().all(|(x, _)| x.starts_with("_out")) {
                     // use the signature so we expand in the correct order
                     *rets = self.replace_call_args(rets, self.sig_out, 0);
                 }
@@ -345,18 +342,19 @@ impl<'a> Fact for EncodeTransform<'a> {
 /// Uses type information to insert device variables into the `BeginEncoding` operator.
 /// Also used type information to insert variables into the `Sync` operator and
 /// expand record arguments.
+/// # Arguments
+/// * `cfg` - The control flow graph to transform
+/// * `data_types` - The data types of the program
+/// * `ctx` - The context of the program
+/// * `sig_out` - The UNEXPANDED signature of the function
 pub fn transform_encode_pass(
     cfg: &mut Cfg,
     data_types: &HashMap<String, DataType>,
     ctx: &Context,
-    sig_out: &[FullType],
+    sig_out: &Vec<FlaggedType>,
 ) {
     // Map from fence to the encoder that holds its variables
     // TODO: do all the record expansion here?
-    let sig_out = sig_out
-        .iter()
-        .map(|x| x.base.as_ref().unwrap().clone())
-        .collect();
-    let top = EncodeTransform::top(data_types, ctx, &sig_out);
+    let top = EncodeTransform::top(data_types, ctx, sig_out);
     bft_transform(cfg, &top);
 }

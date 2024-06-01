@@ -50,7 +50,8 @@ val select_sum(a: i32, b: i32, c: i32) -> i32 {
 }
 
 fn select_sum_local(a: i32, b: i32, c: i32) -> i32 impls select_sum, time, space {
-    let x = rec_sum_local'<1, 1, 1>(a, b);
+    let b2 = b;
+    let x = rec_sum_local'<1, 1, 1>(a, b2);
     if x < 0 {
         rec_sum_local'<1, 1, 1>(b, c)
     } else {
@@ -71,30 +72,25 @@ tmln double_sync(e: Event) -> out: Event {
 fn select_sum_gpu(a: i32, b: i32, c: i32) -> i32 
     impls select_sum, double_sync, space 
 {
-    @in { input: input(tmln.e), output: node(tmln.out) };
     var a = a;
     var b = b;
     var c = c;
-    let e = encode-begin @ node(tmln.(loc1, rem1)) gpu;
+    let e = encode-begin gpu;
     encode e.copy[a_gpu <- &a];
     encode e.copy[b_gpu <- &b];
     encode e.call[x_gpu <- rec_sum_gpu'<1, 1, 1>(a_gpu, b_gpu)];
-    let f1 = submit @ node(tmln.sub) e;
-    let e2 = encode-begin @ node(tmln.(loc2, rem2)) gpu;
+    let f1 = submit e;
+    let e2 = encode-begin gpu;
     encode e2.copy[b_gpu <- &b];
     encode e2.copy[c_gpu <- &c];
     encode e2.call[r_gpu <- rec_sum_gpu'<1, 1, 1>(b_gpu, c_gpu)];
-    let f2 = submit @ node(tmln.sub2) e2;
-    let x = (await @ node(tmln.f1) f1).x_gpu;
-    let r = (await @ node(tmln.f2) f2).r_gpu;
+    let f2 = submit e2;
+    let x = (await f1).x_gpu;
+    let r = (await f2).r_gpu;
 
     if x < 0 {
-        @in { input: node(tmln.f2), output: node(tmln.out) };
-        @out { input: node(tmln.out), output: node(tmln.out) };
         r
     } else {
-        @in { input: node(tmln.f2), output: node(tmln.out) };
-        @out { input: node(tmln.out), output: node(tmln.out) };
         x
     }
 }

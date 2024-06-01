@@ -593,7 +593,13 @@ impl Funclets {
             .collect();
         let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
 
-        transform_encode_pass(&mut cfg, &data_types, ctx, &f.output);
+        transform_encode_pass(
+            &mut cfg,
+            &data_types,
+            ctx,
+            // the unexpanded output types
+            &ctx.scheds[&f.name].unwrap_sched().dtype_sig.output,
+        );
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());

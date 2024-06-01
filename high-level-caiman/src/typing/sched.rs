@@ -568,14 +568,6 @@ fn collect_begin_encode(
         DTypeConstraint::Encoder(Box::new(DTypeConstraint::Any)),
         info,
     )?;
-    // for (def_name, def_annot) in defs {
-    //     if let Some(FullType {
-    //         base: Some(anot), ..
-    //     }) = def_annot
-    //     {
-    //         env.add_dtype_constraint(def_name, anot.base.clone(), info)?;
-    //     }
-    // }
     Ok(())
 }
 
@@ -913,7 +905,8 @@ pub fn collect_schedule(
             ..
         } = fn_t
         {
-            env.add_dtype_constraint(ret_name, base.clone(), info)?;
+            let dtc = DTypeConstraint::from(base.clone());
+            env.add_constraint(ret_name, dtc.into_subtypeable(), info)?;
             for flag in flags {
                 env.add_usage(ret_name, *flag);
             }

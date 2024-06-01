@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     enum_cast,
     lower::IN_STEM,
@@ -16,14 +18,9 @@ use caiman::{
 use super::{binop_to_str, tuple_id};
 
 /// Lower a spec term into a caiman assembly node.
-fn lower_spec_term(t: SpecTerm) -> asm::Node {
+fn lower_spec_term(t: SpecTerm, dtype: &DataType) -> asm::Node {
     match t {
         SpecTerm::Lit { lit, .. } => match lit {
-            SpecLiteral::Int(v) => asm::Node::Constant {
-                // TODO: different int widths
-                value: Hole::Filled(v),
-                type_id: Hole::Filled(asm::TypeId(String::from("i64"))),
-            },
             SpecLiteral::Bool(v) => asm::Node::Constant {
                 value: Hole::Filled(if v {
                     String::from("1")
@@ -32,9 +29,9 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
                 }),
                 type_id: Hole::Filled(asm::TypeId(String::from("bool"))),
             },
-            SpecLiteral::Float(v) => asm::Node::Constant {
+            SpecLiteral::Float(v) | SpecLiteral::Int(v) => asm::Node::Constant {
                 value: Hole::Filled(v),
-                type_id: Hole::Filled(asm::TypeId(String::from("f64"))),
+                type_id: Hole::Filled(dtype.asm_type()),
             },
             _ => todo!(),
         },
@@ -245,6 +242,7 @@ fn lower_spec_assign(
     e: NestedExpr<SpecTerm>,
     global_ctx: &Context,
     spec_name: &str,
+    dtypes: &HashMap<String, DataType>,
 ) -> Vec<Hole<asm::Command>> {
     match e {
         NestedExpr::Conditional {
@@ -274,7 +272,7 @@ fn lower_spec_assign(
         }) => lower_spec_call(lhs, &function, args, templates),
         NestedExpr::Term(t) => {
             assert_eq!(lhs.len(), 1);
-            let node = lower_spec_term(t);
+            let node = lower_spec_term(t, &dtypes[&lhs[0]]);
             vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(lhs.swap_remove(0))),
                 node,
@@ -304,6 +302,7 @@ fn lower_spec_stmts(
     stmts: Vec<SpecStmt>,
     ctx: &Context,
     spec_name: &str,
+    dtypes: &HashMap<String, DataType>,
     mut res: Vec<Hole<asm::Command>>,
 ) -> Vec<Hole<asm::Command>> {
     for stmt in stmts {
@@ -314,6 +313,7 @@ fn lower_spec_stmts(
                     rhs,
                     ctx,
                     spec_name,
+                    dtypes,
                 ));
             }
             SpecStmt::Returns(_, e) => {
@@ -432,7 +432,13 @@ fn lower_spec_funclet(
                 function_class: asm::FunctionClassId(class_name.to_string()),
             }),
         },
-        lower_spec_stmts(spec.statements, ctx, &spec.name, phi_nodes),
+        lower_spec_stmts(
+            spec.statements,
+            ctx,
+            &spec.name,
+            &ctx.specs[&spec.name].types,
+            phi_nodes,
+        ),
     )
 }
 
