@@ -70,6 +70,7 @@ pub struct TagAnalysis {
     data_types: Rc<HashMap<String, DataType>>,
     flags: Rc<HashMap<String, ir::BufferFlags>>,
     out_tags: Option<Rc<HashMap<String, TripleTag>>>,
+    block: Option<usize>,
 }
 
 impl PartialEq for TagAnalysis {
@@ -154,6 +155,7 @@ impl TagAnalysis {
             data_types: Rc::new(data_types.clone()),
             flags: Rc::new(flags.clone()),
             out_tags: Some(Rc::new(out_tags)),
+            block: None,
         }
     }
 
@@ -171,16 +173,10 @@ impl TagAnalysis {
 }
 
 impl TagAnalysis {
-    /// Special processing for the start and final blocks
+    /// Special processing for the final blocks
     fn special_process_block(&mut self, block_id: usize) {
         use std::collections::hash_map::Entry;
-        if block_id == START_BLOCK_ID {
-            // the first instruction of the input block effectively turns
-            // all input tags into nodes
-            for v in self.tags.values_mut() {
-                *v = input_to_node(v.clone());
-            }
-        } else if block_id == FINAL_BLOCK_ID {
+        if block_id == FINAL_BLOCK_ID {
             // the final block adds in the output tags
             // output tags are defined in the final return instruction,
             // but we set the new types as the types of these will
@@ -197,6 +193,11 @@ impl TagAnalysis {
                     }
                 }
             }
+        }
+        if self.block != Some(block_id) {
+            // input overrides only apply to the block they are a part of
+            self.input_overrides.clear();
+            self.block = Some(block_id);
         }
     }
     /// Transfer function for an HIR body statement
@@ -307,25 +308,22 @@ impl TagAnalysis {
             }
             HirBody::InAnnotation(_, tags) => {
                 for (v, tag) in tags {
-                    let mut annotate = |v: &String| {
-                        match self.input_overrides.entry(v.clone()) {
-                            Entry::Occupied(mut entry) => {
-                                entry.get_mut().set_specified_info(tag.clone());
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(tag.clone());
-                            }
+                    match self.input_overrides.entry(v.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().set_specified_info(tag.clone());
                         }
-                        match self.tags.entry(v.clone()) {
-                            Entry::Occupied(mut entry) => {
-                                entry.get_mut().set_specified_info(tag.clone());
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(tag.clone());
-                            }
+                        Entry::Vacant(entry) => {
+                            entry.insert(tag.clone());
                         }
-                    };
-                    annotate(v);
+                    }
+                    match self.tags.entry(v.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().set_specified_info(tag.clone());
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(tag.clone());
+                        }
+                    }
                 }
             }
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
@@ -383,6 +381,72 @@ impl TagAnalysis {
             }
         }
     }
+
+    /// Performs tag analysis on the block terminator
+    fn transfer_tail(&mut self, tail: &mut Terminator, block_id: usize) {
+        match tail {
+            Terminator::Select { dests, tag, .. } => {
+                tag.override_unknown_info(TripleTag::new_none_usable());
+                for (dest, dest_tags) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(
+                            dest_tags.clone(),
+                            &self.data_types[dest],
+                            self.flags.get(dest),
+                        ),
+                    );
+                }
+            }
+            Terminator::CaptureCall {
+                dests,
+                captures,
+                call: HirFuncCall { tag, .. },
+                ..
+            } => {
+                tag.override_unknown_info(TripleTag::new_none_usable());
+                for (dest, dest_tags) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(
+                            dest_tags.clone(),
+                            &self.data_types[dest],
+                            self.flags.get(dest),
+                        ),
+                    );
+                }
+                for cap in captures.iter() {
+                    assert!(
+                        self.tags.contains_key(cap),
+                        "Capture {cap} is missing a tag",
+                    );
+                }
+            }
+            Terminator::Return { dests, rets, .. } => {
+                assert_eq!(dests.len(), rets.len());
+                for ((idx, _), out) in dests.iter().zip(rets.iter()) {
+                    let tag = self.tags.get(out).cloned().unwrap();
+                    self.tags.insert(
+                        idx.clone(),
+                        override_none_usable(tag, &self.data_types[idx], self.flags.get(out)),
+                    );
+                }
+            }
+
+            Terminator::None(..)
+            | Terminator::Next(..)
+            | Terminator::FinalReturn(..)
+            | Terminator::Yield(..) => (),
+            Terminator::Call(..) => panic!("Call should be eliminated"),
+        }
+        // treat the end of the first block like a special "de-inputifier"
+        // where all input quotients become node quotients
+        if block_id == START_BLOCK_ID {
+            for t in self.tags.values_mut() {
+                *t = input_to_node(t.clone());
+            }
+        }
+    }
 }
 
 /// Determines if there is a conflict between the quotient or flow of the
@@ -418,20 +482,19 @@ impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
-            let v = input_to_node(v.clone());
             match self.tags.entry(k.to_string()) {
                 Entry::Occupied(mut old_v) => {
-                    if old_v.get() != &v {
+                    if old_v.get() != v {
                         old_v.get_mut().override_unknown_info(v.clone());
                         assert!(
-                            !tag_conflict(old_v.get(), &v),
+                            !tag_conflict(old_v.get(), v),
                             "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
                             old_v.get(),
                         );
                     }
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(v);
+                    entry.insert(v.clone());
                 }
             }
         }
@@ -441,60 +504,7 @@ impl Fact for TagAnalysis {
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize) {
         self.special_process_block(block_id);
         match stmt {
-            HirInstr::Tail(Terminator::Select { dests, tag, .. }) => {
-                tag.override_unknown_info(TripleTag::new_none_usable());
-                for (dest, dest_tags) in dests {
-                    self.tags.insert(
-                        dest.clone(),
-                        override_none_usable(
-                            dest_tags.clone(),
-                            &self.data_types[dest],
-                            self.flags.get(dest),
-                        ),
-                    );
-                }
-            }
-            HirInstr::Tail(Terminator::CaptureCall {
-                dests,
-                captures,
-                call: HirFuncCall { tag, .. },
-                ..
-            }) => {
-                tag.override_unknown_info(TripleTag::new_none_usable());
-                for (dest, dest_tags) in dests {
-                    self.tags.insert(
-                        dest.clone(),
-                        override_none_usable(
-                            dest_tags.clone(),
-                            &self.data_types[dest],
-                            self.flags.get(dest),
-                        ),
-                    );
-                }
-                for cap in captures.iter() {
-                    assert!(
-                        self.tags.contains_key(cap),
-                        "Capture {cap} is missing a tag",
-                    );
-                }
-            }
-            HirInstr::Tail(Terminator::Return { dests, rets, .. }) => {
-                assert_eq!(dests.len(), rets.len());
-                for ((idx, _), out) in dests.iter().zip(rets.iter()) {
-                    let tag = self.tags.get(out).cloned().unwrap();
-                    self.tags.insert(
-                        idx.clone(),
-                        override_none_usable(tag, &self.data_types[idx], self.flags.get(out)),
-                    );
-                }
-            }
-            HirInstr::Tail(
-                Terminator::None(..)
-                | Terminator::Next(..)
-                | Terminator::FinalReturn(..)
-                | Terminator::Yield(..),
-            ) => (),
-            HirInstr::Tail(Terminator::Call(..)) => panic!("Call should be eliminated"),
+            HirInstr::Tail(t) => self.transfer_tail(t, block_id),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }

@@ -178,7 +178,6 @@ pub fn bft_transform<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
         if !visited.insert(block) {
             continue;
         }
-        visited.insert(block);
         let in_fact = in_facts.get(&block).unwrap();
         let out_fact = analyze_basic_block(cfg, block, in_fact);
         let add_neighbors = out_facts.get(&block) != Some(&out_fact);

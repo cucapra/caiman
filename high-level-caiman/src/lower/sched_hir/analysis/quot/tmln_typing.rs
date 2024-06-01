@@ -1,3 +1,12 @@
+//! This file contains the logic for deducing the timeline quotients of a function.
+//! It follows the same approach as `val_typing`, with the main difference being
+//! that it doesn't operate in SSA form. This can be done because the timeline
+//! doesn't have selects right now (phi nodes are used for this) and because
+//! we can't "store" to a fence or encoder. In other words, every timeline
+//! operation has a unique destination. Furthermore, we don't need SSA because
+//! the latest local event can be tracked in a dataflow fashion, and applied
+//! to all the defs and live in variables.
+
 use std::{
     collections::{hash_map::Entry, HashMap, VecDeque},
     vec,
@@ -7,7 +16,7 @@ use crate::{
     error::{Info, LocalError},
     lower::{
         sched_hir::{
-            analysis::{analyze, InOutFacts, LiveVars},
+            analysis::{InOutFacts, LiveVars},
             cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
             Hir, HirBody, HirFuncCall, Terminator, TripleTag,
         },
@@ -33,6 +42,9 @@ const LOCAL_STEM: &str = "_loc";
 /// * `ctx` - The context of the program
 /// * `dtypes` - The data types of the variables in the function
 /// * `info` - The source info for the function
+/// * `num_dims` - The number of dimensions in function (non-type templates)
+/// * `spec_name` - The name of the spec
+/// * `live_vars` - The live variables of the function
 #[allow(clippy::too_many_arguments)]
 pub fn deduce_tmln_quots(
     inputs: &mut [(String, TripleTag)],
@@ -44,6 +56,8 @@ pub fn deduce_tmln_quots(
     dtypes: &HashMap<String, DataType>,
     info: Info,
     num_dims: usize,
+    spec_name: &str,
+    live_vars: &InOutFacts<LiveVars>,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
     let mut overrides = Vec::new();
@@ -62,19 +76,17 @@ pub fn deduce_tmln_quots(
         info,
         num_dims,
     )?;
-    let is_called = true; //ctx.called_specs.contains(&spec_info.feq);
     let (env, implicit_events) = unify_nodes(cfg, &spec_info.sig.input[0].0, dtypes, ctx, env)?;
-    fill_io_tags(
-        inputs,
-        outputs,
-        output_dtypes,
-        &env,
-        &implicit_events,
-        is_called,
-    );
-    let live_vars = analyze(cfg, &LiveVars::top());
-    fill_tmln_tags(cfg, &env, &implicit_events, &live_vars, dtypes, is_called);
-    add_implicit_annotations(cfg, &implicit_events);
+    // sort of a hack to support the previous tests without timeline specs
+    // a timeline spec that is trivial and never called is just not deduced so
+    // it can remain none
+    let do_fill =
+        ctx.called_specs.contains(&spec_info.feq) || !ctx.trivial_tmlns.contains(spec_name);
+    if do_fill {
+        fill_io_tags(inputs, outputs, output_dtypes, &env, &implicit_events);
+        fill_tmln_tags(cfg, &env, &implicit_events, live_vars, dtypes);
+        add_implicit_annotations(cfg, &implicit_events);
+    }
     Ok(())
 }
 
@@ -92,15 +104,19 @@ impl InOutEvents {
         &self.0[&block].1
     }
 
+    /// Gets the local event name of the event that is active right after
+    /// the given instruction
     pub fn get_local_name_after_instr(&self, block: usize, instr_id: usize) -> String {
         // +1 to skip the implicit input
         format!("{LOCAL_STEM}{}", &self.0[&block].2[instr_id + 1])
     }
 
+    /// Gets the local event name of the implicit input
     pub fn get_implicit_in_name(&self, block: usize) -> String {
         format!("{LOCAL_STEM}{}", &self.0[&block].2[0])
     }
 
+    /// Gets the local event name of the implicit output
     pub fn get_implicit_out_name(&self, block: usize) -> String {
         format!("{LOCAL_STEM}{}", &self.0[&block].2.last().unwrap())
     }
@@ -896,7 +912,6 @@ fn fill_io_tags(
     output_dtypes: &[DataType],
     env: &NodeEnv,
     event_info: &InOutEvents,
-    fill_non_tmln: bool,
 ) {
     // the io has already been expanded, so we need to carry over the annotations
     // for fences and encoders
@@ -906,14 +921,12 @@ fn fill_io_tags(
             let record_name = name.split("::").next().unwrap();
             fill_tmln_quotient(record_name, tag, env, START_BLOCK_ID);
         }
-        if fill_non_tmln {
-            add_tmln_quotient(
-                &event_info.get_implicit_in_name(START_BLOCK_ID),
-                tag,
-                env,
-                START_BLOCK_ID,
-            );
-        }
+        add_tmln_quotient(
+            &event_info.get_implicit_in_name(START_BLOCK_ID),
+            tag,
+            env,
+            START_BLOCK_ID,
+        );
     }
     // output_class[0] is the implicit out
     let output_classes = env.get_function_output_classes().to_vec();
@@ -934,7 +947,7 @@ fn fill_io_tags(
                 &MetaVar::new_class_name(output_class).into_string(),
                 tag,
                 env,
-                START_BLOCK_ID,
+                FINAL_BLOCK_ID,
             );
             if let DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) = dt {
                 if let DataType::RemoteObj { all, .. } = &**t {
@@ -959,9 +972,9 @@ fn fill_io_tags(
                 &MetaVar::new_class_name(node).into_string(),
                 tag,
                 env,
-                START_BLOCK_ID,
+                FINAL_BLOCK_ID,
             );
-        } else if fill_non_tmln {
+        } else {
             add_tmln_quotient(&implicit_out, tag, env, FINAL_BLOCK_ID);
         }
     }
@@ -1035,10 +1048,8 @@ fn fill_tmln_tags(
     implicit_events: &InOutEvents,
     live_vars: &InOutFacts<LiveVars>,
     dtypes: &HashMap<String, DataType>,
-    fill_non_tmln: bool,
 ) {
     // insertion index, var name, info, metavar name, block id of new in annotations
-    let mut new_in_annots = Vec::new();
     for block in cfg.blocks.values_mut() {
         for (instr_id, stmt) in block.stmts.iter_mut().enumerate() {
             let local_event = implicit_events.get_local_name_after_instr(block.id, instr_id);
@@ -1047,8 +1058,8 @@ fn fill_tmln_tags(
                 | HirBody::VarDecl { lhs_tag, .. }
                 | HirBody::RefStore {
                     lhs_tags: lhs_tag, ..
-                } if fill_non_tmln => add_tmln_quotient(&local_event, lhs_tag, env, block.id),
-                HirBody::Op { dests, .. } if fill_non_tmln => {
+                } => add_tmln_quotient(&local_event, lhs_tag, env, block.id),
+                HirBody::Op { dests, .. } => {
                     for (_, t) in dests {
                         add_tmln_quotient(&local_event, t, env, block.id);
                     }
@@ -1091,50 +1102,27 @@ fn fill_tmln_tags(
                     }
                 }
                 HirBody::Phi { .. } => unreachable!(),
-                HirBody::DeviceCopy {
-                    src, info, encoder, ..
-                } => {
-                    // make sure the source can be used here
-                    new_in_annots.push((instr_id, src.clone(), *info, encoder.clone(), block.id));
-                }
                 _ => {}
             }
         }
-        fill_terminator_tags(block, env, implicit_events, fill_non_tmln);
-    }
-    for (idx, src, info, event_name, block_id) in new_in_annots {
-        let mut t = TripleTag::new_unspecified();
-        add_tmln_quotient(&event_name, &mut t, env, block_id);
-        let annot = HirBody::InAnnotation(info, vec![(src, TripleTag::new_unspecified())]);
-        // cfg.blocks
-        //     .get_mut(&block_id)
-        //     .unwrap()
-        //     .stmts
-        //     .insert(idx, annot);
+        fill_terminator_tags(block, env, implicit_events);
     }
 
-    if fill_non_tmln {
-        // collect so we don't borrow
-        #[allow(clippy::needless_collect)]
-        for block in cfg.graph.keys().copied().collect::<Vec<_>>() {
-            fill_local_in_annotations(
-                block,
-                live_vars,
-                dtypes,
-                &implicit_events.get_implicit_in_name(block),
-                cfg,
-                env,
-            );
-        }
+    // collect so we don't borrow
+    #[allow(clippy::needless_collect)]
+    for block in cfg.graph.keys().copied().collect::<Vec<_>>() {
+        fill_local_in_annotations(
+            block,
+            live_vars,
+            dtypes,
+            &implicit_events.get_implicit_in_name(block),
+            cfg,
+            env,
+        );
     }
 }
 
-fn fill_terminator_tags(
-    block: &mut BasicBlock,
-    env: &NodeEnv,
-    implicit_events: &InOutEvents,
-    fill_non_tmln: bool,
-) {
+fn fill_terminator_tags(block: &mut BasicBlock, env: &NodeEnv, implicit_events: &InOutEvents) {
     let local_event = implicit_events.get_local_name_after_instr(block.id, block.stmts.len());
     match &mut block.terminator {
         Terminator::CaptureCall { dests, call, .. } | Terminator::Call(dests, call, ..) => {
@@ -1144,9 +1132,7 @@ fn fill_terminator_tags(
                     let record_name = dest.split("::").next().unwrap();
                     add_tmln_quotient(record_name, tag, env, block.id);
                 }
-                if fill_non_tmln {
-                    add_tmln_quotient(&local_event, tag, env, block.id);
-                }
+                add_tmln_quotient(&local_event, tag, env, block.id);
             }
             fill_tmln_quotient(
                 &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),

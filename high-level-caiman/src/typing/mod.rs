@@ -1,5 +1,8 @@
 pub mod context;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    hash::Hash,
+};
 mod specs;
 
 use crate::{
@@ -746,6 +749,8 @@ pub struct Context {
     pub class_dimensions: HashMap<String, usize>,
     /// The set of spec classes which are called from another spec.
     pub called_specs: HashSet<String>,
+    /// The set of specs which are trivial timelines.
+    pub trivial_tmlns: HashSet<String>,
 }
 
 /// A typed binary operation.

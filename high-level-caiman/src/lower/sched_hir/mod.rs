@@ -611,6 +611,8 @@ impl Funclets {
                 &data_types,
                 f.info,
                 num_dims,
+                &specs.timeline.0,
+                &live_vars,
             )?;
             cfg = transform_to_ssa(cfg, &live_vars);
 

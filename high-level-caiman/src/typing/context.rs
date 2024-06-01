@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::binop_to_str;
-use crate::parse::ast::{ExternDef, FlaggedType, FullType, IntSize, SpecFunclet};
+use crate::parse::ast::{
+    ExternDef, FlaggedType, FullType, IntSize, SpecExpr, SpecFunclet, SpecStmt, SpecTerm,
+};
 use crate::typing::{
     ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS, LOCAL_TEMP_FLAGS,
 };
@@ -192,6 +194,18 @@ fn get_other_decls() -> Vec<asm::Declaration> {
     ]
 }
 
+/// If the timeline spec is the identity function, it is trivial.
+fn is_trivial_tmln(spec: &SpecFunclet) -> bool {
+    if spec.input.len() == 1 && spec.output.len() == 1 && spec.statements.len() == 1 {
+        if let SpecStmt::Returns(_, SpecExpr::Term(SpecTerm::Var { name, .. })) =
+            &spec.statements[0]
+        {
+            return name == &spec.input[0].0;
+        }
+    }
+    false
+}
+
 /// Collects a context for top level declarations.
 /// Generates a list of extern declarations needed for a given program and type
 /// checks the specs.
@@ -209,6 +223,9 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
                 if let ClassMembers::ValueFunclet(funclet)
                 | ClassMembers::TimelineFunclet(funclet) = m
                 {
+                    if is_trivial_tmln(funclet) {
+                        ctx.trivial_tmlns.insert(funclet.name.clone());
+                    }
                     let spec = ctx.specs.get_mut(&funclet.name).unwrap();
                     for (name, typ) in &funclet.input {
                         spec.types.insert(name.clone(), typ.clone());
@@ -726,6 +743,7 @@ impl Context {
             user_types: collect_user_defined_types(tl),
             class_dimensions: HashMap::new(),
             called_specs: HashSet::new(),
+            trivial_tmlns: HashSet::new(),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;
