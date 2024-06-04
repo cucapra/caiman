@@ -1,7 +1,10 @@
-mod tail_edge_explicator;
-mod node_explicator;
+mod operation_explicator;
+mod storage_explicator;
 
-use crate::explication::context::{FuncletOutState, InState, OpCode, StaticContext};
+use priority_queue::PriorityQueue;
+use std::collections::HashMap;
+
+use crate::explication::context::{InState, OperationOutState, StaticContext, StorageOutState};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
 use crate::explication::explicator_macros;
@@ -9,6 +12,7 @@ use crate::explication::util::Location;
 use crate::explication::util::*;
 use crate::explication::Hole;
 use crate::ir::Place;
+use crate::stable_vec::StableVec;
 use crate::{explication, frontend, ir};
 
 use super::expir::Funclet;
@@ -22,42 +26,9 @@ fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
     }
 }
 
-// the function that handles "ok, I have an output, now figure out how to get there"
-// searches exactly the given spec language of the "location" funclet
-fn deduce_operation(
-    location: &Location,
-    outputs: &Hole<Vec<Hole<NodeId>>>,
-    spec: &SpecLanguage,
-    context: &StaticContext,
-) -> Location {
-    todo!()
-    // let spec_funclet = context.get_spec_funclet(&location.funclet, spec);
-    // match outputs {
-    //     None => Location {
-    //         funclet: Some(spec_funclet.clone()),
-    //         node: None,
-    //     },
-    //     Some(outs) => {
-    //         let output_specs: Vec<Hole<&NodeId>> = outs
-    //             .iter()
-    //             .map(|hole| {
-    //                 hole.as_ref().and_then(|output| {
-    //                     context.get_spec_instantiation(&location.funclet, output, spec)
-    //                 })
-    //             })
-    //             .collect();
-    //         let spec_node = context.get_matching_operation(&location.funclet, output_specs);
-    //         Location {
-    //             funclet: Some(spec_funclet.clone()),
-    //             node: spec_node.cloned(),
-    //         }
-    //     }
-    // }
-}
-
 fn explicate_funclet_spec(
     spec: &expir::FuncletSpec,
-    state: &FuncletOutState,
+    state: &StorageOutState,
     context: &StaticContext,
 ) -> ir::FuncletSpec {
     let error = format!("Unimplemented Hole in specification {:?}", spec);
@@ -83,7 +54,7 @@ fn explicate_funclet_spec(
 
 fn explicate_spec_binding(
     funclet: &FuncletId,
-    state: Option<&FuncletOutState>,
+    state: Option<&StorageOutState>,
     context: &StaticContext,
 ) -> ir::FuncletSpecBinding {
     let current = context.get_funclet(&funclet);
@@ -111,23 +82,62 @@ fn explicate_spec_binding(
     }
 }
 
-pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -> ir::Funclet {
-    let funclet = state.get_current_funclet_id();
-    let current = context.get_funclet(&funclet);
+/*
+ * The first pass of explication, where we fill in ??? with necessary operations
+ *   we also fill in specific operations that are purely type-directed
+ *   we do not attempt to actually put data in storage
+ * Returns the updated funclet first, then any new funclets to add second
+ */
+pub fn explicate_schedule_funclet_operation(
+    funclet_id: FuncletId,
+    context: &StaticContext,
+) -> (expir::Funclet, Vec<expir::Funclet>) {
+    let mut state = InState::new_operation(funclet_id, context);
     state.next_node();
-    match node_explicator::explicate_node(state, context) {
+    let funclet = context.get_funclet(&funclet_id);
+    match operation_explicator::explicate_node(state, context) {
         None => panic!(
             "No explication solution found for funclet {:?}",
-            context.debug_info.funclet(&funclet)
+            context.debug_info.funclet(&funclet_id)
+        ),
+        Some(mut result) => (
+            expir::Funclet {
+                kind: funclet.kind.clone(),
+                spec_binding: funclet.spec_binding.clone(),
+                input_types: funclet.input_types.clone(),
+                output_types: funclet.output_types.clone(),
+                tail_edge: result.take_tail_edge().into(),
+                nodes: result.drain_nodes().into_boxed_slice(),
+            },
+            vec![],
+        ),
+    }
+}
+
+/*
+ * The second pass of explication, where we assume we have the operations we need
+ *   and now we need to actually put the stuff in the correct storage at the right time
+ */
+pub fn explicate_schedule_funclet_storage(
+    funclet_id: FuncletId,
+    context: &StaticContext,
+) -> ir::Funclet {
+    let mut state = InState::new_storage(funclet_id, context);
+    state.next_node();
+    let funclet = context.get_funclet(&funclet_id);
+    match storage_explicator::explicate_node(state, context) {
+        None => panic!(
+            "No explication solution found for funclet {:?}",
+            context.debug_info.funclet(&funclet_id)
         ),
         Some(mut result) => {
-            assert!(!result.has_fills_remaining());
-            let spec_binding = explicate_spec_binding(&funclet, Some(&result), context);
+            assert!(result.is_to_fill_empty());
+            let spec_binding = explicate_spec_binding(&funclet_id, Some(&result), context);
             ir::Funclet {
-                kind: current.kind.clone(),
+                kind: funclet.kind.clone(),
                 spec_binding,
-                input_types: current.input_types.clone(),
-                output_types: current.output_types.clone(),
+                input_types: funclet.input_types.clone(),
+                output_types: funclet.output_types.clone(),
                 tail_edge: result.expect_tail_edge(),
                 nodes: result.drain_nodes().into_boxed_slice(),
             }

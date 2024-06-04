@@ -7,6 +7,8 @@
 //     return n1 + n2;
 // }
 
+// tests the chain of operation deductions
+
 version 0.0.2
 
 ffi i64;
@@ -42,24 +44,24 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_main<$time-usable, $time-usable>() ->
 [%out : $val.%out-usable %i64] {
-    %x_loc = alloc-temporary local [] i64;
-    %y_loc = alloc-temporary local [] i64;
-    %n1_loc = alloc-temporary local [] i64;
-    %n2_loc = alloc-temporary local [] i64;
-    %res_loc = alloc-temporary local [] i64;
+    %alloc1 = alloc-temporary local [] i64;
+    %alloc2 = alloc-temporary local [] i64;
+    %alloc3 = alloc-temporary local [] i64;
+    %alloc4 = alloc-temporary local [] i64;
+    %alloc5 = alloc-temporary local [] i64;
 
-    local-do-builtin $val.%x() -> %x_loc;
-    local-do-builtin $val.%y() -> %y_loc;
+    local-do-builtin ?() -> %alloc1;
+    local-do-builtin ?() -> %alloc2;
+    %_ = read-ref i64 %alloc1;
+    %_ = read-ref i64 %alloc2;
 
-    %x = read-ref i64 %x_loc;
-    %y = read-ref i64 %y_loc;
-    local-do-external %add $val.%n1_t(%x, %y) -> %n1_loc;
-    %n1 = read-ref i64 %n1_loc;
-    local-do-external %add $val.%n2_t(%x, %n1) -> %n2_loc;
-    %n2 = read-ref i64 %n2_loc;
-    local-do-external %add $val.%res_t(%n1, %n2) -> %res_loc;
+    local-do-external %add ?(?, ?) -> %alloc3;
+    %_ = read-ref i64 %alloc3;
+    local-do-external %add ?(?, ?) -> %alloc4;
+    %_ = read-ref i64 %alloc4;
+    local-do-external %add ?(?, ?) -> %alloc5;
     
-    %res_val = read-ref i64 %res_loc;
+    %res_val = read-ref i64 %alloc5;
     return %res_val;
 }
 

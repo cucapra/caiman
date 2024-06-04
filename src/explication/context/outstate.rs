@@ -3,54 +3,47 @@ use crate::explication::util::*;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
-impl FuncletOutState {
-    pub fn new() -> FuncletOutState {
-        FuncletOutState {
-            allocation_requests: HashMap::new(),
-            to_fill: HashSet::new(),
+impl OperationOutState {
+    pub fn new() -> OperationOutState {
+        OperationOutState {
             nodes: VecDeque::new(),
             tail_edge: None,
         }
     }
 
-    pub fn add_allocation_request(&mut self, typ: StorageTypeId) {
-        *self.allocation_requests.entry(typ).or_insert(0) += 1;
+    pub fn add_hole(&mut self) {
+        self.nodes.push_front(Hole::Empty);
     }
 
-    pub fn pop_allocation_request(&mut self, typ: &StorageTypeId) -> bool {
-        match self.allocation_requests.get_mut(typ) {
-            Some(mut x) => {
-                if (*x > 0) {
-                    *x -= 1;
-                    true
-                } else {
-                    false
-                }
-            },
-            None => false
+    pub fn add_node(&mut self, node: expir::Node) {
+        self.nodes.push_front(Hole::Filled(node));
+    }
+
+    pub fn drain_nodes(&mut self) -> Vec<Hole<expir::Node>> {
+        self.nodes.drain(..).collect()
+    }
+
+    pub fn set_tail_edge(&mut self, tail_edge: expir::TailEdge) {
+        assert!(self.tail_edge.is_none());
+        self.tail_edge = Some(tail_edge)
+    }
+
+    pub fn has_tail_edge(&self) -> bool {
+        self.tail_edge.is_some()
+    }
+
+    pub fn take_tail_edge(&mut self) -> Option<expir::TailEdge> {
+        self.tail_edge.take()
+    }
+}
+
+impl StorageOutState {
+    pub fn new() -> StorageOutState {
+        StorageOutState {
+            to_fill: HashMap::new(),
+            nodes: VecDeque::new(),
+            tail_edge: None,
         }
-    }
-
-    pub fn drain_allocation_requests(&mut self) -> Vec<(expir::StorageTypeId, usize)> {
-        self.allocation_requests.drain().collect()
-    }
-
-    pub fn add_fill(&mut self, spec_type: Location) {
-        let check = self.to_fill.insert(spec_type);
-        assert!(check);
-    }
-
-    pub fn reqs_fill(&self, spec_type: &Location) -> bool {
-        self.to_fill.contains(spec_type)
-    }
-
-    pub fn fill(&mut self, spec_type: &Location) {
-        let check = self.to_fill.remove(spec_type);
-        assert!(check);
-    }
-
-    pub fn has_fills_remaining(&self) -> bool {
-        !self.to_fill.is_empty()
     }
 
     pub fn add_node(&mut self, node: ir::Node) {
@@ -59,6 +52,19 @@ impl FuncletOutState {
 
     pub fn drain_nodes(&mut self) -> Vec<ir::Node> {
         self.nodes.drain(..).collect()
+    }
+
+    pub fn take_to_fill(&mut self, node_id: &NodeId) -> Option<ir::Node> {
+        self.to_fill.remove_entry(node_id).map(|(_, n)| n)
+    }
+
+    pub fn add_to_fill(&mut self, node_id: NodeId, node: ir::Node) {
+        let check = self.to_fill.insert(node_id, node);
+        assert!(check.is_none());
+    }
+
+    pub fn is_to_fill_empty(&self) -> bool {
+        self.to_fill.is_empty()
     }
 
     pub fn set_tail_edge(&mut self, tail_edge: ir::TailEdge) {

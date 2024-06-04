@@ -9,7 +9,9 @@ use crate::{debug_info::DebugInfo, ir};
 use context::{InState, StaticContext};
 use serde_derive::{Deserialize, Serialize};
 
-use self::explicator::{explicate_schedule_funclet, lower_spec_funclet};
+use self::explicator::{
+    explicate_schedule_funclet_operation, explicate_schedule_funclet_storage, lower_spec_funclet,
+};
 
 // Explication and frontend AST
 
@@ -74,41 +76,70 @@ where
     }
 }
 
-fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
+/*
+ * adds nodes and fills in ?/??? to build schedules that have all the operations
+ * does not actually _store_ any information, and as a result, does not need to backtrack
+ * note that this is _not_ done funclet-by-funclet to support adding control flow later
+ */
+fn schedule_funclet_operations(context: &StaticContext) -> StableVec<expir::Funclet> {
+    let mut result = StableVec::new();
+    let mut new_funclets = Vec::new();
+    for (funclet_id, funclet) in context.program.funclets.iter() {
+        match &funclet.kind {
+            ir::FuncletKind::ScheduleExplicit => {
+                let (current, mut to_add) =
+                    explicate_schedule_funclet_operation(funclet_id, context);
+                result.add(current);
+                new_funclets.append(&mut to_add)
+            }
+            _ => {
+                result.add(funclet.clone());
+            }
+        }
+    }
+    for new_funclet in new_funclets.drain(..) {
+        result.add(new_funclet);
+    }
+    result
+}
+
+fn explicate_funclets(context: &mut StaticContext) -> StableVec<ir::Funclet> {
+    context.program.funclets = schedule_funclet_operations(&context);
     context
-        .program()
+        .program
         .funclets
         .iter()
-        .map(|(id, funclet)| match funclet.kind {
-            ir::FuncletKind::Unknown
-            | ir::FuncletKind::Value
-            | ir::FuncletKind::Timeline
-            | ir::FuncletKind::Spatial => lower_spec_funclet(&id, context),
+        .map(|(funclet_id, funclet)| match funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                explicate_schedule_funclet(InState::new(id, context), context)
+                explicate_schedule_funclet_storage(funclet_id, &context)
             }
+            _ => lower_spec_funclet(&funclet_id, &context),
         })
         .collect()
 }
 
 fn explicate_program(program: expir::Program, debug_info: &DebugInfo) -> ir::Program {
-    let mut context = StaticContext::new(&program, debug_info);
-    let explicated_funclets = explicate_funclets(&context);
+    let mut context = StaticContext::new(program, debug_info);
+    let explicated_funclets = explicate_funclets(&mut context);
 
-    match program {
-        expir::Program {
-            native_interface,
-            types,
-            funclets,
-            function_classes,
-            pipelines,
-        } => ir::Program {
+    match context {
+        StaticContext {
+            program: expir::Program {
+                native_interface,
+                types,
+                funclets,
+                function_classes,
+                pipelines,
+            },
+            debug_info: _,
+            spec_explication_data: _,
+        }  => ir::Program {
             native_interface,
             types,
             funclets: explicated_funclets,
             function_classes,
             pipelines,
-        },
+        }
     }
 }
 
@@ -121,8 +152,6 @@ fn explicate_program(program: expir::Program, debug_info: &DebugInfo) -> ir::Pro
 pub fn explicate(
     definition: crate::frontend::ExplicationDefinition,
 ) -> crate::frontend::Definition {
-    // dbg!(&definition);
-    // todo!();
     match definition {
         crate::frontend::ExplicationDefinition {
             version,

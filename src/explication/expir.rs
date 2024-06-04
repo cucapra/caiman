@@ -192,8 +192,8 @@ pub enum FuncletSpecBinding {
     },
     ScheduleExplicit {
         value: FuncletSpec,
-        spatial: FuncletSpec,
         timeline: FuncletSpec,
+        spatial: FuncletSpec,
     },
 }
 
