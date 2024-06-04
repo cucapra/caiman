@@ -1,4 +1,5 @@
 #version 0.1.0
+type f32 = i32;
 
 val find_closest(p: f32, pts: [f32; N], start: i64, end: i64, idx: i64) 
     -> (f32, f32) 

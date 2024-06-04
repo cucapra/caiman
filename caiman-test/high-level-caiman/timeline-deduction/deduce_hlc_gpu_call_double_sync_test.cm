@@ -1,0 +1,78 @@
+#version 0.1.0
+
+// Call a function and pass it an encoder to submit and synchronize on and
+// a fence to synchronize on
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    in {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    out {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(a: i32, b: i32) -> out: i32 {
+    x1 :- simple'<1, 1, 1>(a)
+    x2 :- simple'<1, 1, 1>(b)
+    y2 :- bar(x1, x2)
+    returns y2
+}
+
+val bar(a : i32, b: i32) -> out: i32 {
+    returns a + b
+}
+
+tmln bar_time(e: Event, f1: Fence, r1: Encoder) -> out: Event {
+    sub :- submit_event(r1)
+    snc1 :- sync_event(e, sub)
+    snc2 :- sync_event(snc1, f1)
+    returns snc2
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    sub :- submit_event(rem)
+    loc2, rem2 :- encode_event(loc, sub)
+    ret :- bar_time(loc2, sub, rem2)
+    returns ret
+}
+
+sptl space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+type R = { y_gpu: i32'<storage, map_read> };
+
+
+fn foo_impl(a: &i32 @ node(tmln.ret), b: &i32 @ node(tmln.ret)) -> i32 impls foo_time, foo, space {
+    let e = encode-begin gpu;
+    encode e.copy[x_gpu <- a];
+    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+    let f = submit e;
+
+    let e2 = encode-begin gpu;
+    encode e2.copy[x2_gpu <- b];
+    encode e2.call[y_gpu <- simple'<1, 1, 1>(x2_gpu)];
+    let r = bar_impl(f, e2);
+    r
+}
+
+fn bar_impl(f: Fence'R, e: Encoder'R) -> i32 
+            impls bar_time, bar, space 
+{
+    let f2 = submit e;
+    let ye = (await f2).y_gpu;
+    let yf = (await f).y_gpu;
+    yf + ye
+}
+
+pipeline main { foo_impl }

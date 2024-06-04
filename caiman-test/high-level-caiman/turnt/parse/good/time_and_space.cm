@@ -8,12 +8,12 @@ tmln t(e: Event) -> Event {
     returns e
 }
 
-sptl s(b: Buffersptl) -> Buffersptl {
+sptl s(b: BufferSpace) -> BufferSpace {
     returns s
 }
 
 tmln t2(e: Event) -> Event {
-    enc1, enc2 :- encoding_event(e, [])
+    enc1, enc2 :- encoding_event(e)
     sub :- submission_event(enc2)
     snc :- synchronization_event(enc1, sub)
     returns snc

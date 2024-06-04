@@ -1,0 +1,84 @@
+#version 0.1.0
+
+// similar to hlc_gpu_call_sync, but instead of passing a fence, pass an encoder
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    in {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    out {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x : i32) -> out: i32 {
+    y :- simple'<1, 1, 1>(x)
+    y2 :- bar(x, y)
+    returns y2
+}
+
+// record arguments are passed in the order they are declared
+val bar(a: i32, b: i32) -> out: i32 {
+    y :- simple'<1, 1, 1>(3)
+    returns b + y
+}
+
+tmln bar_time(e: Event, r: Encoder) -> out: Event {
+    loc, rem :- encode_event(e)
+    sub :- submit_event(rem)
+    sub2 :- submit_event(r)
+    snc1 :- sync_event(loc, sub)
+    snc2 :- sync_event(snc1, sub2)
+    returns snc2
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    ret :- bar_time(loc, rem)
+    returns ret
+}
+
+sptl space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+type R = { x_gpu: i32'<storage, copy_dst>, y_gpu: i32'<storage, map_read> };
+
+
+fn foo_impl(x: &i32 @ node(tmln.rem)) -> i32 impls foo_time, foo, space {
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    let e = encode-begin @ node(tmln.(loc, rem)) gpu;
+    encode e.copy[x_gpu <- x];
+    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+    let r = bar_impl(e) @ node(tmln.ret);
+    @in {input: node(tmln.ret), output: node(tmln.out) };
+    @out {input: node(tmln.out), output: node(tmln.out) };
+    r
+}
+
+fn bar_impl(e2: Encoder'R @ input(tmln.r)) -> i32 
+            impls bar_time, bar, space 
+{
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    let e = encode-begin @ node(tmln.(loc, rem)) gpu;
+    var t: i32 = 3;
+    encode e.copy[x_gpu <- &t];
+    encode e2.copy[z_gpu <- &t];
+    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+    let f2 = submit @ node(tmln.sub) e;
+    let f = submit @ node(tmln.sub2) e2;
+    let y = (await @ node(tmln.snc1) f2).y_gpu;
+    let x2 = (await @ node(tmln.snc2) f).y_gpu;
+    @out { input: node(tmln.out), output: node(tmln.out) };
+    x2 + y
+}
+
+pipeline main { foo_impl }

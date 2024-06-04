@@ -1,0 +1,68 @@
+#version 0.1.0
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x : i32) -> i32 {
+    y :- simple'<1, 1, 1>(x)
+    y2 :- foo(y)
+    y3 :- simple'<1, 1, 1>(y2)
+    returns y3
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc1, rem1 :- encode_event(e)
+    sub1 :- submit_event(rem1)
+    snc1 :- sync_event(loc1, sub1)
+
+    ret :- foo_time(snc1)
+
+    loc2, rem2 :- encode_event(ret)
+    sub2 :- submit_event(rem2)
+    snc2 :- sync_event(loc2, sub2)
+    returns snc2
+}
+
+sptl space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+fn foo_impl(x: i32 @ input(tmln.e)) -> i32 @ node(tmln.out) impls foo, foo_time, space {
+    @in { input: input(tmln.e), output: node(tmln.out) };
+    let e = encode-begin @ node(tmln.(loc1, rem1)) gpu;
+    var x = x;
+    encode e.copy[x_gpu <- &x];
+    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+    let s = submit @ node(tmln.sub1) e;
+    let f = await @ node(tmln.snc1) s;
+    let y @ node(tmln.snc1) = f.y_gpu;
+    @out { input: node(tmln.snc1) };
+
+    let n @ node(tmln.ret) = foo_impl(y) @ node(tmln.ret);
+    @in { input: node(tmln.ret), output: node(tmln.out) };
+
+    var n = n;
+    let e = encode-begin @ node(tmln.(loc2, rem2)) gpu;
+    encode e.copy[n_gpu <- &n];
+    encode e.call[y_gpu <- simple'<1, 1, 1>(n_gpu)];
+    let s = submit @ node(tmln.sub2) e;
+    let f = await @ node(tmln.snc2) s;
+    @out { input: node(tmln.snc2) };
+    f.y_gpu
+}
+
+pipeline main { foo_impl }

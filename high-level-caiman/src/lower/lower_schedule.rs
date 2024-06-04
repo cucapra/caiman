@@ -18,8 +18,7 @@ use caiman::ir;
 
 use super::{
     sched_hir::{
-        DataMovement, FenceOp, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator,
-        TripleTag,
+        DataMovement, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag,
     },
     tuple_id,
 };
@@ -85,7 +84,10 @@ fn build_copy_cmd(
             node: asm::Node::WriteRef {
                 source: Hole::Filled(asm::NodeId(src.clone())),
                 destination: Hole::Filled(asm::NodeId(dest.to_string())),
-                storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
+                storage_type: Hole::Filled(
+                    f.get_storage_type(dest)
+                        .unwrap_or_else(|| f.get_storage_type(src).unwrap()),
+                ),
             },
         })
     }
@@ -415,31 +417,68 @@ fn lower_encode_do(
 ///          encoder to submit for a submit fence
 /// * `tags` - the tags for the fence
 /// * `temp_id` - the next available temporary id
-fn lower_fence_op(
-    dest: &Option<String>,
-    op: FenceOp,
-    src: &SchedTerm,
-    tags: &TripleTag,
-    temp_id: usize,
-) -> (CommandVec, usize) {
-    let src = enum_cast!(SchedTerm::Var { name, .. }, name, src).clone();
-    let local_do = match op {
-        FenceOp::Submit => asm::Command::Node(asm::NamedNode {
-            name: dest.as_ref().map(|x| asm::NodeId(x.clone())),
-            node: asm::Node::Submit {
-                encoder: Hole::Filled(asm::NodeId(src)),
-                event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
-            },
-        }),
-        FenceOp::Sync => asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::SyncFence {
-                fence: Hole::Filled(asm::NodeId(src)),
-                event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
-            },
-        }),
-    };
+fn lower_submit(dest: &str, src: &str, tags: &TripleTag, temp_id: usize) -> (CommandVec, usize) {
+    let local_do = asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(dest.to_string())),
+        node: asm::Node::Submit {
+            encoder: Hole::Filled(asm::NodeId(src.to_string())),
+            event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+        },
+    });
+    //     FenceOp::Sync => asm::Command::Node(asm::NamedNode {
+    //         name: None,
+    //         node: asm::Node::SyncFence {
+    //             fence: Hole::Filled(asm::NodeId(src)),
+    //             event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+    //         },
+    //     }),
+    // };
     (vec![Hole::Filled(local_do)], temp_id)
+}
+
+fn lower_sync(
+    dests: &[(String, TripleTag)],
+    srcs: &[String],
+    tags: &TripleTag,
+    mut temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    assert_eq!(dests.len() + 1, srcs.len());
+    let mut v = Vec::new();
+    v.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+        name: None,
+        node: asm::Node::SyncFence {
+            fence: Hole::Filled(asm::NodeId(srcs[0].clone())),
+            event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+        },
+    })));
+    for ((dest, _), src) in dests.iter().zip(srcs.iter().skip(1)) {
+        let t = temp_var_name(temp_id);
+        temp_id += 1;
+        v.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(t.clone())),
+            node: asm::Node::AllocTemporary {
+                place: Hole::Filled(ir::Place::Local),
+                storage_type: Hole::Filled(f.get_storage_type(dest).unwrap().clone()),
+                buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+            },
+        })));
+        v.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::LocalCopy {
+                input: Hole::Filled(asm::NodeId(src.clone())),
+                output: Hole::Filled(asm::NodeId(t.clone())),
+            },
+        })));
+        v.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(dest.clone())),
+            node: asm::Node::ReadRef {
+                source: Hole::Filled(asm::NodeId(t.clone())),
+                storage_type: Hole::Filled(f.get_storage_type(dest).unwrap().clone()),
+            },
+        })));
+    }
+    (v, temp_id)
 }
 
 /// Lowers a scheduling statement into a caiman assembly command
@@ -475,7 +514,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         } => lower_begin_encode(
             device,
             device_vars,
-            encoder,
+            &encoder.0,
             tags,
             temp_id,
             active_fences,
@@ -494,13 +533,12 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             encoder,
             ..
         } => lower_encode_do(dests, func, encoder, temp_id),
-        HirBody::FenceOp {
-            dest,
-            op,
-            src,
-            tags,
-            ..
-        } => lower_fence_op(dest, *op, src, tags, temp_id),
+        HirBody::Submit {
+            dest, src, tags, ..
+        } => lower_submit(dest, src, tags, temp_id),
+        HirBody::Sync {
+            dests, srcs, tags, ..
+        } => lower_sync(dests.processed(), srcs.processed(), tags, temp_id, f),
     }
 }
 
@@ -699,7 +737,6 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
             },
         ))],
         Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
-        // TODO: review this
         Terminator::None(..) => panic!("None terminator not replaced by Next"),
         Terminator::Call(..) => panic!("Call not replaced by CaptureCall"),
         Terminator::CaptureCall { call, captures, .. } => {
@@ -803,7 +840,6 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         commands.append(&mut new_cmds);
     }
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
-    // TODO: implicit timeline tag deduction
     let get_tag = |name: &str| {
         let t = if name == "input" {
             funclet.get_input_tag(name)
@@ -858,6 +894,7 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
 pub fn lower_schedule(
     ctx: &Context,
     func: SchedulingFunc,
+    no_inference: bool,
 ) -> Result<Vec<asm::Funclet>, LocalError> {
     let mut val = None;
     let mut timeline = None;
@@ -884,6 +921,6 @@ pub fn lower_schedule(
             .map(asm::FuncletId)
             .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
     };
-    let blocks = Funclets::new(func, &specs, ctx)?;
+    let blocks = Funclets::new(func, &specs, ctx, no_inference)?;
     Ok(blocks.funclets().iter().map(lower_block).collect())
 }

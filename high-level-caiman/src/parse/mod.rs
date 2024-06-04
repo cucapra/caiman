@@ -47,9 +47,9 @@ fn parse_error_to_error(
 
 fn parse_string(buf: &str, filename: &str) -> Result<ast::Program, LocalError> {
     let parser = parser::ProgramParser::new();
-    let ast_factory = ASTFactory::new(filename, buf);
+    let mut ast_factory = ASTFactory::new(filename, buf);
     parser
-        .parse(&ast_factory, buf)
+        .parse(&mut ast_factory, buf)
         .map_err(|e| parse_error_to_error(e, &ast_factory))
 }
 

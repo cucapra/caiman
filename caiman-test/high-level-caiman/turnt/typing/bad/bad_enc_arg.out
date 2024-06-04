@@ -1,0 +1,48 @@
+Error: At "bad_enc_arg.cm" 74:5 - 74:33, 
+  Type Error: Failed to unify type constraints of variable e2_0
+Encoder(
+    RemoteObj(
+        Record {
+            x_gpu: Num(
+                Int(
+                    I32,
+                ),
+            ),
+            y_gpu: Num(
+                Int(
+                    I32,
+                ),
+            ),
+        },
+        Record {
+            y_gpu: Var(
+                0,
+            ),
+        },
+        Record {
+            x_gpu: Var(
+                1,
+            ),
+        },
+    ),
+)
+	!=
+Encoder(
+    RemoteObj(
+        Record {
+            z_gpu: Num(
+                Int(
+                    I32,
+                ),
+            ),
+        },
+        Record,
+        Record {
+            z_gpu: Num(
+                Int(
+                    I32,
+                ),
+            ),
+        },
+    ),
+)

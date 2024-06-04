@@ -28,6 +28,10 @@
 //! ```
 //! However, because this is a local transformation, we can't reuse results
 //! across funclet/block boundaries.
+//!
+//! We also insert loads and stores for variables around function calls to
+//! support capturing references across function calls. We do not do this
+//! for references.
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
@@ -36,17 +40,20 @@ use crate::{
     error::Info,
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
-        Hir, HirBody, HirInstr, HirOp, UseType,
+        Hir, HirBody, HirInstr, HirOp, Terminator, TripleTag, UseType,
     },
     parse::ast::{DataType, SchedTerm, Uop},
 };
 
-use super::{analyze, Fact, Forwards};
+use super::{analyze, Fact, Forwards, InOutFacts, LiveVars};
 
 /// Transforms uses of references into uses of values by inserting
 /// deref instructions (loads). A loaded value is reused within a block
 /// until the reference is updated. This is a local pass, and does not reuse
 /// loads across basic blocks.
+///
+/// Also allows capturing of variables by inserting loads and stores
+/// before and after function calls.
 ///
 /// This should be the first pass run (before live vars, etc.)
 pub fn deref_transform_pass(
@@ -54,6 +61,7 @@ pub fn deref_transform_pass(
     data_types: &mut HashMap<String, DataType>,
     variables: &HashSet<String>,
 ) {
+    insert_capture_copies(cfg, data_types, variables);
     for bb in cfg.blocks.values_mut() {
         deref_transform_block(bb, data_types, variables);
     }
@@ -64,6 +72,120 @@ pub fn deref_transform_pass(
     let _ = analyze(cfg, &RefPropagation::default());
     for bb in cfg.blocks.values_mut() {
         remove_refs_ops(bb);
+    }
+}
+
+/// Inserts copies of variables that are live across calls to capture their values.
+/// This will insert a read-ref of a variable before the call and a var decl
+/// after the call to store the value of the variable back into a mutable location.
+///
+/// This only applies to variables, and NOT references. This was a conscious decision
+/// as we don't want to do too much magic. It makes sense for variables since they
+/// have value semantics.
+///
+/// # Example
+/// ```text
+/// var x = 10;
+/// foo(10);
+/// x
+/// ```
+///
+/// becomes
+///
+/// ```text
+/// var x = 10;
+/// let _cap_x = x;
+/// foo(10);
+/// var x = _cap_x;
+/// x
+/// ```
+fn insert_capture_copies(
+    cfg: &mut Cfg,
+    data_types: &mut HashMap<String, DataType>,
+    variables: &HashSet<String>,
+) {
+    let live_vars = analyze(cfg, &LiveVars::top());
+    let mut preceded_by_call = HashSet::new();
+    let mut terminated_by_call = HashSet::new();
+    for bb in cfg.blocks.values() {
+        if matches!(
+            &bb.terminator,
+            Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Yield(..),
+        ) {
+            for next in cfg.graph[&bb.id].targets() {
+                preceded_by_call.insert(next);
+            }
+            terminated_by_call.insert(bb.id);
+        }
+    }
+    for bb in cfg.blocks.values_mut() {
+        block_capture_vars(
+            bb,
+            &live_vars,
+            &preceded_by_call,
+            &terminated_by_call,
+            variables,
+            data_types,
+        );
+    }
+}
+
+/// Inserts copies of variables that are live across calls to capture their values.
+/// This will insert a read-ref of a variable before the call and a var decl
+/// after the call to store the value of the variable back into a mutable location.
+fn block_capture_vars(
+    bb: &mut BasicBlock,
+    live_vars: &InOutFacts<LiveVars>,
+    preceded_by_call: &HashSet<usize>,
+    terminated_by_call: &HashSet<usize>,
+    variables: &HashSet<String>,
+    data_types: &mut HashMap<String, DataType>,
+) {
+    if preceded_by_call.contains(&bb.id) {
+        let (last_in_annotation_idx, last_in_annotation_info) = bb
+            .stmts
+            .iter()
+            .enumerate()
+            .find_map(|(idx, stmt)| match stmt {
+                HirBody::InAnnotation(..) => None,
+                s => Some((idx, s.get_info())),
+            })
+            .unwrap_or((0, bb.src_loc));
+        for name in &live_vars.get_in_fact(bb.id).live_set {
+            if variables.contains(name) {
+                bb.stmts.insert(
+                    last_in_annotation_idx,
+                    HirBody::VarDecl {
+                        lhs: name.to_string(),
+                        lhs_tag: TripleTag::new_unspecified(),
+                        rhs: Some(SchedTerm::Var {
+                            name: format!("_cap_{name}"),
+                            info: last_in_annotation_info,
+                            tag: None,
+                        }),
+                        info: last_in_annotation_info,
+                    },
+                );
+            }
+        }
+    }
+    if terminated_by_call.contains(&bb.id) {
+        let info = bb.terminator.get_info();
+        for name in &live_vars.get_out_fact(bb.id).live_set {
+            if variables.contains(name) {
+                bb.stmts.push(HirBody::ConstDecl {
+                    lhs: format!("_cap_{name}"),
+                    lhs_tag: TripleTag::new_unspecified(),
+                    rhs: SchedTerm::Var {
+                        name: name.clone(),
+                        info,
+                        tag: None,
+                    },
+                    info,
+                });
+                data_types.insert(format!("_cap_{name}"), unref_type(&data_types[name]));
+            }
+        }
     }
 }
 

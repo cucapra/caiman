@@ -1,0 +1,34 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> res: i64 {
+    c :- 1
+    c2 :- 2
+    r :- id(c)
+    x :- c + r + c2
+    returns x
+}
+
+val id(a: i64) -> r: i64 {
+    returns a
+}
+
+fn main_func() -> i64 @ node(val.res)-usable impls main, time, space  {
+    let c: i64 @ node(val.c)-usable = 1;
+    var c2 = 1;
+    var c3 = 2;
+    let r: i64 @ node(val.r)-usable = id_func(c) @ node(val.r);
+    @in { c2: node(val.c)-usable };
+    let x: i64 @ node(val.x)-usable = c2 + r + c3;
+    x
+}
+
+fn id_func(a: i64 @ input(val.a)-usable) -> i64 @ val.r-usable  
+    impls id, time, space
+{
+    a
+}
+
+pipeline main { main_func }

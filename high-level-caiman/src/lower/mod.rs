@@ -1,3 +1,5 @@
+
+
 use crate::{
     error::{self, type_error, Info, LocalError},
     parse::ast::{
@@ -87,13 +89,13 @@ impl DataType {
             Self::BufferSpace => TypeId(String::from("BufferSpace")),
             Self::Event => TypeId(String::from("Event")),
             Self::UserDefined(name) => TypeId(name.clone()),
-            Self::Encoder(None) => TypeId(String::from("Encoder")),
-            Self::Fence(None) => TypeId(String::from("Fence")),
+            Self::Encoder(_) => TypeId(String::from("Encoder")),
+            Self::Fence(_) => TypeId(String::from("Fence")),
             Self::Ref(t) => TypeId(format!(
                 "&{}",
                 t.asm_type()
             )),
-            _ => unimplemented!("TODO"),
+            x => unimplemented!("TODO: {x:?}"),
         }
     }
     
@@ -110,7 +112,7 @@ fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
 /// Returns an error if the program is not well-typed or flattened.
 /// # Panics
 /// If lowering something with currently unsupported language features.
-pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, error::LocalError> {
+pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
     // 2. Constant fold constants
@@ -174,7 +176,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                             output,
                             def,
                             info,
-                        } => asm.declarations.push(extern_to_asm(&name, device, pure, input, output, def, info, &class.name)?),
+                        } => asm.declarations.push(extern_to_asm(&name, device, pure, input, output, def, info, &class.name, typing_ctx.class_dimensions[&class.name.0])?),
                     }
                 }
                 asm.declarations
@@ -198,10 +200,13 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                         specs,
                         statements,
                     },
+                    no_inference,
                 )?;
                 asm.declarations
                     .extend(res.into_iter().map(asm::Declaration::Funclet));
             }
+            // TODO: do something with this instead of handling in the parser to allow out of order uses
+            TopLevel::Typedef { .. } => (), 
             _ => todo!(),
         }
     }
@@ -307,6 +312,17 @@ fn get_gpu_info(def: Option<ExternDef>) -> Option<asm::ExternalGPUInfo> {
 }
 
 /// Converts an extern def into a declaration for an assembly external function
+/// For a cpu extern, we insert arguments for the dimensions of the function class.
+/// # Arguments
+/// * `name` - The name of the function
+/// * `device` - The device the function is on
+/// * `pure` - Whether the function is pure
+/// * `input` - The input arguments of the function, excluding templates
+/// * `output` - The output arguments of the function
+/// * `def` - The extern def of the function, if it's a gpu extern
+/// * `info` - The src info of the function
+/// * `class_name` - The name of the function class the extern is a member of
+/// * `num_dims` - The number of dimensions (templates) of the function class
 /// # Errors
 /// Returns an error if the device is not recognized.
 /// # Panics
@@ -321,7 +337,16 @@ fn extern_to_asm(
     def: Option<ExternDef>,
     info: Info,
     class_name: &asm::FunctionClassId,
+    num_dims: usize,
 ) -> Result<asm::Declaration, LocalError> {
+    let template_args = if device == "gpu" {
+        vec![]
+    } else {
+        (0..num_dims).map(|_| asm::ExternalArgument{
+            name: None,
+            ffi_type: DataType::Int(IntSize::I32).ffi().unwrap(),
+        }).collect()
+    };
     Ok(asm::Declaration::ExternalFunction(asm::ExternalFunction {
         name: name.to_string(),
         kind: match (device, pure) {
@@ -340,12 +365,12 @@ fn extern_to_asm(
                 ))
             }
         },
-        input_args: input
+        input_args: template_args.into_iter().chain(input
             .into_iter()
             .map(|(n, t)| asm::ExternalArgument{
                 name: n.map(asm::NodeId),
                 ffi_type: t.ffi().unwrap(),
-            })
+            }))
             .collect(),
         output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
             name: n.map(asm::NodeId),
