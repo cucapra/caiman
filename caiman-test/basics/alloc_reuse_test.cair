@@ -35,7 +35,12 @@ value[impl default @addtwo] %addtwo(%x : %i64) -> %i64 {
 }
 
 timeline %time(%e : %event0) -> %event0 {
-    return %e;
+    %enc = encoding-event %e [];
+    %enc1 = extract %enc 0;
+    %enc2 = extract %enc 1;
+    %sub = submission-event %enc2;
+    %snc = synchronization-event %enc1 %sub;
+    return %snc;
 }
 
 spatial %space(%bs : %buffspace) -> %buffspace {
@@ -47,9 +52,9 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 schedule[value $val = %addtwo, timeline $time = %time, spatial $space = %space] 
 %addtwo_head
 <$time-usable, $time-usable>
-    (%x     : $val.%x-usable $time-usable $space-usable %i64)
+    (%x     : $val.%x-usable $time.%e-usable $space-usable %i64)
     -> 
-    $val.%result-usable $time-usable $space-usable %i64
+    $val.%result-usable $time.%e-usable $space-usable %i64
 {
     %one_ref = alloc-temporary local [storage, map_write] i64;
     %result_ref = alloc-temporary local [storage, map_write] i64;
