@@ -407,16 +407,16 @@ where
 
         let timeline_spatial_info = LocationTriple::new();
         let mut valid_inputs = true;
-        for input in inputs.iter() {
-            let info = state.get_node_information(input, context);
-            match info.instantiation {
-                None => {},
-                Some(triple) => {
-                    //valid_inputs = timeline_spatial_info.intersection(other)
-                    // TODO
-                },
-            }
-        }
+        // for input in inputs.iter() {
+        //     let info = state.get_node_information(input, context);
+        //     match &info.instantiation {
+        //         None => {},
+        //         Some(triple) => {
+        //             //valid_inputs = timeline_spatial_info.intersection(other)
+        //             // TODO
+        //         },
+        //     }
+        // }
         if valid_inputs {
             for outputs in output_attempts.iter() {
                 let mut new_state = state.clone();
@@ -1273,7 +1273,7 @@ fn explicate_return(
         Hole::Filled(values) => values.clone(),
         Hole::Empty => funclet.output_types.iter().map(|_| Hole::Empty).collect(),
     };
-    dbg!(&state);
+    // dbg!(&state);
     let mut return_values = Vec::new();
     let mut no_matching_type = false;
     for (index, ret) in return_values_todo.iter().enumerate() {
@@ -1291,7 +1291,7 @@ fn explicate_return(
                     .instantiation
                     .clone()
                     .unwrap_or(LocationTriple::new());
-                dbg!((&expected_remote, &actual_remote));
+                // dbg!((&expected_remote, &actual_remote));
                 if expected_remote.is_subset_of(&actual_remote, context) {
                     return_values.push(node_id.clone());
                 } else {

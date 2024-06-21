@@ -52,13 +52,27 @@ impl DataType {
     ///
     /// The types with equivalents are value types, not reference types.
     #[must_use]
-    pub const fn ffi(&self) -> Option<asm::FFIType> {
+    pub fn ffi(&self) -> Option<asm::FFIType> {
         use asm::FFIType;
         match self {
             Self::Bool => Some(BOOL_FFI_TYPE),
             Self::Int(IntSize::I32) => Some(FFIType::I32),
             Self::Int(IntSize::I64) => Some(FFIType::I64),
             Self::Float(FloatSize::F64) => Some(FFIType::F64),
+            Self::Array(data, expr) => Some(FFIType::Array { element_type: Box::new(data.ffi().unwrap()), length: match *(expr.clone()) {
+                crate::parse::ast::NestedExpr::Term(t) => match t {
+                    crate::parse::ast::SpecTerm::Lit { info: _, lit } => 
+                        match lit {
+
+                            crate::parse::ast::SpecLiteral::Int(i) => {
+                                i.parse::<usize>().unwrap()
+                            },
+                            _ => todo!()
+                        }
+                    _ => todo!(),
+                },
+                _ => todo!()
+            } }),
             _ => None,
         }
     }
@@ -93,6 +107,27 @@ impl DataType {
                 "&{}",
                 t.asm_type()
             )),
+            Self::Array(data, expr) => 
+                match *(expr.clone()) {
+                    crate::parse::ast::NestedExpr::Term(t) => match t {
+                        crate::parse::ast::SpecTerm::Lit { info: _, lit } => 
+                            match lit {
+
+                                crate::parse::ast::SpecLiteral::Int(i) => {
+                                    let data_name = match *(data.clone()) {
+                                        DataType::Int(IntSize::I32) => "i32",
+                                        DataType::Int(IntSize::I64) => "i64",
+                                        _ => todo!(),
+                                    };
+                                    TypeId(format!("array_{}_{}", data_name, i))
+                                },
+                                _ => todo!()
+                            }
+                        _ => todo!(),
+                    },
+                    _ => todo!()
+                }
+            
             _ => unimplemented!("TODO"),
         }
     }
@@ -340,13 +375,15 @@ fn extern_to_asm(
                 ))
             }
         },
-        input_args: input
+        input_args: {
+            input
             .into_iter()
             .map(|(n, t)| asm::ExternalArgument{
                 name: n.map(asm::NodeId),
                 ffi_type: t.ffi().unwrap(),
             })
-            .collect(),
+            .collect()
+        },
         output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
             name: n.map(asm::NodeId),
             ffi_type: t.ffi().unwrap(),

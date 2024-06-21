@@ -1,4 +1,5 @@
-use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
+use crate::error::Info;
+use crate::parse::ast::{Binop, DataType, FloatSize, IntSize, SpecExpr, SpecLiteral, SpecTerm};
 
 use super::unification::{Constraint, Env, Kind};
 
@@ -18,6 +19,7 @@ pub enum ADataType {
     Bool,
     BufferSpace,
     Event,
+    Array(Box<ADataType>, usize),
     // TODO: records for encoders and fences?
     Encoder,
     Fence,
@@ -48,6 +50,7 @@ pub enum DTypeConstraint {
     /// A reference constraint which contains a dtype constraint
     /// that will be instantiated to a new inner data type constraint.
     RefN(Box<DTypeConstraint>),
+    Array(Box<DataType>, usize),
     Encoder,
     Fence,
 }
@@ -139,6 +142,17 @@ impl DTypeConstraint {
             Self::Event => Constraint::Atom(ADataType::Event),
             Self::Ref(x) => Constraint::Term(CDataType::Ref, vec![x]),
             Self::RefN(x) => Constraint::Term(CDataType::Ref, vec![x.instantiate(env)]),
+            Self::Array(d, size) => Constraint::Atom(ADataType::Array(
+                {
+                    let datatype = match *(d.clone()) {
+                        DataType::Int(IntSize::I32) => ADataType::I32,
+                        DataType::Int(IntSize::I64) => ADataType::I64,
+                        _ => todo!(),
+                    };
+                    Box::new(datatype)
+                },
+                size,
+            )),
             Self::Encoder => Constraint::Atom(ADataType::Encoder),
             Self::Fence => Constraint::Atom(ADataType::Fence),
         }
@@ -166,6 +180,16 @@ impl TryFrom<DTypeConstraint> for DataType {
                 DTypeConstraint::try_from(x).map_err(|_| ())?,
             )?))),
             DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
+            DTypeConstraint::Array(data, size) => Ok(Self::Array(
+                data,
+                Box::new(SpecExpr::Term(SpecTerm::Lit {
+                    info: Info {
+                        start_ln_and_col: (0, 0),
+                        end_ln_and_col: (0, 0),
+                    },
+                    lit: SpecLiteral::Int(format!("{}", size)),
+                })),
+            )),
             DTypeConstraint::Encoder => Ok(Self::Encoder(None)),
             DTypeConstraint::Fence => Ok(Self::Fence(None)),
         }
@@ -210,6 +234,14 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
             Constraint::Var(_) => Ok(Self::Any),
             Constraint::Atom(ADataType::Encoder) => Ok(Self::Encoder),
             Constraint::Atom(ADataType::Fence) => Ok(Self::Fence),
+            Constraint::Atom(ADataType::Array(data, size)) => Ok(Self::Array(
+                Box::new(match *(data.clone()) {
+                    ADataType::I32 => DataType::Int(IntSize::I32),
+                    ADataType::I64 => DataType::Int(IntSize::I64),
+                    _ => todo!(),
+                }),
+                size,
+            )),
             _ => todo!(),
         }
     }
@@ -227,6 +259,19 @@ impl From<DataType> for DTypeConstraint {
             DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
             DataType::Encoder(None) => Self::Encoder,
             DataType::Fence(None) => Self::Fence,
+            DataType::Array(data, expr) => Self::Array(
+                data,
+                match *(expr.clone()) {
+                    crate::parse::ast::NestedExpr::Term(t) => match t {
+                        crate::parse::ast::SpecTerm::Lit { info: _, lit } => match lit {
+                            crate::parse::ast::SpecLiteral::Int(i) => i.parse::<usize>().unwrap(),
+                            _ => todo!(),
+                        },
+                        _ => todo!(),
+                    },
+                    _ => todo!(),
+                },
+            ),
             _ => todo!(),
         }
     }

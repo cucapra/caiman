@@ -240,7 +240,7 @@ impl LocationTriple {
                 Some(LocationTriple{
                     value: Some(v),
                     timeline: Some(t),
-                    spatial: Some(t)
+                    spatial: Some(s)
                 })
             }
             _ => { None }

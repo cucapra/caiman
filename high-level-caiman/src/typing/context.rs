@@ -23,6 +23,12 @@ use super::{
 #[allow(clippy::too_many_lines)]
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     // TODO: collect used types
+    let arr1 = asm::FFIType::Array{element_type: Box::new(asm::FFIType::I32), length: 2};
+    let arr2 = asm::FFIType::Array{element_type: Box::new(asm::FFIType::I32), length: 4};
+    let arr3 = asm::FFIType::Array{element_type: Box::new(asm::FFIType::I32), length: 8};
+    let arr4 = asm::FFIType::Array{element_type: Box::new(asm::FFIType::I64), length: 2};
+    let arr5 = asm::FFIType::Array{element_type: Box::new(asm::FFIType::I64), length: 4};
+    let arr6 = asm::FFIType::Array{element_type: Box::new(asm::FFIType::I64), length: 8};
     vec![
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("BufferSpace"),
@@ -45,6 +51,48 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(asm::FFIType::I64)),
+        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(arr1.clone())),
+        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(arr2.clone())),
+        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(arr3.clone())),
+        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(arr4.clone())),
+        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(arr5.clone())),
+        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(arr6.clone())),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("array_i32_2"),
+            data: asm::LocalTypeInfo::NativeValue {
+                storage_type: arr1.clone(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("array_i32_4"),
+            data: asm::LocalTypeInfo::NativeValue {
+                storage_type: arr2.clone(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("array_i328"),
+            data: asm::LocalTypeInfo::NativeValue {
+                storage_type: arr3.clone(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("array_i64_2"),
+            data: asm::LocalTypeInfo::NativeValue {
+                storage_type: arr4.clone(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("array_i64_4"),
+            data: asm::LocalTypeInfo::NativeValue {
+                storage_type: arr5.clone(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("array_i64_8"),
+            data: asm::LocalTypeInfo::NativeValue {
+                storage_type: arr6.clone(),
+            },
+        })),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(BOOL_FFI_TYPE)),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("bool"),

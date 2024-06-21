@@ -1,0 +1,32 @@
+#version 0.1.0
+
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+tmln time(e: Event) -> out: Event { returns e }
+
+extern(cpu) pure sum([i64; 4]) -> i64
+
+val select_sum(v1: [i64; 4], v2: [i64; 4], v3: [i64; 4]) -> out: i64 {
+    sum1 :- sum(v1)
+    sum2 :- sum(v2)
+    sum3 :- sum(v3)
+    condition :- sum1 < 0
+    result :- sum2 if condition else sum3
+    returns result
+}
+
+fn select_sum_impl(
+    v1: [i64; 4], 
+    v2: [i64; 4], 
+    v3: [i64; 4]
+) 
+-> i64 impls select_sum,time,space {
+    if sum(v1) < 0 {
+        sum(v2)
+    }
+    else {
+        sum(v3)
+    }
+}
+
+pipeline main { select_sum_impl }

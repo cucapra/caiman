@@ -1215,7 +1215,7 @@ impl<'program> CodeGen<'program> {
                 if let Some(join_point_id) = default_join_point_id_opt {
                     default_join_point_id_opt = None;
                     let join_point = pipeline_context.join_graph.move_join(join_point_id);
-                    println!("Continuing to {:?} {:?}", join_point_id, join_point);
+                    // println!("Continuing to {:?} {:?}", join_point_id, join_point);
                     // jump and select are handled
                     // so split point here is either for call or return
                     match &join_point {
@@ -1268,10 +1268,10 @@ impl<'program> CodeGen<'program> {
                         ),
                     }
 
-                    println!(
-                        "{:?} {:?} {:?}",
-                        funclet_id, default_join_point_id_opt, current_out_node_results
-                    );
+                    // println!(
+                    //     "{:?} {:?} {:?}",
+                    //     funclet_id, default_join_point_id_opt, current_out_node_results
+                    // );
                 }
             }
         }
