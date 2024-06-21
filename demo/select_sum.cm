@@ -1,10 +1,9 @@
 #version 0.1.0
 
-sptl space(s: BufferSpace) -> BufferSpace { returns s }
-
-tmln time(e: Event) -> out: Event { returns e }
-
-extern(cpu) pure sum([i64; 4]) -> i64
+feq sum {
+    extern(cpu) pure sum1([i64; 4]) -> i64
+    extern(cpu) pure sum2([i64; 4]) -> i64
+}
 
 val select_sum(v1: [i64; 4], v2: [i64; 4], v3: [i64; 4]) -> out: i64 {
     sum1 :- sum(v1)
@@ -15,17 +14,21 @@ val select_sum(v1: [i64; 4], v2: [i64; 4], v3: [i64; 4]) -> out: i64 {
     returns result
 }
 
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+tmln time(e: Event) -> Event { returns e }
+
 fn select_sum_impl(
     v1: [i64; 4], 
     v2: [i64; 4], 
     v3: [i64; 4]
 ) 
 -> i64 impls select_sum,time,space {
-    if sum(v1) < 0 {
-        sum(v2)
+    if sum1(v1) < 0 {
+        sum2(v2)
     }
     else {
-        sum(v3)
+        sum2(v3)
     }
 }
 

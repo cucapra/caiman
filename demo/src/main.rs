@@ -6,7 +6,12 @@ mod util;
 struct Callbacks;
 
 impl caiman_out::main::CpuFunctions for Callbacks {
-    fn sum(&self, _: &mut dyn caiman_rt::State, x: [i64; 4]) -> caiman_out::main::outputs::sum {
+    fn sum1(&self, _: &mut dyn caiman_rt::State, x: [i64; 4]) -> caiman_out::main::outputs::sum1 {
+        println!("sum1 called");
+        (x.iter().sum(),)
+    }
+    fn sum2(&self, _: &mut dyn caiman_rt::State, x: [i64; 4]) -> caiman_out::main::outputs::sum2 {
+        println!("sum2 called");
         (x.iter().sum(),)
     }
 
