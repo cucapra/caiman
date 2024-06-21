@@ -219,12 +219,21 @@ impl LocationTriple {
     //   with the given set of specifications
     // If any of the specifications conflict, returns None
     pub fn intersection(&self, other: &LocationTriple) -> Option<LocationTriple> {
-        let mut value = None;
-        let mut timeline = None;
-        let mut spatial = None;
-        match self.value {
-            None => {}
-        }
+        let value = match (&self.value, &other.value) {
+            (Some(loc1), Some(loc2)) => loc1.intersect(loc2),
+            (None, None) => None,
+            (Some(loc), None) | (None, Some(loc)) => Some(loc.clone())
+        };
+        let timeline = match (&self.timeline, &other.timeline) {
+            (Some(loc1), Some(loc2)) => loc1.intersect(loc2),
+            (None, None) => None,
+            (Some(loc), None) | (None, Some(loc)) => Some(loc.clone())
+        };
+        let spatial = match (&self.spatial, &other.spatial) {
+            (Some(loc1), Some(loc2)) => loc1.intersect(loc2),
+            (None, None) => None,
+            (Some(loc), None) | (None, Some(loc)) => Some(loc.clone())
+        };
 
         match (value, timeline, spatial) {
             (Some(v), Some(t), Some(s)) => {

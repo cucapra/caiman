@@ -412,7 +412,8 @@ where
             match info.instantiation {
                 None => {},
                 Some(triple) => {
-                    valid_inputs = timeline_spatial_info.interse
+                    //valid_inputs = timeline_spatial_info.intersection(other)
+                    // TODO
                 },
             }
         }
