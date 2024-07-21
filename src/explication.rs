@@ -45,6 +45,15 @@ impl<T> Hole<T> {
     }
 }
 
+impl<'a, T: Clone> Hole<&'a T> {
+    pub fn cloned(self) -> Hole<T> {
+        match self {
+            Hole::Empty => Hole::Empty,
+            Hole::Filled(t) => Hole::Filled(t.clone()),
+        }
+    }
+}
+
 impl<T> From<Option<T>> for Hole<T> {
     fn from(x: Option<T>) -> Self {
         match x {
