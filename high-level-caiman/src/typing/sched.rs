@@ -136,8 +136,10 @@ fn collect_assign_uop(
     mutables: &mut HashMap<String, Info>,
 ) -> Result<(), LocalError> {
     let expr_name = hole_or_var(expr).unwrap().opt();
-    if op == Uop::Ref && expr_name.is_some() {
-        mutables.insert(expr_name.unwrap().clone(), info);
+    if let Some(expr_name) = expr_name {
+        if op == Uop::Ref {
+            mutables.insert(expr_name.clone(), info);
+        }
     }
     let (expr_c, ret_c) = uop_to_contraints(op, &mut env.env);
     if dest.len() != 1 {
@@ -213,6 +215,9 @@ fn collect_assign_var(
     }
     env.add_var_equiv(dest_name, var, info)
 }
+/// The return values of the true branch of an `if` followed by the return values
+/// of the false branch of the `if`.
+type IfRets = (Vec<Hole<String>>, Vec<Hole<String>>);
 
 /// Collects constraints for the body of a sequence.
 /// The body of the sequence must be an `if` statement or a block which
@@ -227,7 +232,7 @@ fn collect_seq_body(
     env: &mut DTypeEnv,
     stmt: &SchedStmt,
     mutables: &mut HashMap<String, Info>,
-) -> Result<(Vec<Hole<String>>, Vec<Hole<String>>), LocalError> {
+) -> Result<IfRets, LocalError> {
     match stmt {
         SchedStmt::If {
             true_block,
@@ -585,7 +590,10 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             SchedStmt::Assign {
                 rhs: SchedExpr::Term(SchedTerm::Hole(_)),
                 ..
-            } => (),
+            }
+            | SchedStmt::InEdgeAnnotation { .. }
+            | SchedStmt::OutEdgeAnnotation { .. }
+            | SchedStmt::Hole(_) => (),
             SchedStmt::Decl {
                 lhs: dest,
                 expr:
@@ -670,9 +678,6 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => {
                 collect_begin_encode(env, lhs, defs, *info)?;
             }
-            SchedStmt::InEdgeAnnotation { .. }
-            | SchedStmt::OutEdgeAnnotation { .. }
-            | SchedStmt::Hole(_) => (),
             SchedStmt::Call(info, call_info) => {
                 collect_assign_call(ctx, env, &[], call_info, *info, None)?;
             }
@@ -705,7 +710,6 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 encoder,
                 ..
             } => collect_encode(ctx, env, encoder, stmt, *cmd, *info)?,
-            SchedStmt::Hole(_) => (),
             x => unreachable!("{x:?}"),
         }
     }

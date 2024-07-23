@@ -256,7 +256,8 @@ impl<'a> Funclet<'a> {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
                         typ: self.get_asm_type(&name).unwrap(),
-                        tags: self.get_input_tag(&name).unwrap().tags_vec(),
+                        // using the out tag here since it's never a hole
+                        tags: self.get_out_tag(&name).unwrap().tags_vec(),
                         name: Some(asm::NodeId(name)),
                     }
                 })
@@ -772,7 +773,7 @@ impl Funclets {
             .collect();
         captures
             .into_iter()
-            .chain(term_dests.into_iter())
+            .chain(term_dests)
             .chain(returns)
             .collect()
     }

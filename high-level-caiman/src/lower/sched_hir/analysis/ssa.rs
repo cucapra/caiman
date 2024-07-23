@@ -65,7 +65,7 @@ fn add_phi_to_block(
     bb.stmts.insert(
         0,
         HirBody::Phi {
-            info: bb.stmts.get(0).map_or(bb.src_loc, Hir::get_info),
+            info: bb.stmts.first().map_or(bb.src_loc, Hir::get_info),
             dest: var.to_string(),
             inputs,
             original: var.to_string(),

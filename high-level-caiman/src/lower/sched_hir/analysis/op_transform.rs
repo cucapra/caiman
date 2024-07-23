@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use caiman::explication::Hole;
+
 use crate::{
     enum_cast,
     lower::{
@@ -65,24 +67,32 @@ fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType
         HirBody::Op { op, args, .. } => match op {
             HirOp::Binary(bin) => {
                 assert_eq!(args.len(), 2);
-                let arg_l = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
-                let arg_r = enum_cast!(SchedTerm::Var { name, .. }, name, &args[1]);
-                *op = HirOp::FFI(
-                    binop_to_str(
-                        *bin,
-                        &format!("{}", data_types[arg_l]),
-                        &format!("{}", data_types[arg_r]),
-                    ),
-                    OpType::Binary,
-                );
+                let arg_l = args[0].hole_or_var().unwrap();
+                let arg_r = args[1].hole_or_var().unwrap();
+                if let (Hole::Filled(arg_l), Hole::Filled(arg_r)) = (arg_l, arg_r) {
+                    *op = HirOp::FFI(
+                        Hole::Filled(binop_to_str(
+                            *bin,
+                            &format!("{}", data_types[arg_l]),
+                            &format!("{}", data_types[arg_r]),
+                        )),
+                        OpType::Binary,
+                    );
+                } else {
+                    *op = HirOp::FFI(Hole::Empty, OpType::Binary);
+                }
             }
             HirOp::Unary(unary @ (Uop::Neg | Uop::Not | Uop::LNot)) => {
                 assert_eq!(args.len(), 1);
-                let arg = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
-                *op = HirOp::FFI(
-                    uop_to_str(*unary, &format!("{}", data_types[arg])),
-                    OpType::Unary,
-                );
+                let arg = args[0].hole_or_var().unwrap();
+                if let Hole::Filled(arg) = arg {
+                    *op = HirOp::FFI(
+                        Hole::Filled(uop_to_str(*unary, &format!("{}", data_types[arg]))),
+                        OpType::Unary,
+                    );
+                } else {
+                    *op = HirOp::FFI(Hole::Empty, OpType::Unary);
+                }
             }
             HirOp::Unary(Uop::Ref) | HirOp::FFI(_, OpType::External) => (),
             HirOp::Unary(Uop::Deref) => panic!("Unexpected deref op"),

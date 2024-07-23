@@ -166,7 +166,7 @@ fn lower_store(
 /// Lowers an operation into a local-do-external and read-ref
 fn lower_op(
     dests: &[(String, TripleTag)],
-    op: &str,
+    op: &Hole<String>,
     args: &[SchedTerm],
     temp_id: usize,
     f: &Funclet,
@@ -196,8 +196,8 @@ fn lower_op(
         .collect::<Vec<_>>();
     let mut inputs = vec![];
     for arg in args {
-        let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
-        inputs.push(Hole::Filled(asm::NodeId(arg.clone())));
+        let arg = arg.hole_or_var().unwrap();
+        inputs.push(arg.cloned().map(asm::NodeId));
     }
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
@@ -213,7 +213,7 @@ fn lower_op(
                     .map(|(n, _)| Hole::Filled(asm::NodeId(n.clone())))
                     .collect(),
             ),
-            external_function_id: Hole::Filled(asm::ExternalFunctionId(op.to_string())),
+            external_function_id: op.clone().map(asm::ExternalFunctionId),
         },
     });
     // read ref for each destination
@@ -394,7 +394,7 @@ fn lower_encode_do(
             inputs: Hole::Filled(
                 func.args
                     .iter()
-                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .map(|x| x.clone().map(asm::NodeId))
                     .collect(),
             ),
             outputs: Hole::Filled(
@@ -590,7 +590,7 @@ fn lower_func_call(
             callee_arguments: Hole::Filled(
                 call.args
                     .iter()
-                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .map(|x| x.clone().map(asm::NodeId))
                     .collect(),
             ),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),
@@ -660,7 +660,12 @@ fn lower_yield(captures: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
 /// * `f` - the funclet that contains the return
 /// # Returns
 /// A tuple containing the commands that implement the return
-fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+fn lower_ret(
+    rets: &[Hole<String>],
+    passthrough: &[String],
+    temp_id: usize,
+    f: &Funclet,
+) -> CommandVec {
     assert!(passthrough.len() <= 1 || passthrough.iter().le(passthrough.iter().skip(1)));
     if f.is_final_return() {
         let djoin_id = temp_id;
@@ -684,8 +689,12 @@ fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funcle
             Hole::Filled(asm::Command::TailEdge(asm::TailEdge::Jump {
                 arguments: Hole::Filled(
                     rets.iter()
-                        .chain(passthrough.iter())
-                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .map(|x| x.clone().map(asm::NodeId))
+                        .chain(
+                            passthrough
+                                .iter()
+                                .map(|x| Hole::Filled(asm::NodeId(x.clone()))),
+                        )
                         .collect(),
                 ),
                 join: Hole::Filled(asm::NodeId(join_var)),
@@ -696,8 +705,12 @@ fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funcle
             asm::TailEdge::Return {
                 return_values: Hole::Filled(
                     rets.iter()
-                        .chain(passthrough.iter())
-                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .map(|x| x.clone().map(asm::NodeId))
+                        .chain(
+                            passthrough
+                                .iter()
+                                .map(|x| Hole::Filled(asm::NodeId(x.clone()))),
+                        )
                         .collect(),
                 ),
             },
@@ -749,7 +762,12 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
 /// Lowers a select terminator into a series of caiman assembly commands
 /// # Returns
 /// The commands that implement the terminator
-fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<'_>) -> CommandVec {
+fn lower_select(
+    guard_name: &Hole<String>,
+    tags: &TripleTag,
+    temp_id: usize,
+    f: &Funclet<'_>,
+) -> CommandVec {
     let djoin_id = temp_id;
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
@@ -775,7 +793,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     .map(|x| x.quot)
                     .collect(),
             ),
-            condition: Hole::Filled(asm::NodeId(guard_name.to_string())),
+            condition: guard_name.clone().map(asm::NodeId),
             callee_funclet_ids: Hole::Filled(f.next_blocks()),
             callee_arguments: Hole::Filled(f.output_args()),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),

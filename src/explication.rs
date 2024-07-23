@@ -29,6 +29,13 @@ impl<T> Hole<T> {
         }
     }
 
+    pub fn as_mut(&mut self) -> Hole<&mut T> {
+        match self {
+            Hole::Empty => Hole::Empty,
+            Hole::Filled(x) => Hole::Filled(x),
+        }
+    }
+
     pub fn opt(self) -> Option<T> {
         self.into()
     }
@@ -42,6 +49,13 @@ impl<T> Hole<T> {
 
     pub fn is_filled(&self) -> bool {
         !self.is_empty()
+    }
+
+    pub fn map<R>(self, f: impl Fn(T) -> R) -> Hole<R> {
+        match self {
+            Self::Empty => Hole::Empty,
+            Self::Filled(t) => Hole::Filled(f(t)),
+        }
     }
 }
 

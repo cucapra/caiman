@@ -4,10 +4,13 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use caiman::explication::Hole;
+
 use crate::{
-    enum_cast,
     error::Info,
-    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, Tags},
+    parse::ast::{
+        hole_or_var, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, Tags,
+    },
     typing::Context,
 };
 
@@ -255,7 +258,7 @@ fn handle_return(
     blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
     cur_stmts: &mut Vec<SchedStmt>,
-    sched_expr: SchedExpr,
+    sched_expr: &SchedExpr,
     join_edge: Edge,
     end: Info,
     ret_names: Vec<(String, Option<Tags>)>,
@@ -302,7 +305,7 @@ fn handle_select(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
     cur_stmts: &mut Vec<SchedStmt>,
-    guard: SchedExpr,
+    guard: &SchedExpr,
     tag: Option<Vec<crate::parse::ast::Tag>>,
     true_block: Vec<SchedStmt>,
     false_block: Vec<SchedStmt>,
@@ -454,7 +457,7 @@ fn handle_seq(
             cur_id,
             blocks,
             cur_stmts,
-            guard,
+            &guard,
             tag,
             true_block,
             false_block,
@@ -523,7 +526,7 @@ fn make_blocks(
                     blocks,
                     edges,
                     &mut cur_stmts,
-                    sched_expr,
+                    &sched_expr,
                     join_edge,
                     end,
                     ret_names.to_vec(),
@@ -544,7 +547,7 @@ fn make_blocks(
                     cur_id,
                     blocks,
                     &mut cur_stmts,
-                    guard,
+                    &guard,
                     tag,
                     true_block,
                     false_block,
@@ -855,20 +858,19 @@ impl Cfg {
 /// Converts an expression to a node Id, assuming the expression is just a variable
 /// # Panics
 /// Panics if the expression is not a variable
-fn expr_to_node_id(e: SchedExpr) -> String {
-    let t = enum_cast!(SchedExpr::Term, e);
-    enum_cast!(SchedTerm::Var { name, .. }, name, t)
+fn expr_to_node_id(e: &SchedExpr) -> Hole<String> {
+    hole_or_var(e).unwrap().cloned()
 }
 
 /// Converts an expression to a list of node Ids, assuming the expression is just a variable
 /// or a tuple of variables
-fn expr_to_multi_node_id(e: SchedExpr) -> Vec<String> {
+fn expr_to_multi_node_id(e: &SchedExpr) -> Vec<Hole<String>> {
     if let SchedExpr::Term(SchedTerm::Lit {
         lit: SchedLiteral::Tuple(lits),
         ..
     }) = e
     {
-        lits.into_iter().map(expr_to_node_id).collect()
+        lits.iter().map(expr_to_node_id).collect()
     } else {
         vec![expr_to_node_id(e)]
     }

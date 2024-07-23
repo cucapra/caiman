@@ -157,7 +157,7 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
                     |class_id| format!("{op:?}:{class_id}"),
                 );
                 let mut t = f.debug_struct(&id);
-                for (k, v) in args.iter() {
+                for (k, v) in args {
                     t.field(k, &v.borrow());
                 }
                 t.finish()
@@ -226,7 +226,7 @@ fn deep_clone<T: Kind, A: Kind>(
     ptr: &NodePtr<T, A>,
     cloned_ptrs: &mut HashMap<*const Node<T, A>, NodePtr<T, A>>,
 ) -> NodePtr<T, A> {
-    let key = ptr.as_ptr() as *const _;
+    let key = ptr.as_ptr().cast_const();
     if cloned_ptrs.contains_key(&key) {
         return cloned_ptrs[&key].clone();
     }
@@ -559,7 +559,7 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                 {
                     return false;
                 }
-                for (k, a) in args_a.iter() {
+                for (k, a) in args_a {
                     if let Some(b) = args_b.get(k) {
                         if !unify(a, b) {
                             return false;

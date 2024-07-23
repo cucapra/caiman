@@ -76,9 +76,9 @@ pub enum DTypeConstraint {
     RemoteObj {
         /// record of all remote variables (have the storage flag)
         all: RecordConstraint,
-        /// record of all readable variables (map_read)
+        /// record of all readable variables (`map_read`)
         read: RecordConstraint,
-        /// record of all writable variables (copy_dst)
+        /// record of all writable variables (`copy_dst`)
         write: RecordConstraint,
     },
     SpecEncoder,

@@ -300,7 +300,7 @@ impl ASTFactory {
                 }
             }
         }
-        sanitize_expr(&expr).map(|_| expr)
+        sanitize_expr(&expr).map(|()| expr)
     }
 
     /// Finalizes a datatype used as the base type of a flagged type. Flagged types

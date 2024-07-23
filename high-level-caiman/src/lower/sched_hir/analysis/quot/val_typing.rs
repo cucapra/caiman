@@ -77,6 +77,8 @@
 
 use std::collections::HashMap;
 
+use caiman::explication::Hole;
+
 use crate::{
     error::{type_error, Info, LocalError},
     lower::{
@@ -145,7 +147,7 @@ fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],
     input_overrides: &[(String, TripleTag)],
-    outputs: &mut [TripleTag],
+    outputs: &[TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,
@@ -272,40 +274,45 @@ fn unify_decl(
             env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
             env = add_var_constraint(lhs, name, *info, env)?;
         }
+        SchedTerm::Hole(_) => {}
         x => todo!("{x:#?}"),
     }
     add_type_annot(lhs, lhs_tag, decl_info, env)
 }
 
-/// Converts an `HirOp` to a `Binop`
+/// Converts an `HirOp` to a `Binop`. If the `HirOp` is a hole, returns a hole
 /// # Panics
 /// If the `HirOp` is not a binary operator
-fn hir_op_to_binop(op: &HirOp) -> Binop {
+fn hir_op_to_binop(op: &HirOp) -> Hole<Binop> {
     match op {
-        HirOp::Binary(binop) => *binop,
+        HirOp::Binary(binop) => Hole::Filled(*binop),
         HirOp::FFI(name, OpType::Binary) => {
-            let mut parts: Vec<_> = name.split('_').collect();
-            match parts.swap_remove(1) {
-                "add" => Binop::Add,
-                "sub" => Binop::Sub,
-                "mul" => Binop::Mul,
-                "div" => Binop::Div,
-                "mod" => Binop::Mod,
-                "and" => Binop::And,
-                "or" => Binop::Or,
-                "xor" => Binop::Xor,
-                "shl" => Binop::Shl,
-                "shr" => Binop::Shr,
-                "eq" => Binop::Eq,
-                "neq" => Binop::Neq,
-                "lt" => Binop::Lt,
-                "leq" => Binop::Leq,
-                "gt" => Binop::Gt,
-                "geq" => Binop::Geq,
-                "ashr" => Binop::AShr,
-                "land" => Binop::Land,
-                "lor" => Binop::Lor,
-                x => panic!("Unrecognized FFI binop: {x}"),
+            if let Hole::Filled(name) = name {
+                let mut parts: Vec<_> = name.split('_').collect();
+                Hole::Filled(match parts.swap_remove(1) {
+                    "add" => Binop::Add,
+                    "sub" => Binop::Sub,
+                    "mul" => Binop::Mul,
+                    "div" => Binop::Div,
+                    "mod" => Binop::Mod,
+                    "and" => Binop::And,
+                    "or" => Binop::Or,
+                    "xor" => Binop::Xor,
+                    "shl" => Binop::Shl,
+                    "shr" => Binop::Shr,
+                    "eq" => Binop::Eq,
+                    "neq" => Binop::Neq,
+                    "lt" => Binop::Lt,
+                    "leq" => Binop::Leq,
+                    "gt" => Binop::Gt,
+                    "geq" => Binop::Geq,
+                    "ashr" => Binop::AShr,
+                    "land" => Binop::Land,
+                    "lor" => Binop::Lor,
+                    x => panic!("Unrecognized FFI binop: {x}"),
+                })
+            } else {
+                Hole::Empty
             }
         }
         HirOp::Unary(_) => panic!("Not a binary operator"),
@@ -313,7 +320,7 @@ fn hir_op_to_binop(op: &HirOp) -> Binop {
     }
 }
 
-/// Unifies a built-in operation with the given name and arguments
+/// Unifies a built-in operation with the given name and arguments.
 /// # Arguments
 /// * `dest` - The name of the variable to assign the result to
 /// * `dest_tag` - The type annotation for the variable being assigned to
@@ -332,62 +339,82 @@ fn unify_op(
     ctx: &Context,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
+    for (dest, dest_tag) in dests {
+        env = add_type_annot(dest, dest_tag, info, env)?;
+    }
     let mut arg_names = vec![];
     for arg in args {
         match arg {
             SchedTerm::Var { name, tag, info } => {
                 env = add_type_annot(name, &TripleTag::from_opt(tag), *info, env)?;
-                arg_names.push(name.clone());
+                arg_names.push(Hole::Filled(name.clone()));
             }
+            // if any arg is a hole, then we can't know what instantiation of the
+            // operator to call, so just quit early.
+            SchedTerm::Hole(_) => arg_names.push(Hole::Empty),
             _ => unreachable!(),
         }
     }
     match op {
         HirOp::FFI(_, OpType::Binary) => {
             assert_eq!(dests.len(), 1);
-            env = add_constraint(
-                &dests[0].0,
-                &ValQuot::Bop(
-                    hir_op_to_binop(op),
-                    MetaVar::new_var_name(&arg_names[0]),
-                    MetaVar::new_var_name(&arg_names[1]),
-                ),
-                info,
-                env,
-            )?;
-        }
-        HirOp::FFI(target, OpType::External) => {
-            // The name of an external function is the name of its value spec
-            let f_class = ctx.specs[target].feq.clone();
-            let dest_tuple = tuple_id(
-                &dests
-                    .iter()
-                    .map(|(name, _)| name.clone())
-                    .collect::<Vec<_>>(),
-            );
-            env = add_constraint(
-                &format!("!{dest_tuple}"),
-                &ValQuot::Call(
-                    f_class,
-                    arg_names.iter().map(|x| MetaVar::new_var_name(x)).collect(),
-                ),
-                info,
-                env,
-            )?;
-            for (id, (dest, _)) in dests.iter().enumerate() {
+            if let Hole::Filled(op) = hir_op_to_binop(op) {
                 env = add_constraint(
-                    dest,
-                    &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest_tuple}")), id),
+                    &dests[0].0,
+                    &ValQuot::Bop(
+                        op,
+                        arg_names[0]
+                            .as_ref()
+                            .opt()
+                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
+                        arg_names[1]
+                            .as_ref()
+                            .opt()
+                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
+                    ),
                     info,
                     env,
                 )?;
             }
         }
+        HirOp::FFI(target, OpType::External) => {
+            // The name of an external function is the name of its value spec
+            if let Hole::Filled(target) = target {
+                let f_class = ctx.specs[target].feq.clone();
+                let dest_tuple = tuple_id(
+                    &dests
+                        .iter()
+                        .map(|(name, _)| name.clone())
+                        .collect::<Vec<_>>(),
+                );
+                env = add_constraint(
+                    &format!("!{dest_tuple}"),
+                    &ValQuot::Call(
+                        f_class,
+                        arg_names
+                            .iter()
+                            .map(|x| {
+                                x.as_ref()
+                                    .opt()
+                                    .map_or_else(|| env.new_temp(), |y| MetaVar::new_var_name(y))
+                            })
+                            .collect(),
+                    ),
+                    info,
+                    env,
+                )?;
+                for (id, (dest, _)) in dests.iter().enumerate() {
+                    env = add_constraint(
+                        dest,
+                        &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest_tuple}")), id),
+                        info,
+                        env,
+                    )?;
+                }
+            }
+        }
         HirOp::FFI(..) => todo!("Unimplemented operator"),
         _ => unreachable!(),
-    }
-    for (dest, dest_tag) in dests {
-        env = add_type_annot(dest, dest_tag, info, env)?;
     }
     Ok(env)
 }
@@ -427,7 +454,10 @@ fn unify_phi(
                 env = add_constraint(
                     dest,
                     &ValQuot::Select {
-                        guard: MetaVar::new_var_name(guard),
+                        guard: guard
+                            .as_ref()
+                            .opt()
+                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
                         true_id: MetaVar::new_var_name(incoming_edges[0].1),
                         false_id: MetaVar::new_var_name(incoming_edges[1].1),
                     },
@@ -440,7 +470,10 @@ fn unify_phi(
                 env = add_constraint(
                     dest,
                     &ValQuot::Select {
-                        guard: MetaVar::new_var_name(guard),
+                        guard: guard
+                            .as_ref()
+                            .opt()
+                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
                         true_id: MetaVar::new_var_name(incoming_edges[1].1),
                         false_id: MetaVar::new_var_name(incoming_edges[0].1),
                     },
@@ -499,13 +532,17 @@ fn unify_call(
             call.args
                 .iter()
                 .filter_map(|arg| {
-                    let t = dtypes.get(&ssa::original_name(arg)).unwrap_or_else(|| {
-                        panic!("Missing type info for {}", ssa::original_name(arg))
-                    });
-                    if is_value_dtype(t) {
-                        Some(MetaVar::new_var_name(arg))
+                    if let Hole::Filled(arg) = arg {
+                        let t = dtypes.get(&ssa::original_name(arg)).unwrap_or_else(|| {
+                            panic!("Missing type info for {}", ssa::original_name(arg))
+                        });
+                        if is_value_dtype(t) {
+                            Some(MetaVar::new_var_name(arg))
+                        } else {
+                            None
+                        }
                     } else {
-                        None
+                        Some(env.new_temp())
                     }
                 })
                 .collect(),
@@ -662,7 +699,9 @@ fn unify_terminator(
             // pass through is ignored (like next)
             // the destination tag is the tag for the merged node, we handle this
             for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
-                env = add_var_constraint(dest, ret, *info, env)?;
+                if let Hole::Filled(ret) = ret {
+                    env = add_var_constraint(dest, ret, *info, env)?;
+                }
             }
             Ok(env)
         }

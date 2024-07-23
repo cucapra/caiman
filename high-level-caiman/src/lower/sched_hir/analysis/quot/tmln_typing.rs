@@ -16,6 +16,8 @@ use std::{
     vec,
 };
 
+use caiman::explication::Hole;
+
 use crate::{
     error::{type_error, Info, LocalError},
     lower::{
@@ -547,7 +549,9 @@ fn unify_terminator(
             // pass through is ignored (like next)
             // the destination tag is the tag for the merged node, we handle this
             for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
-                env = add_var_constraint(dest, ret, *info, env)?;
+                if let Hole::Filled(ret) = ret {
+                    env = add_var_constraint(dest, ret, *info, env)?;
+                }
             }
             Ok(env)
         }
@@ -786,11 +790,15 @@ fn unify_call(
         f_class,
         std::iter::once(MetaVar::new_var_name(&format!("{LOCAL_STEM}{last_loc}")))
             .chain(call.args.iter().filter_map(|arg| {
-                let t = dtypes
-                    .get(arg)
-                    .unwrap_or_else(|| panic!("Missing type info for {arg}"));
-                if is_timeline_dtype(t) {
-                    Some(MetaVar::new_var_name(arg))
+                if let Hole::Filled(arg) = arg {
+                    let t = dtypes
+                        .get(arg)
+                        .unwrap_or_else(|| panic!("Missing type info for {arg}"));
+                    if is_timeline_dtype(t) {
+                        Some(MetaVar::new_var_name(arg))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -865,7 +873,7 @@ fn add_io_constraints(
     mut env: NodeEnv,
     inputs: &mut [(String, TripleTag)],
     input_overrides: &[(String, TripleTag)],
-    outputs: &mut [TripleTag],
+    outputs: &[TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,

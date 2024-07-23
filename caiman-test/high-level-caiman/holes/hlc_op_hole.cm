@@ -1,0 +1,19 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(s: BufferSpace) -> BufferSpace {
+    returns s
+}
+
+val foo() -> i64 {
+    returns 10 + 20
+}
+
+fn main() -> i64 impls time, space, foo {
+    let x = 10;
+    let y = 20;
+    ? + ?
+}

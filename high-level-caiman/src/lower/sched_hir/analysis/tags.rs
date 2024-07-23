@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use caiman::explication::Hole;
 use caiman::ir;
 
 use crate::lower::sched_hir::cfg::FINAL_BLOCK_ID;
@@ -92,6 +93,7 @@ impl PartialEq for TagAnalysis {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for TagAnalysis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TagAnalysis")
@@ -434,12 +436,27 @@ impl TagAnalysis {
             }
             Terminator::Return { dests, rets, .. } => {
                 assert_eq!(dests.len(), rets.len());
-                for ((idx, _), out) in dests.iter().zip(rets.iter()) {
-                    let tag = self.tags.get(out).cloned().unwrap();
-                    self.tags.insert(
-                        idx.clone(),
-                        override_none_usable(tag, &self.data_types[idx], self.flags.get(out)),
-                    );
+                for ((dest_name, dest_tag), out) in dests.iter().zip(rets.iter()) {
+                    if let Hole::Filled(out) = out {
+                        let tag = self.tags.get(out).cloned().unwrap();
+                        self.tags.insert(
+                            dest_name.clone(),
+                            override_none_usable(
+                                tag,
+                                &self.data_types[dest_name],
+                                self.flags.get(out),
+                            ),
+                        );
+                    } else {
+                        self.tags.insert(
+                            dest_name.clone(),
+                            override_none_usable(
+                                dest_tag.clone(),
+                                &self.data_types[dest_name],
+                                self.flags.get(dest_name),
+                            ),
+                        );
+                    }
                 }
             }
 

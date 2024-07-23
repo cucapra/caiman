@@ -2,9 +2,10 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
+    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{hole_or_var, Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
 };
 use caiman::assembly::ast as asm;
+use caiman::explication::Hole;
 
 use crate::{
     error::Info,
@@ -324,13 +325,13 @@ pub enum HirOp {
     /// an unlowered unary operation
     Unary(Uop),
     /// a lowered operation into an external call
-    FFI(Name, OpType),
+    FFI(Hole<Name>, OpType),
 }
 
 impl HirOp {
     /// Lowers a HIR operation into the name of the external function to call.
     /// Panics if the operation is not lowered.
-    pub fn lower(&self) -> Name {
+    pub fn lower(&self) -> Hole<Name> {
         match self {
             Self::Binary(_) | Self::Unary(_) => panic!("Cannot lower unlowered operation"),
             Self::FFI(name, _) => name.clone(),
@@ -344,7 +345,7 @@ impl HirOp {
 pub struct HirFuncCall {
     pub info: Info,
     pub target: String,
-    pub args: Vec<String>,
+    pub args: Vec<Hole<String>>,
     pub tag: TripleTag,
     /// The number of value template arguments that occur in `args` before the 
     /// normal arguments
@@ -364,7 +365,7 @@ impl HirFuncCall {
                 Some(TemplateArgs::Vals(vs)) => {
                     for v in vs {
                         if let NestedExpr::Term(SpecTerm::Var { name, .. }) = v {
-                            starting_args.push(name);
+                            starting_args.push(Hole::Filled(name));
                         } else {
                             panic!("Invalid template argument {v:?}")
                         }
@@ -377,11 +378,7 @@ impl HirFuncCall {
             let args = starting_args.into_iter().chain(value.args
                 .into_iter()
                 .map(|a| {
-                    enum_cast!(
-                        SchedTerm::Var { name, .. },
-                        name,
-                        enum_cast!(SchedExpr::Term, a)
-                    )
+                    hole_or_var(&a).unwrap().cloned()
                 }))
                 .collect();
             return Self {
@@ -433,7 +430,7 @@ pub enum Terminator {
     Select {
         info: Info,
         dests: Vec<(String, TripleTag)>,
-        guard: String,
+        guard: Hole<String>,
         tag: TripleTag,
     },
     /// A return statement which returns values to the parent scope, **NOT** out
@@ -445,7 +442,7 @@ pub enum Terminator {
         /// The destination names and tags for the return values in the **parent** scope
         dests: Vec<(String, TripleTag)>,
         /// The returned variables in the child scope
-        rets: Vec<String>,
+        rets: Vec<Hole<String>>,
         /// The variables that aren't directly returned by the user but are
         /// captured by the select
         passthrough: Vec<String>,
@@ -495,13 +492,6 @@ pub trait Hir {
     /// passed the name of the variable.
     fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String);
 
-    /// Get the variables used by this statement.
-    fn get_use_set(&self) -> BTreeSet<String> {
-        let mut res = BTreeSet::new();
-        self.get_uses(&mut res);
-        res
-    }
-
     fn get_info(&self) -> Info;
 }
 
@@ -532,14 +522,18 @@ impl Hir for Terminator {
         match self {
             Self::Call(_, call) | Self::CaptureCall { call, .. } => {
                 for arg in &call.args {
-                    uses.insert(arg.clone());
+                    if let Hole::Filled(arg) = arg {
+                        uses.insert(arg.clone());
+                    }
                 }
             }
             Self::Select { guard, .. } => {
-                uses.insert(guard.clone());
+                if let Hole::Filled(guard) = guard {
+                    uses.insert(guard.clone());
+                }
             }
             Self::Return { rets, passthrough, ..}  => {
-                for node in rets.iter().chain(passthrough.iter()) {
+                for node in rets.iter().filter_map(|x| x.as_ref().opt()).chain(passthrough.iter()) {
                     uses.insert(node.clone());
                 }
             }
@@ -554,11 +548,15 @@ impl Hir for Terminator {
         match self {
             Self::Call(_, call) | Self::CaptureCall { call, .. } => {
                 for arg in &mut call.args {
-                    *arg = f(arg, UseType::Read);
+                    if let Hole::Filled(arg) = arg {
+                        *arg = f(arg, UseType::Read);
+                    }
                 }
             }
             Self::Select { guard, .. } => {
-                *guard = f(guard, UseType::Read);
+                if let Hole::Filled(guard) = guard {
+                    *guard = f(guard, UseType::Read);
+                }
             }
             Self::Next(_, rets) | Self::FinalReturn(_, rets) => {
                 for node in rets {
@@ -571,7 +569,7 @@ impl Hir for Terminator {
                 }
             }
             Self::Return { rets, passthrough, .. } => {
-                for node in rets.iter_mut().chain(passthrough.iter_mut()) {
+                for node in rets.iter_mut().filter_map(|x| x.as_mut().opt()).chain(passthrough.iter_mut()) {
                     *node = f(node, UseType::Read);
                 }
             }
@@ -719,7 +717,7 @@ impl HirBody {
                         Self::Op {
                             info,
                             dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                            op: HirOp::FFI(target.clone(), OpType::External),
+                            op: HirOp::FFI(Hole::Filled(target.clone()), OpType::External),
                             args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
                         }
                     },
@@ -841,7 +839,9 @@ impl Hir for HirBody {
             }
             Self::EncodeDo { dests, func, encoder, ..} => {
                 for arg in &func.args {
-                    res.insert(arg.clone());
+                    if let Hole::Filled(arg) = arg {
+                        res.insert(arg.clone());
+                    }
                 }
                 for (name, _) in dests {
                     res.insert(name.clone());
@@ -987,7 +987,9 @@ impl Hir for HirBody {
             }
             Self::EncodeDo { func, encoder, dests, ..} => {
                 for arg in &mut func.args {
-                    *arg = f(arg, UseType::Read);
+                    if let Hole::Filled(arg) = arg {
+                         *arg = f(arg, UseType::Read);
+                    }
                 }
                 for (dest, _) in dests {
                     *dest = f(dest, UseType::Write);

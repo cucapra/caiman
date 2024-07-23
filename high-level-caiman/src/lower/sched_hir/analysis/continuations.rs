@@ -23,6 +23,7 @@ pub struct Succs {
     /// A map from each block to the transitive closure of nodes that are
     /// predecessors of the key. We consider a block to be a predecessor of
     /// itself in this map.
+    #[allow(unused)]
     pub preds: HashMap<usize, HashSet<usize>>,
 }
 
@@ -31,9 +32,7 @@ impl Succs {
         let mut res: HashMap<usize, HashSet<usize>> = HashMap::new();
         for (dominated, dominators) in &preds {
             for dominator in dominators {
-                res.entry(*dominator)
-                    .or_insert_with(HashSet::new)
-                    .insert(*dominated);
+                res.entry(*dominator).or_default().insert(*dominated);
             }
         }
         Self { succs: res, preds }
@@ -162,7 +161,7 @@ fn compute_merge_points<T: NextSet, U: NextSet>(
         let mut successors = HashSet::new();
         for succ in edge.next_set() {
             if successors.is_empty() {
-                successors = succs.succs.get(&succ).unwrap().clone();
+                successors.clone_from(succs.succs.get(&succ).unwrap());
             } else {
                 successors = successors
                     .intersection(succs.succs.get(&succ).unwrap())

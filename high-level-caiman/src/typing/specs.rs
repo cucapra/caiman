@@ -412,7 +412,7 @@ fn resolve_types(
                 })?;
                 ctx.types.insert(
                     name.clone(),
-                    dt.try_into().map_err(|_| {
+                    dt.try_into().map_err(|()| {
                         type_error(
                             ctx.info,
                             &format!("Failed to resolve type of variable {name}. Not enough constraints."),

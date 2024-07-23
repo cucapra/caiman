@@ -27,6 +27,8 @@
 
 use std::collections::HashMap;
 
+use caiman::explication::Hole;
+
 use crate::{
     enum_cast,
     lower::sched_hir::{cfg::Cfg, DataMovement, HirBody, HirInstr, Terminator, TripleTag},
@@ -150,10 +152,10 @@ impl<'a> EncodeTransform<'a> {
     /// Furthermore, dimensional arguments are not expressed in the target signature.
     fn replace_call_args(
         &self,
-        args: &[String],
+        args: &[Hole<String>],
         sig: &[FlaggedType],
         num_dims: usize,
-    ) -> Vec<String> {
+    ) -> Vec<Hole<String>> {
         let mut new_args = Vec::new();
         for arg_name in args.iter().take(num_dims) {
             new_args.push(arg_name.clone());
@@ -165,10 +167,14 @@ impl<'a> EncodeTransform<'a> {
                     ..
                 } => {
                     for (field_name, _) in all {
-                        new_args.push(format!(
-                            "{}::{field_name}",
-                            self.fence_map.get(arg_name).unwrap_or(arg_name)
-                        ));
+                        if let Hole::Filled(arg_name) = arg_name {
+                            new_args.push(Hole::Filled(format!(
+                                "{}::{field_name}",
+                                self.fence_map.get(arg_name).unwrap_or(arg_name)
+                            )));
+                        } else {
+                            new_args.push(Hole::Empty);
+                        }
                     }
                 }
                 FlaggedType {
@@ -178,10 +184,14 @@ impl<'a> EncodeTransform<'a> {
                     new_args.push(arg_name.clone());
                     if let DataType::RemoteObj { all, .. } = &**t {
                         for (field_name, _) in all {
-                            new_args.push(format!(
-                                "{}::{field_name}",
-                                self.fence_map.get(arg_name).unwrap_or(arg_name)
-                            ));
+                            if let Hole::Filled(arg_name) = arg_name {
+                                new_args.push(Hole::Filled(format!(
+                                    "{}::{field_name}",
+                                    self.fence_map.get(arg_name).unwrap_or(arg_name)
+                                )));
+                            } else {
+                                new_args.push(Hole::Empty);
+                            }
                         }
                     } else {
                         panic!("Unexpected inner type of fence/encoder");
@@ -204,12 +214,14 @@ impl<'a> EncodeTransform<'a> {
                     *rets = self.replace_call_args(rets, self.sig_out, 0);
                 }
                 for ((dest, _), src) in dests.iter().zip(rets.iter()) {
-                    if let Some(src) = self.fence_map.get(src) {
-                        let mut src = src.clone();
-                        while let Some(new_src) = self.fence_map.get(&src) {
-                            src = new_src.clone();
+                    if let Hole::Filled(src) = src {
+                        if let Some(src) = self.fence_map.get(src) {
+                            let mut src = src.clone();
+                            while let Some(new_src) = self.fence_map.get(&src) {
+                                src.clone_from(new_src);
+                            }
+                            self.fence_map.insert(dest.clone(), src);
                         }
-                        self.fence_map.insert(dest.clone(), src);
                     }
                 }
             }
@@ -268,7 +280,7 @@ impl<'a> EncodeTransform<'a> {
                 }
             }
         }
-        record_fields.extend(std::mem::take(&mut *annot).into_iter());
+        record_fields.extend(std::mem::take(&mut *annot));
         *annot = record_fields;
     }
 }
@@ -297,7 +309,7 @@ impl<'a> Fact for EncodeTransform<'a> {
                 {
                     if let DataType::RemoteObj { all, .. } = &**dt {
                         device_vars.clear();
-                        for (var, _) in all.iter() {
+                        for (var, _) in all {
                             device_vars.push((format!("{}::{var}", encoder.0), encoder.1.clone()));
                         }
                     }
@@ -313,7 +325,9 @@ impl<'a> Fact for EncodeTransform<'a> {
                     *dest = format!("{encoder}::{dest}");
                 }
                 for arg in func.args.iter_mut().skip(func.num_dims) {
-                    *arg = format!("{encoder}::{arg}");
+                    if let Hole::Filled(arg) = arg {
+                        *arg = format!("{encoder}::{arg}");
+                    }
                 }
             }
             HirInstr::Stmt(HirBody::DeviceCopy {

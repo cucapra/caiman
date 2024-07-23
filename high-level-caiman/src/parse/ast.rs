@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::{collections::BTreeSet, fmt::Display};
 
 use caiman::{explication::Hole, ir};
@@ -645,7 +646,8 @@ impl SchedTerm {
 
     /// If this term is a hole or variable, returns a hole that is either empty or
     /// filled with the variable name. Otherwise returns `None`.
-    pub fn hole_or_var(&self) -> Option<Hole<&String>> {
+    #[must_use]
+    pub const fn hole_or_var(&self) -> Option<Hole<&String>> {
         match self {
             Self::Hole(_) => Some(Hole::Empty),
             Self::Var { name, .. } => Some(Hole::Filled(name)),
@@ -656,7 +658,8 @@ impl SchedTerm {
 
 /// If the expr is a hole or a variable, returns a hole to a string
 /// Otherwise returns `None`
-pub fn hole_or_var(e: &SchedExpr) -> Option<Hole<&String>> {
+#[must_use]
+pub const fn hole_or_var(e: &SchedExpr) -> Option<Hole<&String>> {
     if let SchedExpr::Term(t) = e {
         t.hole_or_var()
     } else {
@@ -665,6 +668,9 @@ pub fn hole_or_var(e: &SchedExpr) -> Option<Hole<&String>> {
 }
 
 /// Gets the variable name of `e` if one exists, otherwise panics.
+/// # Panics
+/// Panics if the expression is not a variable
+#[must_use]
 pub fn expect_var(e: &SchedExpr) -> &String {
     match e {
         SchedExpr::Term(SchedTerm::Var { name, .. }) => name,
@@ -915,12 +921,6 @@ impl ClassMembers {
             ),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct ImplicitTags {
-    pub input: Option<Tag>,
-    pub output: Option<Tag>,
 }
 
 /// A top level statement in the source language

@@ -202,6 +202,10 @@ impl NodeEnv {
         !name.starts_with('$')
     }
 
+    pub fn new_temp(&mut self) -> MetaVar {
+        MetaVar::new_var_name(&self.env.new_temp_type())
+    }
+
     /// Adds a constraint to the type variable `name`. If the constraint
     /// uniquely identifies a quotient class, unifies the quotient class with
     /// the type variable.
@@ -524,6 +528,7 @@ pub struct SchedInfo {
     /// Name of the timeline spec.
     pub timeline: String,
     /// Name of the spatial spec.
+    #[allow(unused)]
     pub spatial: String,
     /// The type signature of the schedule.
     pub dtype_sig: Signature,
@@ -776,6 +781,7 @@ pub struct Context {
     /// Set of external function names.
     pub externs: HashSet<String>,
     /// User defined types. Map from type name to type.
+    #[allow(unused)]
     pub user_types: HashMap<String, FlaggedType>,
     /// Map from class name to the class's dimensions (number of value template arguments)
     pub class_dimensions: HashMap<String, usize>,

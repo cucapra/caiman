@@ -1,4 +1,4 @@
-#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::all, clippy::pedantic, clippy::nursery, dead_code)]
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
@@ -41,6 +41,7 @@ match {
 pub Program: Program = { 
     "#version" <maj_min: r"[0-9]+[.][0-9]+"> "." <patch: r"[0-9]+">
     <tls: TopLevel*> =>? astf.program(maj_min, patch, tls), 
+    <TopLevel*> => <>,
 }
 
 // Top level statements and declarations

@@ -10,7 +10,7 @@ use crate::parse::ast::{
 pub struct CallGraph<'a> {
     // btree map for deterministic iteration so yields are inserted in the same
     // place every time
-    /// Map from source function name to a list of (edge_id, destination function name)
+    /// Map from source function name to a list of (`edge_id`, destination function name)
     /// Edge ids are indices into the `edges` vector
     adj: BTreeMap<String, Vec<(String, usize)>>,
     edges: Vec<&'a mut SchedFuncCall>,
