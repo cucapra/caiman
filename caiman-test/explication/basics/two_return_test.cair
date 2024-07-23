@@ -1,3 +1,8 @@
+// implements:
+// main() -> (i64, i64) {
+//   return (4, 5)
+// } 
+
 version 0.0.2
 
 ffi i64;
@@ -33,6 +38,7 @@ schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
     
     local-do-builtin $val.%y() -> %y_ref;
     %y = read-ref i64 %y_ref;
+    
     return ?;
 }
 

@@ -30,16 +30,16 @@ schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
 %foo<$time-usable, $time-usable>() ->
 [%out1 : $val.%x-usable $time-usable $space-usable %i64,
  %out2 : $val.%y-usable $time-usable $space-usable %i64] {
-    %x_ref = alloc-temporary local [] i64;
-    %y_ref = alloc-temporary local [] i64;
+    %ref_1 = alloc-temporary local [] i64;
+    %ref_2 = alloc-temporary local [] i64;
 
-    local-do-builtin $val.%x() -> ?;
-    %a = read-ref i64 %x_ref;
-    
-    local-do-builtin $val.%y() -> ?;
-    %b = read-ref i64 %y_ref;
+    local-do-builtin ?() -> ?;
+    local-do-builtin ?() -> ?;
 
-    return ?;
+    %a = read-ref i64 %ref_1;
+    %b = read-ref i64 %ref_2;
+
+    return [%b, %a];
 }
 
 pipeline "main" = %foo;

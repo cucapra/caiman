@@ -5,8 +5,15 @@ use itertools::Itertools;
 use paste::paste;
 
 impl InState {
-    pub fn new(funclet_id: FuncletId, context: &StaticContext) -> InState {
-        let scopes = vec![ScheduleScopeData::new(funclet_id)];
+    // setup stuff
+
+    pub fn new_operation(funclet_id: FuncletId, context: &StaticContext) -> InState {
+        let scopes = vec![ScheduleScopeData::new_operation(funclet_id)];
+        InState { scopes }
+    }
+
+    pub fn new_storage(funclet_id: FuncletId, context: &StaticContext) -> InState {
+        let scopes = vec![ScheduleScopeData::new_storage(funclet_id)];
         InState { scopes }
     }
 
@@ -15,7 +22,11 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet_id: FuncletId, context: &StaticContext) {
-        self.scopes.push(ScheduleScopeData::new(funclet_id));
+        let new_scope = match self.get_latest_scope().pass_information {
+            PassInformation::Operation(_) => ScheduleScopeData::new_operation(funclet_id),
+            PassInformation::Storage(_) => ScheduleScopeData::new_storage(funclet_id),
+        };
+        self.scopes.push(new_scope);
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the lexpir element of the scope
@@ -26,48 +37,17 @@ impl InState {
         self.scopes.len() == 0
     }
 
-    pub fn add_storage_node(
-        &mut self,
-        schedule_node: NodeId,
-        typ: expir::Type,
-        context: &StaticContext,
-    ) {
-        self.get_latest_scope_mut()
-            .add_storage_node(schedule_node, typ, context);
-    }
-
-    pub fn set_instantiation(
-        &mut self,
-        schedule_node: NodeId,
-        instantiation: LocationTriple,
-        context: &StaticContext,
-    ) {
-        self.get_latest_scope_mut()
-            .set_instantiation(schedule_node, instantiation, context);
-    }
-
-    pub fn set_timeline_manager(
-        &mut self,
-        schedule_node: &NodeId,
-        timeline_manager: NodeId,
-        context: &StaticContext,
-    ) {
-        self.get_latest_scope_mut()
-            .set_timeline_manager(schedule_node, timeline_manager, context);
-    }
-
-    pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
-        self.get_latest_scope_mut()
-            .clear_timeline_manager(schedule_node, context);
-    }
+    // general utility
 
     pub fn hole_error(&self, context: &StaticContext) -> String {
         format!(
-            "TODO Hole in node {}",
+            "TODO Hole in funclet {} for node {}",
+            context
+                .debug_info
+                .funclet(&self.get_latest_scope().funclet_id),
             context.debug_info.node_expir(
                 self.get_current_funclet_id(),
-                self
-                    .get_current_node(context)
+                self.get_current_node(context)
                     .as_ref()
                     .opt()
                     .expect("Unreachable")
@@ -75,31 +55,17 @@ impl InState {
         )
     }
 
-    pub fn get_node_error(&self, context: &StaticContext) -> String {
+    pub fn node_error(&self, node_id: NodeId, context: &StaticContext) -> String {
         format!(
-            "in spec node {}",
-            context.debug_info.node(
-                &self.get_current_funclet_id(),
-                self.get_current_node_id().unwrap()
-            )
+            "for node {}",
+            context
+                .debug_info
+                .node(&self.get_current_funclet_id(), node_id)
         )
     }
 
-    pub fn get_managed_by_timeline(
-        &self,
-        timeline_manager: NodeId,
-        context: &StaticContext,
-    ) -> Vec<NodeId> {
-        self.get_latest_scope()
-            .storage_node_information
-            .iter()
-            .filter(|(_, info)| {
-                info.timeline_manager
-                    .map(|o| o == timeline_manager)
-                    .unwrap_or(false)
-            })
-            .map(|v| v.0.clone())
-            .collect_vec()
+    pub fn current_node_error(&self, context: &StaticContext) -> String {
+        self.node_error(self.get_current_node_id().unwrap(), context)
     }
 
     pub fn expect_location(&self) -> Location {
@@ -233,6 +199,26 @@ impl InState {
             .tail_edge
     }
 
+    // given a typeid corresponding to a native type
+    // returns the storage_type of that native type
+    pub fn expect_native_storage_type(
+        &self,
+        type_id: &expir::TypeId,
+        context: &StaticContext,
+    ) -> ffi::TypeId {
+        match context.get_type(type_id) {
+            ir::Type::NativeValue { storage_type } => storage_type.clone(),
+            typ => panic!(
+                "Expected a native type, got {:?} while checking {}",
+                typ,
+                context.debug_info.node(
+                    &self.get_current_funclet_id(),
+                    self.get_current_node_id().unwrap()
+                )
+            ),
+        }
+    }
+
     pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {
         let scope = self.get_latest_scope();
         scope.node_id.unwrap() >= context.get_funclet(&scope.funclet_id).nodes.len()
@@ -242,21 +228,90 @@ impl InState {
         self.get_latest_scope_mut().next_node();
     }
 
-    pub fn get_instantiations(
-        &self,
-        location: &Location,
-        context: &StaticContext,
-    ) -> HashSet<NodeId> {
-        // Gets every instantiation of the location explicitly
-        // Useful for update-related stuff
+    // operation stuff
 
+    pub fn add_value_operation(&mut self, operation: Location, context: &StaticContext) {
+        self.get_latest_scope_mut()
+            .add_value_operation(operation, context);
+    }
+
+    pub fn has_value_operation(&self, operation: &Location, context: &StaticContext) {
         self.get_latest_scope()
-            .instantiations
-            .iter()
-            .filter(|(loc, _)| **loc == *location)
-            .fold(HashSet::new(), |acc, (_, hs)| {
-                acc.intersection(hs).cloned().collect()
-            })
+            .has_value_operation(operation, context);
+    }
+
+    pub fn add_timeline_operation(&mut self, operation: Location, context: &StaticContext) {
+        self.get_latest_scope_mut()
+            .add_timeline_operation(operation, context);
+    }
+
+    pub fn has_timeline_operation(&self, operation: &Location, context: &StaticContext) {
+        self.get_latest_scope()
+            .has_timeline_operation(operation, context);
+    }
+
+    // returns all operations who's depedencies have already been satisfied
+    pub fn find_satisfied_operations(
+        &self,
+        value_funclet_id: &FuncletId,
+        context: &StaticContext,
+    ) -> Vec<expir::Quotient> {
+        let value_funclet = context.get_funclet(value_funclet_id);
+        let mut result = Vec::new();
+        let scope = self.get_latest_scope();
+        for node_id in 0..value_funclet.nodes.len() {
+            if !scope.has_value_operation(
+                &Location::new(value_funclet_id.clone(), node_id.clone()),
+                context,
+            ) {
+                if context
+                    .get_node_dependencies(value_funclet_id, &node_id)
+                    .iter()
+                    .map(|dependency| {
+                        scope.has_value_operation(
+                            &Location::new(value_funclet_id.clone(), dependency.clone()),
+                            context,
+                        )
+                    })
+                    .all(|x| x)
+                {
+                    result.push(expir::Quotient::Node { node_id });
+                }
+            }
+        }
+        result
+    }
+
+    // storage stuff
+
+    pub fn add_storage_node(
+        &mut self,
+        schedule_node: NodeId,
+        typ: Hole<expir::Type>,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .add_storage_node(schedule_node, typ, context);
+    }
+
+    pub fn set_storage_type(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .set_storage_type(schedule_node, typ, context);
+    }
+
+    pub fn set_instantiation(
+        &mut self,
+        schedule_node: NodeId,
+        instantiation: LocationTriple,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .set_instantiation(schedule_node, instantiation, context);
     }
 
     pub fn get_node_information(
@@ -268,155 +323,144 @@ impl InState {
             .get_node_information(node_id, context)
     }
 
-    // Returns an ordered list of storage nodes in any scope (most to least recent)
+    pub fn get_nodes_with_timeline_status(
+        &self,
+        timeline_status: &expir::Quotient,
+        context: &StaticContext,
+    ) -> Vec<NodeId> {
+        self.get_latest_scope()
+            .as_storage()
+            .storage_node_information
+            .iter()
+            .filter(|(_, info)| {
+                info.instantiation
+                    .as_ref()
+                    .map(|inst| {
+                        inst.timeline
+                            .as_ref()
+                            .map(|loc| loc.quot == *timeline_status)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            })
+            .map(|v| v.0.clone())
+            .collect_vec()
+    }
+
+    pub fn get_instantiations(
+        &self,
+        location: &Location,
+        context: &StaticContext,
+    ) -> HashSet<NodeId> {
+        // Gets every instantiation of the location explicitly
+        // Useful for update-related stuff
+
+        self.get_latest_scope()
+            .as_storage()
+            .instantiations
+            .iter()
+            .filter(|(loc, _)| **loc == *location)
+            .fold(HashSet::new(), |acc, (_, hs)| {
+                acc.intersection(hs).cloned().collect()
+            })
+    }
+
+    // Returns an ordered list of all storage nodes in any scope (most to least recent)
     // The order is as follows (tiebreaks are in node index order)
     //   1. fully realized storage nodes without an instantiation
     //   2. unrealized storage nodes (those still pending explication)
     //   3. fully realized storage nodes with an existing instantiation
+    //   4. recurse from 1 up the stack
     pub fn find_all_storage_nodes(
         &self,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
         let mut result = Vec::new();
+
+        // keep track of each "kind" of result
+        let mut empty_nodes = Vec::new();
+        let mut unrealized_nodes = Vec::new();
+        let mut filled_nodes = Vec::new();
+
         for scope in self.scopes.iter().rev() {
-            let mut empty_nodes = Vec::new();
-            let mut filled_nodes = Vec::new();
             // sort the results so we go top to bottom of the funclet
-            for node_id in scope
-                .storage_of_type(target_type, context)
-                .iter()
-                .sorted_by(|x, y| x.cmp(y))
-            {
+            for node_id in scope.storage_of_type(target_type, context).iter().sorted() {
                 // this is ok because we can just use the phi associated with an input
                 let location = Location::new(scope.funclet_id.clone(), node_id.clone());
-                match scope.get_node_information(node_id, context).instantiation {
-                    Some(_) => filled_nodes.push(location),
+                let info = scope.get_node_information(node_id, context);
+                match info.instantiation {
+                    Some(_) => match info.typ {
+                        Hole::Empty => unrealized_nodes.push(location),
+                        Hole::Filled(_) => filled_nodes.push(location),
+                    },
                     None => empty_nodes.push(location),
                 }
             }
             result.append(&mut empty_nodes);
+            result.append(&mut unrealized_nodes);
             result.append(&mut filled_nodes);
         }
         result
     }
 
     // Returns an ordered list of storage nodes in any scope (most to least recent)
-    // The order is as follows ()
-    //   1. fully realized storage nodes without an instantiation
-    //
-    pub fn find_matching_storage_nodes(
+    // The order is as follows:
+    //   1. fully realized storage nodes with a matching instantiation
+    //   2. unrealized storage nodes (those still pending explication)
+    //   3. recurse from 1 up the stack
+    pub fn find_matching_instantiations(
         &self,
-        target_location_triple: &LocationTriple,
+        mut target_location_triple: LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Vec<Location> {
+        target_location_triple = target_location_triple.into_node_id(context);
+        self.instantiation_search(Some(target_location_triple), target_type, context)
+    }
+
+    // Does the same as the above, but with no "matching instantiaion" requirement
+    pub fn find_all_instantiations(
+        &self,
+        target_type: &expir::Type,
+        context: &StaticContext,
+    ) -> Vec<Location> {
+        self.instantiation_search(None, target_type, context)
+    }
+
+    fn instantiation_search(
+        &self,
+        target_location_triple: Option<LocationTriple>,
+        target_type: &expir::Type,
+        context: &StaticContext,
+    ) -> Vec<Location> {
+        let mut end_result = Vec::new();
         let mut result = Vec::new();
         for scope in self.scopes.iter().rev() {
             // sort the results so we go top to bottom of the funclet
-            for node in scope
-                .match_triple(target_location_triple, context)
-                .iter()
-                .sorted_by(|x, y| x.cmp(y))
-            {
-                let node_info = scope.storage_node_information.get(&node).unwrap();
-                if is_of_type(&node_info.typ, target_type) {
-                    result.push(Location::new(scope.funclet_id.clone(), node.clone()));
+            let nodes = match target_location_triple {
+                None => scope.all_instantiations(context),
+                Some(ref triple) => scope.match_triple(&triple, context),
+            };
+            for node in nodes.iter().sorted() {
+                let node_info = scope
+                    .as_storage()
+                    .storage_node_information
+                    .get(&node)
+                    .unwrap();
+                let location = Location::new(scope.funclet_id.clone(), node.clone());
+                match &node_info.typ {
+                    Hole::Empty => end_result.push(location),
+                    Hole::Filled(typ) => {
+                        if is_of_type(&typ, target_type) {
+                            result.push(location);
+                        }
+                    }
                 }
             }
+            result.append(&mut end_result);
         }
         result
-        // let nodes = vec![
-        //     expir::Node::AllocTemporary {
-        //         buffer_flags,
-        //         place: Some(target_place.clone()),
-        //         storage_type: None,
-        //     }
-        // ];
-        // self.pop_best_operation(&nodes)
-    }
-
-    // Pops and returns the best match for the given list of operations (if one exists)
-    // Returns as an index to make recursion more clear
-    // Finds the operation with the following preferences (higher numbers are tiebreakers):
-    //   1. maximum matching heuristic value
-    //   2. inner-most scope
-    //   3. order of the list of `nodes`
-    //   4. most recently added node
-    // if no such operation exists, returns the most recent explication hole
-    // if there is also no explication hole, panics
-    pub fn pop_best_operation(&mut self, nodes: &Vec<&expir::Node>) -> Location {
-        todo!("I have no idea what to do here right now");
-        // struct HeuristicResults {
-        //     pub opcode: OpCode,
-        //     pub scope_index: usize,
-        //     pub operation_index: usize,
-        //     pub heuristic_value: usize,
-        // }
-        // let mut best_found: Option<HeuristicResults> = None;
-        // // enumerate before reversing for later access
-        // for (scope_index, scope) in self.scopes.iter().enumerate().rev() {
-        //     for node in nodes {
-        //         let opcode = OpCode::new(node);
-        //         match scope.allocations.get(&opcode) {
-        //             None => {}
-        //             Some(operations) => {
-        //                 // 0 --> index, 1 --> value
-        //                 for (operation_index, comp_node) in operations.iter().enumerate() {
-        //                     best_found =
-        //                         match compare_ops(node, self.get_node(&scope.name, comp_node)) {
-        //                             None => best_found,
-        //                             // this is the "magic heuristic"
-        //                             Some(heuristic_value) => {
-        //                                 let new_found = Some(HeuristicResults {
-        //                                     opcode: opcode.clone(),
-        //                                     scope_index,
-        //                                     operation_index,
-        //                                     heuristic_value,
-        //                                 });
-        //                                 match best_found {
-        //                                     None => new_found,
-        //                                     Some(old_result) => {
-        //                                         if heuristic_value > old_result.heuristic_value {
-        //                                             new_found
-        //                                         } else {
-        //                                             Some(old_result)
-        //                                         }
-        //                                     }
-        //                                 }
-        //                             }
-        //                         }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        // match best_found {
-        //     None => {}
-        //     Some(result) => {
-        //         let scope = &mut self.scopes[result.scope_index];
-        //         return Location {
-        //             funclet: scope.name.clone(),
-        //             node: scope
-        //                 .available_operations
-        //                 .get_mut(&result.opcode)
-        //                 .unwrap()
-        //                 .remove(result.operation_index),
-        //         };
-        //     }
-        // }
-        // for scope in self.scopes.iter().rev() {
-        //     match &scope.explication_hole {
-        //         None => {}
-        //         Some(hole) => {
-        //             return Location {
-        //                 funclet: scope.name.clone(),
-        //                 node: hole.clone(),
-        //             };
-        //         }
-        //     }
-        // }
-        // panic!("No resource found for any of {:?}", nodes);
     }
 }
 

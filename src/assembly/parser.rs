@@ -1492,12 +1492,12 @@ impl CaimanAssemblyParser {
 
     fn read_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), read_sep, ffi_type_sep(storage_type),
+            [assign(name), read_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::ReadRef {
                         source: source.opt().map(|s| NodeId(s)).into(),
-                        storage_type: Hole::Filled(storage_type)
+                        storage_type
                     }
                 }
         ))

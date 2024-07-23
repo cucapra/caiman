@@ -58,6 +58,15 @@ impl BufferFlags {
             uniform: self.uniform | other.uniform,
         }
     }
+
+    pub fn is_subset_of(&self, other: &Self) -> bool {
+        ((self.map_read & other.map_read) == self.map_read) &&
+        ((self.map_write & other.map_write) == self.map_write) &&
+        ((self.copy_src & other.copy_src) == self.copy_src) &&
+        ((self.copy_dst & other.copy_dst) == self.copy_dst) &&
+        ((self.storage & other.storage) == self.storage) &&
+        ((self.uniform & other.uniform) == self.uniform)
+    }
 }
 
 impl std::fmt::Display for BufferFlags {
@@ -486,8 +495,8 @@ pub enum FuncletSpecBinding {
     },
     ScheduleExplicit {
         value: FuncletSpec,
-        spatial: FuncletSpec,
         timeline: FuncletSpec,
+        spatial: FuncletSpec,
     },
 }
 
