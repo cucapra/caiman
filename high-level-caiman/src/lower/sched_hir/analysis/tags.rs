@@ -529,7 +529,7 @@ impl Fact for TagAnalysis {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize, _: Option<usize>) {
         self.special_process_block(block_id);
         match stmt {
             HirInstr::Tail(t) => self.transfer_tail(t, block_id),

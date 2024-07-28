@@ -213,7 +213,7 @@ impl Fact for RefPropagation {
         self
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize, _: Option<usize>) {
         // assume single assignment
         stmt.rename_uses(&mut |name, _| {
             self.aliases

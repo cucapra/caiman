@@ -295,7 +295,12 @@ impl<'a> Fact for EncodeTransform<'a> {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: crate::lower::sched_hir::HirInstr<'_>, _: usize) {
+    fn transfer_instr(
+        &mut self,
+        stmt: crate::lower::sched_hir::HirInstr<'_>,
+        _: usize,
+        _: Option<usize>,
+    ) {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding {
                 encoder,

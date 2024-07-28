@@ -1,0 +1,30 @@
+val bar(a: i64) -> i64 {
+    b :- foo(a)
+    h :- 0 - a if a < 0 else a
+    returns b + h
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn main(a: i64) -> i64 impls bar, time, space {
+    let b = a;
+    let h = if a < 0 {
+        0 - a
+    } else {
+        a
+    };
+    let b = foo_impl(b);
+    ? + ?
+}
+
+val foo(a: i64) -> i64 {
+    returns a + 10
+}
+
+fn foo_impl(a: i64) -> i64 impls foo, time, space {
+    let x = 10;
+    ? + ?
+}
+
+pipeline main { main }

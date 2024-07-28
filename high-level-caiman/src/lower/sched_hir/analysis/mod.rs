@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet, VecDeque},
+    collections::{hash_map::Entry, BTreeSet, HashMap, HashSet, VecDeque},
     rc::Rc,
 };
 
@@ -39,7 +39,7 @@ pub trait Fact: PartialEq + Clone {
 
     /// Updates the basic block's fact after propagating the fact through the given
     /// statement or terminator.
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize, cont_id: Option<usize>);
 
     type Dir: Direction;
 }
@@ -98,6 +98,7 @@ pub trait Direction {
 fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> T {
     let mut fact = in_fact.clone();
     let block = cfg.blocks.get_mut(&block_id).unwrap();
+    let cont_id = block.ret_block;
     T::Dir::local_iter(
         &mut block
             .stmts
@@ -105,7 +106,7 @@ fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> 
             .map(HirInstr::Stmt)
             .chain(std::iter::once(HirInstr::Tail(&mut block.terminator))),
         &mut |instr| {
-            fact.transfer_instr(instr, block_id);
+            fact.transfer_instr(instr, block_id, cont_id);
         },
     );
     fact
@@ -350,17 +351,23 @@ pub struct ReachingDefs {
     available_set: BTreeSet<String>,
     kill_set: BTreeSet<String>,
     data_types: Rc<HashMap<String, DataType>>,
+    variables: Rc<HashSet<String>>,
+    /// Map from block id to list of defs that become available at that block
+    becomes_available: HashMap<usize, Vec<String>>,
 }
 
 impl ReachingDefs {
     pub fn top<'a>(
         inputs: impl Iterator<Item = &'a String>,
         dt: &HashMap<String, DataType>,
+        variables: &HashSet<String>,
     ) -> Self {
         Self {
             available_set: inputs.cloned().collect(),
             kill_set: BTreeSet::new(),
             data_types: Rc::new(dt.clone()),
+            variables: Rc::new(variables.clone()),
+            becomes_available: HashMap::new(),
         }
     }
 
@@ -368,6 +375,7 @@ impl ReachingDefs {
         self.available_set.difference(&self.kill_set)
     }
 
+    /// Set the uses of a hole to be all reaching definitions of its current program point
     fn set_hole_uses(&self, stmt: &mut HirInstr<'_>) {
         match stmt {
             HirInstr::Stmt(
@@ -410,25 +418,35 @@ impl Fact for ReachingDefs {
         self
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize) {
-        // TODO: consumption
+    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, block_id: usize, cont_id: Option<usize>) {
         self.set_hole_uses(&mut stmt);
+        if let Some(newly_available) = self.becomes_available.get(&block_id) {
+            self.available_set.extend(newly_available.iter().cloned());
+        }
         match stmt {
             HirInstr::Stmt(
                 HirBody::ConstDecl { lhs: dest, .. }
                 | HirBody::Phi { dest, .. }
                 | HirBody::RefLoad { dest, .. }
-                | HirBody::Submit { dest, .. }
                 | HirBody::VarDecl { lhs: dest, .. }
-                | HirBody::DeviceCopy { dest, .. }
-                
+                | HirBody::DeviceCopy { dest, .. },
             ) => {
                 self.available_set.insert(dest.clone());
             }
-            HirInstr::Stmt(HirBody::Sync { dests, .. }) => self
-                .available_set
-                .extend(dests.processed().iter().map(|(x, _)| x.clone())),
-            HirInstr::Stmt(HirBody::EncodeDo { dests, .. } | HirBody::Op { dests, .. }) | HirInstr::Tail(Terminator::Return { dests, ..}) => {
+            HirInstr::Stmt(HirBody::Submit { dest, src, .. }) => {
+                self.available_set.insert(dest.clone());
+                assert!(!self.variables.contains(src));
+                self.kill_set.insert(src.clone());
+            }
+            HirInstr::Stmt(HirBody::Sync { dests, srcs, .. }) => {
+                self.available_set
+                    .extend(dests.processed().iter().map(|(x, _)| x.clone()));
+                assert!(!srcs.processed().iter().any(|x| self.variables.contains(x)));
+                self.kill_set.extend(srcs.processed().iter().cloned());
+            }
+            HirInstr::Stmt(HirBody::EncodeDo { dests, .. } | HirBody::Op { dests, .. }) => {
+                // ops are pure, so srcs aren't killed
+                // srcs of encode-do are references, so they aren't killed
                 self.available_set
                     .extend(dests.iter().map(|(x, _)| x.clone()));
             }
@@ -448,18 +466,42 @@ impl Fact for ReachingDefs {
                 | HirBody::RefStore { .. },
             )
             | HirInstr::Tail(
-                Terminator::Next(..)
-                | Terminator::None(_)
-                | Terminator::FinalReturn(..)
-                // TODO: I think we need to make the slect dests reachable at the continuation
-                | Terminator::Select { .. }
-
+                Terminator::Next(..) | Terminator::None(_) | Terminator::FinalReturn(..),
             ) => {}
-            HirInstr::Tail(Terminator::Call(..) | Terminator::Yield(..)) => {
+            HirInstr::Tail(x @ (Terminator::Call(..) | Terminator::Yield(..))) => {
                 for avail in &self.available_set {
                     // we can't capture references, so they are no longer reachable over a call
                     if matches!(self.data_types.get(avail), Some(DataType::Ref(_))) {
                         self.kill_set.insert(avail.clone());
+                    }
+                }
+                if let Terminator::Call(dests, func) = x {
+                    for arg in func.args.iter().filter_map(|x| x.as_ref().opt()) {
+                        // arguments that are consumed are also no longer reachable
+                        if !self.variables.contains(arg) {
+                            self.kill_set.insert(arg.clone());
+                        }
+                    }
+                    for (dest, _) in dests {
+                        self.available_set.insert(dest.clone());
+                    }
+                }
+            }
+            HirInstr::Tail(Terminator::Return { dests, rets, .. }) => {
+                self.available_set
+                    .extend(dests.iter().map(|(x, _)| x.clone()));
+                self.kill_set
+                    .extend(rets.iter().filter_map(|x| x.as_ref().opt().cloned()));
+            }
+            HirInstr::Tail(Terminator::Select { dests, .. }) => {
+                let cont_id = cont_id.expect("Select should have a continuation");
+                // dests of a select become available at the continuation
+                match self.becomes_available.entry(cont_id) {
+                    Entry::Vacant(e) => {
+                        e.insert(dests.iter().map(|(x, _)| x.clone()).collect());
+                    }
+                    Entry::Occupied(mut e) => {
+                        e.get_mut().extend(dests.iter().map(|(x, _)| x.clone()));
                     }
                 }
             }
@@ -499,7 +541,7 @@ impl Fact for LiveVars {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize, _: Option<usize>) {
         if let Some(defs) = stmt.get_defs() {
             for var in defs {
                 self.live_set.remove(&var);
@@ -536,7 +578,7 @@ impl Fact for ActiveFences {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize, _: Option<usize>) {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();

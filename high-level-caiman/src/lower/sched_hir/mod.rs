@@ -602,7 +602,7 @@ impl Funclets {
         );
         bft_transform(
             &mut cfg,
-            &ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types),
+            &ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types, &variables),
         );
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
