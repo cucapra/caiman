@@ -8,11 +8,11 @@ use crate::{
         binop_to_str,
         sched_hir::{
             cfg::{BasicBlock, Cfg},
-            HirBody, HirOp, OpType,
+            HirBody, HirOp, HirTerm, OpType,
         },
         uop_to_str,
     },
-    parse::ast::{DataType, SchedTerm, Uop},
+    parse::ast::{DataType, Uop},
 };
 
 /// Transforms binary and unary operations into external FFI calls.
@@ -56,7 +56,7 @@ fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType
         } => {
             assert_eq!(args.len(), 1);
             assert_eq!(dests.len(), 1);
-            let src = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
+            let src = enum_cast!(HirTerm::Var { name, .. }, name, &args[0]);
             *instr = HirBody::RefLoad {
                 info: *info,
                 dest: dests[0].0.clone(),

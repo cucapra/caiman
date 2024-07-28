@@ -14,10 +14,11 @@ use caiman::explication::Hole;
 use caiman::ir;
 
 use crate::lower::sched_hir::cfg::FINAL_BLOCK_ID;
+use crate::lower::sched_hir::HirTerm;
 use crate::lower::sched_hir::{
     cfg::START_BLOCK_ID, HirBody, HirFuncCall, HirInstr, Terminator, TripleTag,
 };
-use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SpecType, Tag};
+use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SpecType, Tag};
 
 use super::{Fact, Forwards, RET_VAR};
 
@@ -221,7 +222,7 @@ impl TagAnalysis {
                 lhs, lhs_tag, rhs, ..
             } => {
                 let mut info = lhs_tag.clone();
-                if let SchedTerm::Var { name, .. } = rhs {
+                if let HirTerm::Var { name, .. } = rhs {
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         info.value = rhs_typ.value;
                     }
@@ -237,7 +238,7 @@ impl TagAnalysis {
                 let mut info = lhs_tag.clone();
                 if rhs.is_none() {
                     info.value = none_tag(SpecType::Value, Flow::Dead);
-                } else if let Some(SchedTerm::Var { name, .. }) = rhs {
+                } else if let Some(HirTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         info.value = rhs_typ.value;
@@ -257,7 +258,7 @@ impl TagAnalysis {
             } => {
                 let t = self.tags.get_mut(lhs).unwrap();
                 t.set_specified_info(lhs_tags.clone());
-                if let SchedTerm::Var { name, .. } = rhs {
+                if let HirTerm::Var { name, .. } = rhs {
                     // TODO: check this
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         let t = self.tags.get_mut(lhs).unwrap();
@@ -293,7 +294,7 @@ impl TagAnalysis {
                     override_none_usable(tag, &self.data_types[dest], self.flags.get(dest)),
                 );
             }
-            HirBody::Hole(_) => todo!(),
+            HirBody::Hole(_) => {}
             HirBody::Op { dests, .. } => {
                 for (dest, dest_tag) in dests {
                     self.tags.insert(

@@ -40,9 +40,9 @@ use crate::{
     error::Info,
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
-        Hir, HirBody, HirInstr, HirOp, Terminator, TripleTag, UseType,
+        Hir, HirBody, HirInstr, HirOp, HirTerm, Terminator, TripleTag, UseType,
     },
-    parse::ast::{DataType, SchedTerm, Uop},
+    parse::ast::{DataType, Uop},
 };
 
 use super::{analyze, Fact, Forwards, InOutFacts, LiveVars};
@@ -158,10 +158,10 @@ fn block_capture_vars(
                     HirBody::VarDecl {
                         lhs: name.to_string(),
                         lhs_tag: TripleTag::new_unspecified(),
-                        rhs: Some(SchedTerm::Var {
+                        rhs: Some(HirTerm::Var {
                             name: format!("_cap_{name}"),
                             info: last_in_annotation_info,
-                            tag: None,
+                            tag: TripleTag::new_unspecified(),
                         }),
                         info: last_in_annotation_info,
                     },
@@ -176,10 +176,10 @@ fn block_capture_vars(
                 bb.stmts.push(HirBody::ConstDecl {
                     lhs: format!("_cap_{name}"),
                     lhs_tag: TripleTag::new_unspecified(),
-                    rhs: SchedTerm::Var {
+                    rhs: HirTerm::Var {
                         name: name.clone(),
                         info,
-                        tag: None,
+                        tag: TripleTag::new_unspecified(),
                     },
                     info,
                 });
@@ -230,7 +230,7 @@ impl Fact for RefPropagation {
         {
             assert!(args.len() == 1);
             assert_eq!(dests.len(), 1);
-            let src = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
+            let src = enum_cast!(HirTerm::Var { name, .. }, name, &args[0]);
             self.aliases.insert(dests[0].0.clone(), src.clone());
         }
     }
@@ -401,7 +401,7 @@ fn deref_transform_instr(
             ..
         }) => {
             for arg in args {
-                if let SchedTerm::Var { name, .. } = arg {
+                if let HirTerm::Var { name, .. } = arg {
                     if variables.contains(name) {
                         *name = format!("_{name}_ref");
                     }

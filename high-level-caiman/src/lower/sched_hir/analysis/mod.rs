@@ -1,4 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
+    rc::Rc,
+};
 
 mod continuations;
 mod dominators;
@@ -9,10 +12,12 @@ mod refs;
 mod ssa;
 mod tags;
 
+use crate::parse::ast::DataType;
+
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
     hir::HirInstr,
-    HirBody,
+    HirBody, Terminator,
 };
 
 pub use continuations::{compute_continuations, Succs};
@@ -336,6 +341,133 @@ impl Direction for Forwards {
     ) -> &'a HashMap<usize, T> {
         out_facts
     }
+}
+
+/// Computes reaching definitions and uses the information to fill the uses
+/// for holes
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ReachingDefs {
+    available_set: BTreeSet<String>,
+    kill_set: BTreeSet<String>,
+    data_types: Rc<HashMap<String, DataType>>,
+}
+
+impl ReachingDefs {
+    pub fn top<'a>(
+        inputs: impl Iterator<Item = &'a String>,
+        dt: &HashMap<String, DataType>,
+    ) -> Self {
+        Self {
+            available_set: inputs.cloned().collect(),
+            kill_set: BTreeSet::new(),
+            data_types: Rc::new(dt.clone()),
+        }
+    }
+
+    pub fn reaching_defs(&self) -> impl Iterator<Item = &String> {
+        self.available_set.difference(&self.kill_set)
+    }
+
+    fn set_hole_uses(&self, stmt: &mut HirInstr<'_>) {
+        match stmt {
+            HirInstr::Stmt(
+                HirBody::ConstDecl { rhs, .. }
+                | HirBody::VarDecl { rhs: Some(rhs), .. }
+                | HirBody::RefStore { rhs, .. },
+            ) => rhs.fill_uses(|| self.reaching_defs().cloned().collect()),
+            HirInstr::Stmt(HirBody::EncodeDo { func, .. })
+            | HirInstr::Tail(Terminator::Call(_, func)) => {
+                if let Some(x) = func.extra_uses.as_mut() {
+                    x.process(|()| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Stmt(HirBody::Op { args, .. }) => {
+                for arg in args {
+                    arg.fill_uses(|| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Pass out of order"),
+            _ => {}
+        }
+    }
+}
+
+impl Fact for ReachingDefs {
+    fn meet(mut self, other: &Self) -> Self {
+        self.kill_set.extend(other.kill_set.iter().cloned());
+        for item in &self.available_set {
+            if !other.available_set.contains(item) {
+                self.kill_set.insert(item.clone());
+            }
+        }
+        for item in &other.available_set {
+            if !self.available_set.contains(item) {
+                self.kill_set.insert(item.clone());
+            }
+        }
+        self.available_set
+            .extend(other.available_set.iter().cloned());
+        self
+    }
+
+    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize) {
+        // TODO: consumption
+        self.set_hole_uses(&mut stmt);
+        match stmt {
+            HirInstr::Stmt(
+                HirBody::ConstDecl { lhs: dest, .. }
+                | HirBody::Phi { dest, .. }
+                | HirBody::RefLoad { dest, .. }
+                | HirBody::Submit { dest, .. }
+                | HirBody::VarDecl { lhs: dest, .. }
+                | HirBody::DeviceCopy { dest, .. }
+                
+            ) => {
+                self.available_set.insert(dest.clone());
+            }
+            HirInstr::Stmt(HirBody::Sync { dests, .. }) => self
+                .available_set
+                .extend(dests.processed().iter().map(|(x, _)| x.clone())),
+            HirInstr::Stmt(HirBody::EncodeDo { dests, .. } | HirBody::Op { dests, .. }) | HirInstr::Tail(Terminator::Return { dests, ..}) => {
+                self.available_set
+                    .extend(dests.iter().map(|(x, _)| x.clone()));
+            }
+            HirInstr::Stmt(HirBody::BeginEncoding {
+                encoder,
+                device_vars,
+                ..
+            }) => {
+                self.available_set.insert(encoder.0.clone());
+                self.available_set
+                    .extend(device_vars.iter().map(|(x, _)| x.clone()));
+            }
+            HirInstr::Stmt(
+                HirBody::Hole(_)
+                | HirBody::InAnnotation(..)
+                | HirBody::OutAnnotation(..)
+                | HirBody::RefStore { .. },
+            )
+            | HirInstr::Tail(
+                Terminator::Next(..)
+                | Terminator::None(_)
+                | Terminator::FinalReturn(..)
+                // TODO: I think we need to make the slect dests reachable at the continuation
+                | Terminator::Select { .. }
+
+            ) => {}
+            HirInstr::Tail(Terminator::Call(..) | Terminator::Yield(..)) => {
+                for avail in &self.available_set {
+                    // we can't capture references, so they are no longer reachable over a call
+                    if matches!(self.data_types.get(avail), Some(DataType::Ref(_))) {
+                        self.kill_set.insert(avail.clone());
+                    }
+                }
+            }
+            HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Passes out of order"),
+        }
+    }
+
+    type Dir = Forwards;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

@@ -7,7 +7,7 @@ use std::{
     rc::Rc,
 };
 
-use analysis::{bft_transform, deduce_tmln_quots};
+use analysis::{bft_transform, deduce_tmln_quots, ReachingDefs};
 pub use hir::*;
 
 use crate::{
@@ -599,6 +599,10 @@ impl Funclets {
             ctx,
             // the unexpanded output types
             &ctx.scheds[&f.name].unwrap_sched().dtype_sig.output,
+        );
+        bft_transform(
+            &mut cfg,
+            &ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types),
         );
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);

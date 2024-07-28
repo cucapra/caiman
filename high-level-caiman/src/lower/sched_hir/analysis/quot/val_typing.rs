@@ -84,13 +84,11 @@ use crate::{
     lower::{
         sched_hir::{
             cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
-            HirBody, HirFuncCall, HirOp, OpType, Terminator, TripleTag,
+            HirBody, HirFuncCall, HirOp, HirTerm, OpType, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{
-        Binop, DataType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag,
-    },
+    parse::ast::{Binop, DataType, Quotient, QuotientReference, SchedLiteral, SpecType, Tag},
     typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
@@ -241,41 +239,41 @@ fn add_type_annot(
 fn unify_decl(
     lhs: &str,
     lhs_tag: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     decl_info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     match rhs {
-        SchedTerm::Lit {
+        HirTerm::Lit {
             lit: SchedLiteral::Int(i),
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
+            env = add_type_annot(lhs, tag, *info, env)?;
             env = add_constraint(lhs, &ValQuot::Int(i.clone()), *info, env)?;
         }
-        SchedTerm::Lit {
+        HirTerm::Lit {
             lit: SchedLiteral::Bool(b),
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
+            env = add_type_annot(lhs, tag, *info, env)?;
             env = add_constraint(lhs, &ValQuot::Bool(*b), *info, env)?;
         }
-        SchedTerm::Lit {
+        HirTerm::Lit {
             lit: SchedLiteral::Float(f),
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
+            env = add_type_annot(lhs, tag, *info, env)?;
             env = add_constraint(lhs, &ValQuot::Float(f.clone()), *info, env)?;
         }
-        SchedTerm::Var { name, info, tag } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
+        HirTerm::Var { name, info, tag } => {
+            env = add_type_annot(lhs, tag, *info, env)?;
             env = add_var_constraint(lhs, name, *info, env)?;
         }
-        SchedTerm::Hole(_) => {}
-        x => todo!("{x:#?}"),
+        HirTerm::Hole { .. } => todo!(),
+        HirTerm::Lit { .. } => unimplemented!(),
     }
     add_type_annot(lhs, lhs_tag, decl_info, env)
 }
@@ -334,7 +332,7 @@ fn hir_op_to_binop(op: &HirOp) -> Hole<Binop> {
 fn unify_op(
     dests: &[(String, TripleTag)],
     op: &HirOp,
-    args: &[SchedTerm],
+    args: &[HirTerm],
     info: Info,
     ctx: &Context,
     mut env: NodeEnv,
@@ -345,14 +343,14 @@ fn unify_op(
     let mut arg_names = vec![];
     for arg in args {
         match arg {
-            SchedTerm::Var { name, tag, info } => {
-                env = add_type_annot(name, &TripleTag::from_opt(tag), *info, env)?;
+            HirTerm::Var { name, tag, info } => {
+                env = add_type_annot(name, tag, *info, env)?;
                 arg_names.push(Hole::Filled(name.clone()));
             }
             // if any arg is a hole, then we can't know what instantiation of the
             // operator to call, so just quit early.
-            SchedTerm::Hole(_) => arg_names.push(Hole::Empty),
-            _ => unreachable!(),
+            HirTerm::Hole { .. } => arg_names.push(Hole::Empty),
+            HirTerm::Lit { .. } => unreachable!(),
         }
     }
     match op {
@@ -652,10 +650,10 @@ fn unify_nodes(
                 } => unify_decl(
                     dest,
                     dest_tag,
-                    &SchedTerm::Var {
+                    &HirTerm::Var {
                         info: *info,
                         name: src.clone(),
-                        tag: None,
+                        tag: TripleTag::new_unspecified(),
                     },
                     *info,
                     env,
@@ -664,7 +662,7 @@ fn unify_nodes(
                 HirBody::Sync { dests, srcs, info, ..} => {
                     assert_eq!(dests.processed().len() + 1, srcs.processed().len());
                     for ((dest, dest_tag), src) in dests.processed().iter().zip(srcs.processed().iter().skip(1)) {
-                        env = unify_decl(dest, dest_tag, &SchedTerm::Var { name: src.clone(), info: *info, tag: None }, fn_info, env)?;
+                        env = unify_decl(dest, dest_tag, &HirTerm::Var { name: src.clone(), info: *info, tag: TripleTag::new_unspecified() }, fn_info, env)?;
                     }
                     env
                 }

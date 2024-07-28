@@ -2,7 +2,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{hole_or_var, Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
+    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{self, hole_or_var, Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
 };
 use caiman::assembly::ast as asm;
 use caiman::explication::Hole;
@@ -118,8 +118,7 @@ impl TripleTag {
         Self::assert_tag_no_hole(&self.timeline);
     }
 
-    /// Converts a triple tag into an assembly tag vector, using
-    /// the given data type to determine the default flow for the spatial tag.
+    /// Converts a triple tag into an assembly tag vector.
     pub fn tags_vec(&self) -> Vec<asm::Tag> {
         self.assert_no_holes();
         vec![
@@ -153,7 +152,7 @@ pub enum DataMovement {
 /// # Parameters
 /// - `T`: The initial type
 /// - `U`: The type after the analysis pass
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FillIn<T: std::fmt::Debug, U: std::fmt::Debug> {
     Initial(T),
     Processed(U),
@@ -212,7 +211,7 @@ pub enum HirBody {
         info: Info,
         lhs_tags: TripleTag,
         lhs: Name,
-        rhs: SchedTerm,
+        rhs: HirTerm,
     },
     /// Load from a reference into a new variable
     RefLoad {
@@ -275,14 +274,14 @@ pub enum HirBody {
         info: Info,
         lhs: Name,
         lhs_tag: TripleTag,
-        rhs: SchedTerm,
+        rhs: HirTerm,
     },
     /// Declaration of a mutable variable (reference)
     VarDecl {
         info: Info,
         lhs: Name,
         lhs_tag: TripleTag,
-        rhs: Option<SchedTerm>,
+        rhs: Option<HirTerm>,
     },
     Hole(Info),
     /// External operation (performs a const decl for the destinations)
@@ -290,7 +289,7 @@ pub enum HirBody {
         info: Info,
         dests: Vec<(Name, TripleTag)>,
         op: HirOp,
-        args: Vec<SchedTerm>,
+        args: Vec<HirTerm>,
     },
     InAnnotation(Info, Vec<(String, TripleTag)>),
     OutAnnotation(Info, Vec<(String, TripleTag)>),
@@ -303,6 +302,70 @@ pub enum HirBody {
         /// original name of the variable
         original: Name,
     },
+}
+
+/// An atomic term in the HIR that can be used as an argument for
+/// other HIR instructions
+#[derive(Debug)]
+pub enum HirTerm {
+    Lit {
+        info: Info,
+        lit: ast::SchedLiteral,
+        tag: TripleTag,
+    },
+    Var {
+        info: Info,
+        name: Name,
+        tag: TripleTag,
+    },
+    Hole {
+        #[allow(unused)]
+        info: Info, 
+        uses: FillIn<(), Vec<String>>
+    },
+}
+
+impl HirTerm {
+    /// Gets hole containing the variable name if this term is a hole or variable,
+    /// otherwise returns `None` if this term is a literal
+    pub const fn hole_or_var(&self) -> Option<Hole<&String>> {
+        match self {
+            Self::Hole { ..} => Some(Hole::Empty),
+            Self::Var { name, ..} => Some(Hole::Filled(name)),
+            Self::Lit { ..} => None,
+        }
+    }
+
+    /// Gets the tags of this term, or `None` if it's a hole
+    pub const fn get_tags(&self) -> Option<&TripleTag> {
+        match self {
+            Self::Lit { tag, ..} | Self::Var { tag, ..}=> Some(tag),
+            Self::Hole {..} => None,
+        }
+    }
+
+    /// If this term is a hole, fills the uses of the hole by the result of calling
+    /// the given function
+    pub fn fill_uses(&mut self, f: impl Fn() -> Vec<String>) {
+        if let Self::Hole { uses, ..} = self {
+            uses.process(|()| f());
+        }
+    }
+}
+
+impl TryFrom<SchedTerm> for HirTerm {
+    type Error = ();
+
+    fn try_from(value: SchedTerm) -> Result<Self, Self::Error> {
+        match value {
+            SchedTerm::Lit {info, lit, tag} => Ok(Self::Lit {
+                info, lit, tag: TripleTag::from_opt(&tag)
+            }),
+            SchedTerm::Var { info, name, tag} => Ok(Self::Var { info, name, tag: TripleTag::from_opt(&tag)}),
+            SchedTerm::Hole(info) => Ok(Self::Hole { info, uses: FillIn::Initial(())}),
+            _ => Err(())
+        }
+    }
 }
 
 /// The type of an FFI external operation. 
@@ -350,6 +413,9 @@ pub struct HirFuncCall {
     /// The number of value template arguments that occur in `args` before the 
     /// normal arguments
     pub num_dims: usize,
+    /// If any arg is a hole, these are the extra uses of the function call due to
+    /// the hole
+    pub extra_uses: Option<FillIn<(), Vec<String>>>,
 }
 
 impl HirFuncCall {
@@ -375,7 +441,7 @@ impl HirFuncCall {
                 None => (),
 
             }
-            let args = starting_args.into_iter().chain(value.args
+            let args: Vec<_> = starting_args.into_iter().chain(value.args
                 .into_iter()
                 .map(|a| {
                     hole_or_var(&a).unwrap().cloned()
@@ -383,6 +449,7 @@ impl HirFuncCall {
                 .collect();
             return Self {
                 info: value.info,
+                extra_uses: if args.iter().any(Hole::is_empty) { Some(FillIn::Initial(()))} else { None },
                 target: name,
                 args,
                 tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
@@ -526,6 +593,9 @@ impl Hir for Terminator {
                         uses.insert(arg.clone());
                     }
                 }
+                if let Some(extras) = &call.extra_uses {
+                    uses.extend(extras.processed().iter().cloned());
+                }
             }
             Self::Select { guard, .. } => {
                 if let Hole::Filled(guard) = guard {
@@ -550,6 +620,11 @@ impl Hir for Terminator {
                 for arg in &mut call.args {
                     if let Hole::Filled(arg) = arg {
                         *arg = f(arg, UseType::Read);
+                    }
+                }
+                if let Some(extras) = &mut call.extra_uses {
+                    for u in extras.processed_mut() {
+                        *u = f(u, UseType::Read);
                     }
                 }
             }
@@ -638,7 +713,7 @@ impl HirBody {
                         info,
                         lhs_tags: TripleTag::from_opt(&tag),
                         lhs: name,
-                        rhs,
+                        rhs: TryFrom::try_from(rhs).unwrap(),
                     }
                 } else {
                     panic!("Invalid assignment")
@@ -661,7 +736,7 @@ impl HirBody {
                     info,
                     lhs: lhs[0].0.clone(),
                     lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                    rhs,
+                    rhs: rhs.map(|x| HirTerm::try_from(x).unwrap()),
                 }
             }
             SchedStmt::Encode { info, stmt, encoder, cmd, .. } => {
@@ -718,7 +793,7 @@ impl HirBody {
                             info,
                             dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                             op: HirOp::FFI(Hole::Filled(target.clone()), OpType::External),
-                            args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
+                            args: call.args.iter().map(|x| HirTerm::try_from(enum_cast!(SchedExpr::Term, x).clone()).unwrap()).collect(),
                         }
                     },
                     SchedTerm::TimelineOperation { info, op: TimelineOperation::Submit, arg, tag } => 
@@ -745,7 +820,7 @@ impl HirBody {
                         info,
                         lhs: lhs[0].0.clone(),
                         lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                        rhs,
+                        rhs: HirTerm::try_from(rhs).unwrap(),
                     }
                 }
             },
@@ -757,9 +832,9 @@ impl HirBody {
                     info,
                     lhs: lhs[0].0.clone(),
                     lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                    rhs: SchedTerm::Var {
+                    rhs: HirTerm::Var {
                         name: format!("{op_lhs_name}::{rhs_name}"),
-                        tag: None,
+                        tag: TripleTag::new_unspecified(),
                         info,
                     }
                 }
@@ -777,7 +852,7 @@ impl HirBody {
                     info,
                     dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                     op: HirOp::Binary(op),
-                    args: vec![lhs_term.clone(), rhs_term.clone()],
+                    args: vec![HirTerm::try_from(lhs_term.clone()).unwrap(), HirTerm::try_from(rhs_term.clone()).unwrap()],
                 }
             },
             SchedExpr::Uop { 
@@ -789,7 +864,7 @@ impl HirBody {
                     info,
                     dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                     op: HirOp::Unary(op),
-                    args: vec![term],
+                    args: vec![HirTerm::try_from(term).unwrap()],
                 }
             },
             SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
@@ -843,8 +918,12 @@ impl Hir for HirBody {
                         res.insert(arg.clone());
                     }
                 }
+                // semantics of encode-do is to store into references
                 for (name, _) in dests {
                     res.insert(name.clone());
+                }
+                if let Some(extras) = &func.extra_uses {
+                    res.extend(extras.processed().iter().cloned());
                 }
                 res.insert(encoder.clone());
             }
@@ -994,6 +1073,11 @@ impl Hir for HirBody {
                 for (dest, _) in dests {
                     *dest = f(dest, UseType::Write);
                 }
+                if let Some(extras) = &mut func.extra_uses {
+                    for u in extras.processed_mut() {
+                        *u = f(u, UseType::Read);
+                    }
+                }
                 *encoder = f(encoder, UseType::Read);
             }
             Self::Sync { srcs, ..} => {
@@ -1021,24 +1105,28 @@ pub fn stmts_to_hir(stmts: Vec<SchedStmt>, ) -> Vec<HirBody> {
     stmts.into_iter().map(HirBody::new).collect()
 }
 
-/// Get the uses in a `SchedTerm`
-fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
+/// Get the uses in a `HirTerm`
+fn term_get_uses(t: &HirTerm, res: &mut BTreeSet<String>) {
     match t {
-        SchedTerm::Var { name, .. } => {
+        HirTerm::Var { name, .. } => {
             res.insert(name.clone());
         }
-        SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
-        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } 
-        | SchedTerm::EncodeBegin { .. } => panic!("Unexpected term"),
+        HirTerm::Hole {uses, ..} => {
+            res.extend(uses.processed().iter().cloned());
+        }
+        HirTerm::Lit { ..} => {}
     }
 }
 
-/// Renames all uses in a `SchedTerm` using the given function
-fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
+/// Renames all uses in a `HirTerm` using the given function
+fn term_rename_uses(t: &mut HirTerm, f: &mut dyn FnMut(&str) -> String) {
     match t {
-        SchedTerm::Var { name, .. } => *name = f(name),
-        SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
-        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } |
-        SchedTerm::EncodeBegin{ ..} => panic!("Unexpected term"),
+        HirTerm::Var { name, .. } => *name = f(name),
+        HirTerm::Lit { .. } => (),
+        HirTerm::Hole { uses, ..} => {
+            for u in uses.processed_mut() {
+                *u = f(u);
+            }
+        }
     }
 }

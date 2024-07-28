@@ -11,11 +11,12 @@ use crate::{
     enum_cast,
     error::{type_error, LocalError},
     lower::IN_STEM,
-    parse::ast::{self, DataType, Flow, SchedTerm, SchedulingFunc, SpecType, Tag},
+    parse::ast::{self, DataType, Flow, SchedulingFunc, SpecType, Tag},
     typing::{Context, LOCAL_TEMP_FLAGS},
 };
 use caiman::ir;
 
+use super::sched_hir::HirTerm;
 use super::{
     sched_hir::{
         DataMovement, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag,
@@ -35,23 +36,19 @@ fn temp_var_name(temp_id: usize) -> String {
 
 /// Constructs a copy from `src` to `dest` using either a local copy or a local
 /// do builtin, depending on whether `src` is atomic in the value spec.
-fn build_copy_cmd(
-    dest: &str,
-    src: &SchedTerm,
-    f: &Funclet,
-    backup_tag: Option<&TripleTag>,
-) -> asm::Command {
+fn build_copy_cmd(dest: &str, src: &HirTerm, f: &Funclet, backup_tag: &TripleTag) -> asm::Command {
+    // returns a remote id if the value remote id has been specified, else `None`
+    let get_tag_opt = |t: &TripleTag| {
+        if t.value.quot_var.spec_var.is_some() || t.value.quot.is_some() {
+            Some(tag_to_remote_id(&t.value))
+        } else {
+            None
+        }
+    };
     let val_quot = src
         .get_tags()
-        .map(|t| tag_to_remote_id(&TripleTag::from_tags(t).value))
-        .or_else(|| backup_tag.map(|t| tag_to_remote_id(&t.value)))
-        .or_else(|| {
-            if let SchedTerm::Var { name, .. } = src {
-                f.get_out_tag(name).map(|t| tag_to_remote_id(&t.value))
-            } else {
-                None
-            }
-        });
+        .and_then(get_tag_opt)
+        .or_else(|| get_tag_opt(backup_tag));
     if let Some(quot) = &val_quot {
         if f.is_literal_value(quot) {
             return asm::Command::Node(asm::NamedNode {
@@ -64,12 +61,12 @@ fn build_copy_cmd(
             });
         }
     }
-    if let SchedTerm::Lit { info, lit, .. } = src {
+    if let HirTerm::Lit { info, lit, .. } = src {
         panic!(
             "{info}: Missing or mismatched tags for literal value {lit:#?}\nQuotient: {val_quot:#?}",
         );
     }
-    let src = enum_cast!(SchedTerm::Var { name, .. }, name, src);
+    let src = enum_cast!(HirTerm::Var { name, .. }, name, src);
     if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
         asm::Command::Node(asm::NamedNode {
             name: None,
@@ -100,7 +97,7 @@ fn build_copy_cmd(
 fn lower_flat_decl(
     dest: &str,
     dest_tag: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -113,7 +110,7 @@ fn lower_flat_decl(
             storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
         },
     });
-    let mv = build_copy_cmd(&temp_node_name, rhs, f, Some(dest_tag));
+    let mv = build_copy_cmd(&temp_node_name, rhs, f, dest_tag);
     let rd_ref = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
@@ -131,7 +128,7 @@ fn lower_flat_decl(
 fn lower_var_decl(
     dest: &str,
     dest_tag: &TripleTag,
-    rhs: &Option<SchedTerm>,
+    rhs: &Option<HirTerm>,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -144,7 +141,7 @@ fn lower_var_decl(
         },
     }))];
     if let Some(rhs) = rhs {
-        result.push(Hole::Filled(build_copy_cmd(dest, rhs, f, Some(dest_tag))));
+        result.push(Hole::Filled(build_copy_cmd(dest, rhs, f, dest_tag)));
     }
     (result, temp_id)
 }
@@ -153,12 +150,12 @@ fn lower_var_decl(
 fn lower_store(
     lhs: &str,
     lhs_tags: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
     (
-        vec![Hole::Filled(build_copy_cmd(lhs, rhs, f, Some(lhs_tags)))],
+        vec![Hole::Filled(build_copy_cmd(lhs, rhs, f, lhs_tags))],
         temp_id,
     )
 }
@@ -167,7 +164,7 @@ fn lower_store(
 fn lower_op(
     dests: &[(String, TripleTag)],
     op: &Hole<String>,
-    args: &[SchedTerm],
+    args: &[HirTerm],
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -192,7 +189,7 @@ fn lower_op(
         .collect();
     let called_vars = dests
         .iter()
-        .map(|(_, t)| t.value.quot_var.spec_var.as_ref().unwrap().clone())
+        .filter_map(|(_, t)| t.value.quot_var.spec_var.clone())
         .collect::<Vec<_>>();
     let mut inputs = vec![];
     for arg in args {
@@ -204,7 +201,12 @@ fn lower_op(
         node: asm::Node::LocalDoExternal {
             operation: Hole::Filled(asm::RemoteNodeId {
                 funclet: SpecType::Value.get_meta_id(),
-                node: Some(Hole::Filled(asm::NodeId(tuple_id(&called_vars)))),
+                node: Some(if called_vars.len() == dests.len() {
+                    Hole::Filled(asm::NodeId(tuple_id(&called_vars)))
+                } else {
+                    // at least one of the vars were none
+                    Hole::Empty
+                }),
             }),
             inputs: Hole::Filled(inputs),
             outputs: Hole::Filled(
@@ -502,7 +504,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         HirBody::Op {
             dests, op, args, ..
         } => lower_op(dests, &op.lower(), args, temp_id, f),
-        x @ HirBody::Hole(_) => todo!("{x:?}"),
+        HirBody::Hole(_) => (vec![Hole::Empty], temp_id),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
         HirBody::BeginEncoding {
             device,

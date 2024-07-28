@@ -24,11 +24,11 @@ use crate::{
         sched_hir::{
             analysis::{InOutFacts, LiveVars},
             cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
-            Hir, HirBody, HirFuncCall, Terminator, TripleTag,
+            Hir, HirBody, HirFuncCall, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{DataType, Quotient, SchedTerm, SpecType},
+    parse::ast::{DataType, Quotient, SpecType},
     typing::{is_timeline_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
@@ -1055,12 +1055,12 @@ fn add_type_annot(
 fn unify_decl(
     lhs: &str,
     lhs_tag: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     decl_info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    if let SchedTerm::Var { name, info, tag } = rhs {
-        env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
+    if let HirTerm::Var { name, info, tag } = rhs {
+        env = add_type_annot(lhs, tag, *info, env)?;
         env = add_var_constraint(lhs, name, *info, env)?;
     }
     add_type_annot(lhs, lhs_tag, decl_info, env)

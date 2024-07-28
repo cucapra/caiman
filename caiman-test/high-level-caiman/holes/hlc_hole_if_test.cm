@@ -1,0 +1,17 @@
+
+val min_plus(a: i64, b: i64, c: i64) -> i64 {
+    returns a + c if a < b else b + c
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn min(a: i64, b: i64, c: i64) -> i64 impls min_plus, time, space {
+    if a < b {
+        ? + ?
+    } else {
+        ? + ?
+    }
+}
+
+pipeline main { min }
