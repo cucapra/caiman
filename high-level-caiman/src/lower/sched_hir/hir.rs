@@ -6,6 +6,7 @@ use crate::{
 };
 use caiman::assembly::ast as asm;
 use caiman::explication::Hole;
+pub use crate::lower::op_to_str;
 
 use crate::{
     error::Info,
@@ -152,7 +153,7 @@ pub enum DataMovement {
 /// # Parameters
 /// - `T`: The initial type
 /// - `U`: The type after the analysis pass
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FillIn<T: std::fmt::Debug, U: std::fmt::Debug> {
     Initial(T),
     Processed(U),
@@ -173,7 +174,7 @@ impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
         }
     }
 
-    pub fn process(&mut self, f: impl Fn(&mut T) -> U) {
+    pub fn process(&mut self, f: impl FnOnce(&mut T) -> U) {
         match self {
             Self::Initial(t) => *self = Self::Processed(f(t)),
             Self::Processed(_) => (),
@@ -368,27 +369,17 @@ impl TryFrom<SchedTerm> for HirTerm {
     }
 }
 
-/// The type of an FFI external operation. 
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
-pub enum OpType {
-    /// An external operation for a built-in binary operation
-    Binary,
-    /// An external operation for a built-in unary operation
-    Unary,
-    /// An external operation for a user-supplied external function
-    External
-}
-
 /// A high level IR external operation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum HirOp {
-    /// an unlowered binary operation
-    Binary(Binop),
-    /// an unlowered unary operation
-    Unary(Uop),
-    /// a lowered operation into an external call
-    FFI(Hole<Name>, OpType),
+    /// an unlowered binary operation or a pair of a binop name and vector of 
+    /// argument type names
+    Binary(FillIn<Binop, (Name, Vec<Option<String>>)>),
+    /// an unlowered unary operation or a pair of a uop name and argument type name
+    Unary(FillIn<Uop, (Name, Option<String>)>),
+    /// an external call
+    External(Name)
 }
 
 impl HirOp {
@@ -396,8 +387,23 @@ impl HirOp {
     /// Panics if the operation is not lowered.
     pub fn lower(&self) -> Hole<Name> {
         match self {
-            Self::Binary(_) | Self::Unary(_) => panic!("Cannot lower unlowered operation"),
-            Self::FFI(name, _) => name.clone(),
+            Self::Binary(name) => {
+                let (basename, arg_types) = name.processed();
+                if arg_types.iter().any(std::option::Option::is_none) {
+                    // some arg type is unknown
+                    Hole::Empty
+                } 
+                else {
+                    Hole::Filled(op_to_str(basename, arg_types.iter().map(|x| x.as_ref().unwrap())))
+                }
+            }
+            Self::Unary(name) => {
+                let (basename, arg_type) = name.processed();
+                arg_type.as_ref().map_or(Hole::Empty, |arg_type| Hole::Filled(op_to_str(basename, std::iter::once(arg_type))))
+            },
+            Self::External(name) => Hole::Filled(name.clone()),
+            
+            
         }
     }
 }
@@ -792,7 +798,7 @@ impl HirBody {
                         Self::Op {
                             info,
                             dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                            op: HirOp::FFI(Hole::Filled(target.clone()), OpType::External),
+                            op: HirOp::External(target.clone()),
                             args: call.args.iter().map(|x| HirTerm::try_from(enum_cast!(SchedExpr::Term, x).clone()).unwrap()).collect(),
                         }
                     },
@@ -851,7 +857,7 @@ impl HirBody {
                 Self::Op {
                     info,
                     dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                    op: HirOp::Binary(op),
+                    op: HirOp::Binary(FillIn::Initial(op)),
                     args: vec![HirTerm::try_from(lhs_term.clone()).unwrap(), HirTerm::try_from(rhs_term.clone()).unwrap()],
                 }
             },
@@ -863,7 +869,7 @@ impl HirBody {
                 Self::Op {
                     info,
                     dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                    op: HirOp::Unary(op),
+                    op: HirOp::Unary(FillIn::Initial(op)),
                     args: vec![HirTerm::try_from(term).unwrap()],
                 }
             },

@@ -1,4 +1,3 @@
-
 val bar(a: i64, t: i64) -> i64 {
     b :- foo(a)
     p :- foo(t)

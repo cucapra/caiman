@@ -84,7 +84,7 @@ use crate::{
     lower::{
         sched_hir::{
             cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
-            HirBody, HirFuncCall, HirOp, HirTerm, OpType, Terminator, TripleTag,
+            FillIn, HirBody, HirFuncCall, HirOp, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
     },
@@ -281,40 +281,34 @@ fn unify_decl(
 /// Converts an `HirOp` to a `Binop`. If the `HirOp` is a hole, returns a hole
 /// # Panics
 /// If the `HirOp` is not a binary operator
-fn hir_op_to_binop(op: &HirOp) -> Hole<Binop> {
+fn hir_op_to_binop(op: &HirOp) -> Binop {
     match op {
-        HirOp::Binary(binop) => Hole::Filled(*binop),
-        HirOp::FFI(name, OpType::Binary) => {
-            if let Hole::Filled(name) = name {
-                let mut parts: Vec<_> = name.split('_').collect();
-                Hole::Filled(match parts.swap_remove(1) {
-                    "add" => Binop::Add,
-                    "sub" => Binop::Sub,
-                    "mul" => Binop::Mul,
-                    "div" => Binop::Div,
-                    "mod" => Binop::Mod,
-                    "and" => Binop::And,
-                    "or" => Binop::Or,
-                    "xor" => Binop::Xor,
-                    "shl" => Binop::Shl,
-                    "shr" => Binop::Shr,
-                    "eq" => Binop::Eq,
-                    "neq" => Binop::Neq,
-                    "lt" => Binop::Lt,
-                    "leq" => Binop::Leq,
-                    "gt" => Binop::Gt,
-                    "geq" => Binop::Geq,
-                    "ashr" => Binop::AShr,
-                    "land" => Binop::Land,
-                    "lor" => Binop::Lor,
-                    x => panic!("Unrecognized FFI binop: {x}"),
-                })
-            } else {
-                Hole::Empty
-            }
-        }
-        HirOp::Unary(_) => panic!("Not a binary operator"),
-        HirOp::FFI(_, b) => panic!("Unexpected op type: {b:?}"),
+        HirOp::Binary(binop) => match binop {
+            FillIn::Initial(bop) => *bop,
+            FillIn::Processed((basename, _)) => match basename.as_str() {
+                "add" => Binop::Add,
+                "sub" => Binop::Sub,
+                "mul" => Binop::Mul,
+                "div" => Binop::Div,
+                "mod" => Binop::Mod,
+                "and" => Binop::And,
+                "or" => Binop::Or,
+                "xor" => Binop::Xor,
+                "shl" => Binop::Shl,
+                "shr" => Binop::Shr,
+                "eq" => Binop::Eq,
+                "neq" => Binop::Neq,
+                "lt" => Binop::Lt,
+                "leq" => Binop::Leq,
+                "gt" => Binop::Gt,
+                "geq" => Binop::Geq,
+                "ashr" => Binop::AShr,
+                "land" => Binop::Land,
+                "lor" => Binop::Lor,
+                x => panic!("Unrecognized FFI binop: {x}"),
+            },
+        },
+        _ => panic!("Not a binary operator"),
     }
 }
 
@@ -354,65 +348,62 @@ fn unify_op(
         }
     }
     match op {
-        HirOp::FFI(_, OpType::Binary) => {
+        HirOp::Binary(_) => {
             assert_eq!(dests.len(), 1);
-            if let Hole::Filled(op) = hir_op_to_binop(op) {
-                env = add_constraint(
-                    &dests[0].0,
-                    &ValQuot::Bop(
-                        op,
-                        arg_names[0]
-                            .as_ref()
-                            .opt()
-                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
-                        arg_names[1]
-                            .as_ref()
-                            .opt()
-                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
-                    ),
-                    info,
-                    env,
-                )?;
-            }
+            let op = hir_op_to_binop(op);
+            env = add_constraint(
+                &dests[0].0,
+                &ValQuot::Bop(
+                    op,
+                    arg_names[0]
+                        .as_ref()
+                        .opt()
+                        .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
+                    arg_names[1]
+                        .as_ref()
+                        .opt()
+                        .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
+                ),
+                info,
+                env,
+            )?;
         }
-        HirOp::FFI(target, OpType::External) => {
+        HirOp::External(target) => {
             // The name of an external function is the name of its value spec
-            if let Hole::Filled(target) = target {
-                let f_class = ctx.specs[target].feq.clone();
-                let dest_tuple = tuple_id(
-                    &dests
+
+            let f_class = ctx.specs[target].feq.clone();
+            let dest_tuple = tuple_id(
+                &dests
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>(),
+            );
+            env = add_constraint(
+                &format!("!{dest_tuple}"),
+                &ValQuot::Call(
+                    f_class,
+                    arg_names
                         .iter()
-                        .map(|(name, _)| name.clone())
-                        .collect::<Vec<_>>(),
-                );
+                        .map(|x| {
+                            x.as_ref()
+                                .opt()
+                                .map_or_else(|| env.new_temp(), |y| MetaVar::new_var_name(y))
+                        })
+                        .collect(),
+                ),
+                info,
+                env,
+            )?;
+            for (id, (dest, _)) in dests.iter().enumerate() {
                 env = add_constraint(
-                    &format!("!{dest_tuple}"),
-                    &ValQuot::Call(
-                        f_class,
-                        arg_names
-                            .iter()
-                            .map(|x| {
-                                x.as_ref()
-                                    .opt()
-                                    .map_or_else(|| env.new_temp(), |y| MetaVar::new_var_name(y))
-                            })
-                            .collect(),
-                    ),
+                    dest,
+                    &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest_tuple}")), id),
                     info,
                     env,
                 )?;
-                for (id, (dest, _)) in dests.iter().enumerate() {
-                    env = add_constraint(
-                        dest,
-                        &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest_tuple}")), id),
-                        info,
-                        env,
-                    )?;
-                }
             }
         }
-        HirOp::FFI(..) => todo!("Unimplemented operator"),
-        _ => unreachable!(),
+        HirOp::Unary(_) => todo!("Unimplemented operator"),
     }
     Ok(env)
 }

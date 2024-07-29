@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 
-use caiman::explication::Hole;
-
 use crate::{
     enum_cast,
     lower::{
-        binop_to_str,
+        binop_name,
         sched_hir::{
             cfg::{BasicBlock, Cfg},
-            HirBody, HirOp, HirTerm, OpType,
+            FillIn, HirBody, HirOp, HirTerm,
         },
-        uop_to_str,
+        uop_name,
     },
     parse::ast::{DataType, Uop},
 };
@@ -48,7 +46,7 @@ fn deref_data_type(dt: DataType) -> DataType {
 fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType>) {
     match instr {
         HirBody::Op {
-            op: HirOp::Unary(Uop::Deref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Deref)),
             dests,
             args,
             info,
@@ -69,34 +67,36 @@ fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType
                 assert_eq!(args.len(), 2);
                 let arg_l = args[0].hole_or_var().unwrap();
                 let arg_r = args[1].hole_or_var().unwrap();
-                if let (Hole::Filled(arg_l), Hole::Filled(arg_r)) = (arg_l, arg_r) {
-                    *op = HirOp::FFI(
-                        Hole::Filled(binop_to_str(
-                            *bin,
-                            &format!("{}", data_types[arg_l]),
-                            &format!("{}", data_types[arg_r]),
-                        )),
-                        OpType::Binary,
-                    );
-                } else {
-                    *op = HirOp::FFI(Hole::Empty, OpType::Binary);
-                }
+                bin.process(|bop| {
+                    (
+                        String::from(binop_name(*bop)),
+                        vec![
+                            arg_l
+                                .opt()
+                                .and_then(|x| data_types.get(x).map(|dt| format!("{dt}"))),
+                            arg_r
+                                .opt()
+                                .and_then(|x| data_types.get(x).map(|dt| format!("{dt}"))),
+                        ],
+                    )
+                });
             }
-            HirOp::Unary(unary @ (Uop::Neg | Uop::Not | Uop::LNot)) => {
+            HirOp::Unary(unary @ FillIn::Initial(Uop::Neg | Uop::Not | Uop::LNot)) => {
                 assert_eq!(args.len(), 1);
                 let arg = args[0].hole_or_var().unwrap();
-                if let Hole::Filled(arg) = arg {
-                    *op = HirOp::FFI(
-                        Hole::Filled(uop_to_str(*unary, &format!("{}", data_types[arg]))),
-                        OpType::Unary,
-                    );
-                } else {
-                    *op = HirOp::FFI(Hole::Empty, OpType::Unary);
-                }
+                unary.process(|uop| {
+                    (
+                        String::from(uop_name(*uop)),
+                        arg.opt()
+                            .and_then(|x| data_types.get(x).map(|dt| format!("{dt}"))),
+                    )
+                });
             }
-            HirOp::Unary(Uop::Ref) | HirOp::FFI(_, OpType::External) => (),
-            HirOp::Unary(Uop::Deref) => panic!("Unexpected deref op"),
-            HirOp::FFI(_, _) => panic!("Unexpected transformed op"),
+            HirOp::Unary(FillIn::Initial(Uop::Ref)) | HirOp::External(_) => (),
+            HirOp::Unary(FillIn::Initial(Uop::Deref)) => panic!("Unexpected deref op"),
+            HirOp::Unary(FillIn::Processed(_)) => {
+                panic!("Unexpected transformed op")
+            }
         },
         _ => {}
     }

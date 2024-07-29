@@ -40,7 +40,7 @@ use crate::{
     error::Info,
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
-        Hir, HirBody, HirInstr, HirOp, HirTerm, Terminator, TripleTag, UseType,
+        FillIn, Hir, HirBody, HirInstr, HirOp, HirTerm, Terminator, TripleTag, UseType,
     },
     parse::ast::{DataType, Uop},
 };
@@ -222,7 +222,7 @@ impl Fact for RefPropagation {
                 .unwrap_or_else(|| name.to_string())
         });
         if let HirInstr::Stmt(HirBody::Op {
-            op: HirOp::Unary(Uop::Ref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Ref)),
             dests,
             args,
             ..
@@ -245,7 +245,7 @@ fn remove_refs_ops(bb: &mut BasicBlock) {
     let mut to_remove = Vec::new();
     for (idx, instr) in bb.stmts.iter().enumerate() {
         if let HirBody::Op {
-            op: HirOp::Unary(Uop::Ref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Ref)),
             ..
         } = instr
         {
@@ -396,7 +396,7 @@ fn deref_transform_instr(
             }
         }
         HirInstr::Stmt(HirBody::Op {
-            op: HirOp::Unary(Uop::Ref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Ref)),
             args,
             ..
         }) => {

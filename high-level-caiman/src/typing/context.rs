@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
-use crate::lower::binop_to_str;
+use crate::lower::{binop_name, op_to_str};
 use crate::parse::ast::{
     ExternDef, FlaggedType, FullType, IntSize, SpecExpr, SpecFunclet, SpecStmt, SpecTerm,
 };
@@ -408,7 +408,11 @@ fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
         ret,
     } in externs
     {
-        let op_name = binop_to_str(*op, &format!("{op_l:#}"), &format!("{op_r:#}")).to_string();
+        let op_name = op_to_str(
+            binop_name(*op),
+            [format!("{op_l:#}"), format!("{op_r:#}")].iter(),
+        )
+        .to_string();
         let sig = Signature::new(vec![op_l.clone(), op_r.clone()], vec![ret.clone()], 0);
         ctx.signatures.insert(op_name.clone(), sig.clone());
         ctx.scheds.insert(op_name, SchedOrExtern::Extern(sig));
@@ -426,7 +430,11 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
         ret,
     } in existing_externs
     {
-        let op_name = binop_to_str(*op, &format!("{op_l:#}"), &format!("{op_r:#}")).to_string();
+        let op_name = op_to_str(
+            binop_name(*op),
+            [format!("{op_l:#}"), format!("{op_r:#}")].iter(),
+        )
+        .to_string();
         res.extend(
             [
                 asm::Declaration::FunctionClass(asm::FunctionClass {

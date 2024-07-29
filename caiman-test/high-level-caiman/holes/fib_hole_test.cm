@@ -4,10 +4,9 @@ tmln time(e: Event) -> Event { returns e }
 sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
 val fib(a: i64) -> i64 {
-    one :- 1
     returns 0 if a <= 0 else 
-            one if a == one else
-            fib(a - one) + fib(a - 2)
+            1 if a == 1 else
+            fib(a - 1) + fib(a - 2)
 }
 
 fn fib_impl(a: i64) -> i64 impls fib, time, space {

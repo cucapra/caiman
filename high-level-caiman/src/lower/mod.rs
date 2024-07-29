@@ -213,7 +213,8 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Re
     Ok(asm)
 }
 
-const fn binop_name(op: Binop) -> &'static str {
+#[must_use]
+pub const fn binop_name(op: Binop) -> &'static str {
     match op {
         Binop::Lt => "lt",
         Binop::Leq => "leq",
@@ -241,7 +242,8 @@ const fn binop_name(op: Binop) -> &'static str {
     }
 }
 
-const fn uop_name(op: Uop) -> &'static str {
+#[must_use]
+pub const fn uop_name(op: Uop) -> &'static str {
     match op {
         Uop::Neg => "neg",
         Uop::Not => "not",
@@ -251,16 +253,11 @@ const fn uop_name(op: Uop) -> &'static str {
     }
 }
 
-/// Converts a high-level caiman data type to an extern funclet id.
-#[must_use]
-pub fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
-    format!("_{}_{type_left}_{type_right}", binop_name(op))
+pub fn op_to_str<'a>(basename: &str, arg_types: impl Iterator<Item = &'a String>) -> String {
+    let args: Vec<_> = arg_types.cloned().collect();
+    format!("_{basename}_{}", args.join("_"))
 }
 
-#[must_use]
-pub fn uop_to_str(op: Uop, type_in: &str) -> String {
-    format!("_{}_{type_in}", uop_name(op))
-}
 
 /// Gets the id of the direct result of an operation or call that results in `names`.
 /// # Panics
