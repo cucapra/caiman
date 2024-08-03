@@ -381,7 +381,8 @@ impl ReachingDefs {
             HirInstr::Stmt(
                 HirBody::ConstDecl { rhs, .. }
                 | HirBody::VarDecl { rhs: Some(rhs), .. }
-                | HirBody::RefStore { rhs, .. },
+                | HirBody::RefStore { rhs, .. }
+                | HirBody::DeviceCopy { src: rhs, .. },
             ) => rhs.fill_uses(|| self.reaching_defs().cloned().collect()),
             HirInstr::Stmt(HirBody::EncodeDo { func, .. })
             | HirInstr::Tail(Terminator::Call(_, func)) => {

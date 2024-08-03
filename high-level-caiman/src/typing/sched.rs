@@ -796,7 +796,7 @@ fn collect_encode(
     match cmd {
         EncodedCommand::Copy => {
             let src = hole_or_var(&stmt.rhs).unwrap();
-            if let Hole::Filled(src) = src {
+            let constraint = if let Hole::Filled(src) = src {
                 let inner = format!("!{src}!");
                 // force copy from ref
                 env.add_constraint(&inner, DTypeConstraint::Any, info)?;
@@ -805,17 +805,19 @@ fn collect_encode(
                     DTypeConstraint::RefN(Box::new(DTypeConstraint::Var(inner.clone()))),
                     info,
                 )?;
-                let dest = stmt.lhs[0].0.clone();
-                add_singleton_encoder_contraint(
-                    env,
-                    encoder,
-                    &dest,
-                    DTypeConstraint::Var(inner),
-                    WGPUFlags::CopyDst,
-                    info,
-                )?;
-            }
-            Ok(())
+                DTypeConstraint::Var(inner)
+            } else {
+                DTypeConstraint::Any
+            };
+            let dest = stmt.lhs[0].0.clone();
+            add_singleton_encoder_contraint(
+                env,
+                encoder,
+                &dest,
+                constraint,
+                WGPUFlags::CopyDst,
+                info,
+            )
         }
         EncodedCommand::Invoke => {
             if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {

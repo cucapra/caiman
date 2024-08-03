@@ -274,9 +274,14 @@ impl TagAnalysis {
             } => {
                 let t = self.tags.get_mut(dest).unwrap();
                 t.set_specified_info(dest_tag.clone());
-                if let Some(rhs_typ) = self.tags.get(src).cloned() {
+                if let HirTerm::Var { name: src, .. } = src {
+                    if let Some(rhs_typ) = self.tags.get(src).cloned() {
+                        let t = self.tags.get_mut(dest).unwrap();
+                        t.value = rhs_typ.value;
+                    }
+                } else {
                     let t = self.tags.get_mut(dest).unwrap();
-                    t.value = rhs_typ.value;
+                    t.value.flow = Some(Flow::Usable);
                 }
             }
             HirBody::RefLoad { dest, src, .. } => {

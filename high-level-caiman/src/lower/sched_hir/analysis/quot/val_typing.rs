@@ -272,7 +272,7 @@ fn unify_decl(
             env = add_type_annot(lhs, tag, *info, env)?;
             env = add_var_constraint(lhs, name, *info, env)?;
         }
-        HirTerm::Hole { .. } => todo!(),
+        HirTerm::Hole { .. } => (),
         HirTerm::Lit { .. } => unimplemented!(),
     }
     add_type_annot(lhs, lhs_tag, decl_info, env)
@@ -641,11 +641,7 @@ fn unify_nodes(
                 } => unify_decl(
                     dest,
                     dest_tag,
-                    &HirTerm::Var {
-                        info: *info,
-                        name: src.clone(),
-                        tag: TripleTag::new_unspecified(),
-                    },
+                    src,
                     *info,
                     env,
                 )?,

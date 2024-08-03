@@ -228,7 +228,7 @@ pub enum HirBody {
         info: Info,
         dest: Name,
         dest_tag: TripleTag,
-        src: Name,
+        src: HirTerm,
         dir: DataMovement,
         encoder: Name,
     },
@@ -350,6 +350,28 @@ impl HirTerm {
     pub fn fill_uses(&mut self, f: impl Fn() -> Vec<String>) {
         if let Self::Hole { uses, ..} = self {
             uses.process(|()| f());
+        }
+    }
+
+    /// Gets the uses of the term
+    pub fn get_uses(&self) -> Vec<String> {
+        match self {
+            Self::Hole { uses, ..} => uses.processed().clone(),
+            Self::Var { name, ..} => vec![name.clone()],
+            Self::Lit { ..} => vec![],
+        }
+    }
+
+    /// Renames the uses of this term, with the provided use type
+    pub fn rename_uses(&mut self, ut: UseType, f: &mut dyn FnMut(&str, UseType) -> String) {
+        match self {
+            Self::Hole { uses, ..} => {
+                for u in uses.processed_mut() {
+                    *u = f(u, ut);
+                }
+            }
+            Self::Var { name, ..} => *name = f(name, ut),
+            Self::Lit { .. }=> (),
         }
     }
 }
@@ -751,7 +773,7 @@ impl HirBody {
                         assert_eq!(stmt.lhs.len(), 1);  
                         Self::DeviceCopy { info, dest: stmt.lhs[0].0.clone(), 
                             dest_tag: TripleTag::from_opt(&stmt.lhs[0].1), 
-                            src: enum_cast!(SchedTerm::Var {name, ..}, name, enum_cast!(SchedExpr::Term, stmt.rhs)), 
+                            src: HirTerm::try_from(enum_cast!(SchedExpr::Term, stmt.rhs)).unwrap(), 
                             dir: DataMovement::HostToDevice, encoder }
                     },
                     EncodedCommand::Invoke => {
@@ -935,7 +957,7 @@ impl Hir for HirBody {
             }
             Self::DeviceCopy { dest, src, encoder, .. } => {
                 res.insert(dest.clone());
-                res.insert(src.clone());
+                res.extend(src.get_uses());
                 res.insert(encoder.clone());
             }
             Self::Sync { srcs, .. } => {
@@ -1066,7 +1088,7 @@ impl Hir for HirBody {
                 }
             }
             Self::DeviceCopy { src, dest, encoder, ..} => {
-                *src = f(src, UseType::Read);
+                src.rename_uses(UseType::Read, f);
                 *dest = f(dest, UseType::Write);
                 *encoder = f(encoder, UseType::Read);
             }

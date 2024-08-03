@@ -323,13 +323,28 @@ fn lower_begin_encode(
 /// * `temp_id` - the next available temporary id
 fn lower_device_copy(
     dest: &str,
-    src: &str,
+    src: &HirTerm,
     dir: DataMovement,
     encoder: &str,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
     assert_eq!(dir, DataMovement::HostToDevice);
+    let src = src.hole_or_var().unwrap();
+    if src.is_empty() {
+        return (
+            vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: None,
+                node: asm::Node::EncodeCopy {
+                    encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+                    input: Hole::Empty,
+                    output: Hole::Filled(asm::NodeId(dest.to_string())),
+                },
+            }))],
+            temp_id,
+        );
+    }
+    let src = src.opt().unwrap();
     if f.is_var_or_ref(src) {
         (
             vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
