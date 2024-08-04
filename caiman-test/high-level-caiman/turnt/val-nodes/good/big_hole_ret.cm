@@ -1,0 +1,14 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> o: i64 {
+    returns 1 + 2
+}
+
+fn main_func() -> i64 impls main, time, space  {
+    ???
+}
+
+pipeline main { main_func }

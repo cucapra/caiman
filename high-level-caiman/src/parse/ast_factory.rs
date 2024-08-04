@@ -429,7 +429,7 @@ impl ASTFactory {
                 Err(custom_parse_error!(info, "Timeline operation cannot occur in this context")),
             SchedTerm::Call(info, ..) => Err(custom_parse_error!(info, 
                 "Cannot parameterize a function call with non-type template arguments nor specify a tag in this context")),
-            SchedTerm::Hole(info) => Err(custom_parse_error!(info, 
+            SchedTerm::Hole{ info, ..} => Err(custom_parse_error!(info, 
                 "Holes cannot occur in this context")),
         }
     }
@@ -541,7 +541,12 @@ impl ASTFactory {
 
     struct_variant_factory!(sched_lit(lit: SchedLiteral, tag: Option<Tags>) -> SchedTerm:SchedTerm::Lit);
     struct_variant_factory!(sched_var(name: Name, tag: Option<Tags>) -> SchedTerm:SchedTerm::Var);
-    tuple_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole);
+    struct_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole {
+        can_generate_code: false
+    });
+    struct_variant_factory!(sched_big_hole_expr() -> SchedTerm:SchedTerm::Hole {
+        can_generate_code: true
+    });
     struct_variant_factory!(sched_submit(tag: Option<Tags>, e: SchedExpr) -> 
         SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 

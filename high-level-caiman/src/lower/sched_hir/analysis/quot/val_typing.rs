@@ -655,7 +655,7 @@ fn unify_nodes(
                 }
                 HirBody::BeginEncoding { .. }
                 | HirBody::Submit { .. }
-                | HirBody::Hole(..)
+                | HirBody::Hole { .. }
                 // ignore PHIs for non-value types
                 | HirBody::Phi { .. } => env,
             }
@@ -796,7 +796,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 } => {
                     fill_val_quotient(lhs, lhs_tag, env, block.id);
                 }
-                HirBody::Op { dests, .. } => {
+                HirBody::Op { dests, .. } | HirBody::Hole { dests, .. } => {
                     for (d, t) in dests {
                         fill_val_quotient(d, t, env, block.id);
                     }
@@ -820,8 +820,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 HirBody::DeviceCopy { dest, dest_tag, .. } => {
                     fill_val_quotient(dest, dest_tag, env, block.id);
                 }
-                HirBody::Hole(_)
-                | HirBody::RefLoad { .. }
+                HirBody::RefLoad { .. }
                 | HirBody::BeginEncoding { .. }
                 | HirBody::Submit { .. } => {}
                 HirBody::Phi { dest, info, .. } => {

@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use caiman::assembly::ast::{self as asm, MetaMapping};
 use caiman::explication::Hole;
 
+use crate::error::Info;
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
@@ -498,6 +499,55 @@ fn lower_sync(
     (v, temp_id)
 }
 
+fn lower_hole(
+    dests: &[(String, TripleTag)],
+    info: Info,
+    mut temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    let mut allocations = vec![];
+    let mut reads = vec![];
+    for (d, _) in dests {
+        let is_ref = matches!(f.get_dtype(d), Some(DataType::Ref(_)));
+        let name = if is_ref {
+            d.clone()
+        } else {
+            let n = temp_var_name(temp_id);
+            temp_id += 1;
+            n
+        };
+        let place = if f.get_flags().contains_key(d) {
+            ir::Place::Gpu
+        } else {
+            ir::Place::Local
+        };
+        let storage_type = Hole::Filled(
+            f.get_storage_type(d)
+                .unwrap_or_else(|| panic!("{info}: {d} needs a type annotation")),
+        );
+        allocations.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(name.clone())),
+            node: asm::Node::AllocTemporary {
+                place: Hole::Filled(place),
+                storage_type: storage_type.clone(),
+                buffer_flags: Hole::Filled(*f.get_flags().get(d).unwrap_or(&LOCAL_TEMP_FLAGS)),
+            },
+        })));
+        if !is_ref {
+            reads.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(d.clone())),
+                node: asm::Node::ReadRef {
+                    storage_type,
+                    source: Hole::Filled(asm::NodeId(name)),
+                },
+            })));
+        }
+    }
+    allocations.push(Hole::Empty);
+    allocations.extend(reads);
+    (allocations, temp_id)
+}
+
 /// Lowers a scheduling statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
@@ -519,7 +569,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         HirBody::Op {
             dests, op, args, ..
         } => lower_op(dests, &op.lower(), args, temp_id, f),
-        HirBody::Hole(_) => (vec![Hole::Empty], temp_id),
+        HirBody::Hole { info, dests, .. } => lower_hole(dests, *info, temp_id, f),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
         HirBody::BeginEncoding {
             device,

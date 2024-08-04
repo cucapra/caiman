@@ -384,6 +384,9 @@ impl ReachingDefs {
                 | HirBody::RefStore { rhs, .. }
                 | HirBody::DeviceCopy { src: rhs, .. },
             ) => rhs.fill_uses(|| self.reaching_defs().cloned().collect()),
+            HirInstr::Stmt(HirBody::Hole { uses, .. }) => {
+                uses.process(|()| self.reaching_defs().cloned().collect());
+            }
             HirInstr::Stmt(HirBody::EncodeDo { func, .. })
             | HirInstr::Tail(Terminator::Call(_, func)) => {
                 if let Some(x) = func.extra_uses.as_mut() {
@@ -396,7 +399,17 @@ impl ReachingDefs {
                 }
             }
             HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Pass out of order"),
-            _ => {}
+            HirInstr::Tail(_)
+            | HirInstr::Stmt(
+                HirBody::RefLoad { .. }
+                | HirBody::InAnnotation(..)
+                | HirBody::OutAnnotation(..)
+                | HirBody::BeginEncoding { .. }
+                | HirBody::Submit { .. }
+                | HirBody::Sync { .. }
+                | HirBody::Phi { .. }
+                | HirBody::VarDecl { rhs: None, .. },
+            ) => {}
         }
     }
 }
@@ -445,7 +458,11 @@ impl Fact for ReachingDefs {
                 assert!(!srcs.processed().iter().any(|x| self.variables.contains(x)));
                 self.kill_set.extend(srcs.processed().iter().cloned());
             }
-            HirInstr::Stmt(HirBody::EncodeDo { dests, .. } | HirBody::Op { dests, .. }) => {
+            HirInstr::Stmt(
+                HirBody::EncodeDo { dests, .. }
+                | HirBody::Op { dests, .. }
+                | HirBody::Hole { dests, .. },
+            ) => {
                 // ops are pure, so srcs aren't killed
                 // srcs of encode-do are references, so they aren't killed
                 self.available_set
@@ -461,10 +478,7 @@ impl Fact for ReachingDefs {
                     .extend(device_vars.iter().map(|(x, _)| x.clone()));
             }
             HirInstr::Stmt(
-                HirBody::Hole(_)
-                | HirBody::InAnnotation(..)
-                | HirBody::OutAnnotation(..)
-                | HirBody::RefStore { .. },
+                HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) | HirBody::RefStore { .. },
             )
             | HirInstr::Tail(
                 Terminator::Next(..) | Terminator::None(_) | Terminator::FinalReturn(..),

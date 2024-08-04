@@ -214,7 +214,7 @@ impl TagAnalysis {
         }
     }
     /// Transfer function for an HIR body statement
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
@@ -299,7 +299,18 @@ impl TagAnalysis {
                     override_none_usable(tag, &self.data_types[dest], self.flags.get(dest)),
                 );
             }
-            HirBody::Hole(_) => {}
+            HirBody::Hole { dests, .. } => {
+                for (dest, tag) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(
+                            tag.clone(),
+                            self.data_types.get(dest).unwrap(),
+                            self.flags.get(dest),
+                        ),
+                    );
+                }
+            }
             HirBody::Op { dests, .. } => {
                 for (dest, dest_tag) in dests {
                     self.tags.insert(

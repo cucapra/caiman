@@ -1,12 +1,17 @@
 #![allow(clippy::module_name_repetitions)]
 use std::collections::{BTreeSet, HashMap};
 
+pub use crate::lower::op_to_str;
 use crate::{
-    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{self, hole_or_var, Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
+    enum_cast,
+    lower::{lower_schedule::tag_to_tag, tuple_id},
+    parse::ast::{
+        self, hole_or_var, Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr,
+        SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop,
+    },
 };
 use caiman::assembly::ast as asm;
 use caiman::explication::Hole;
-pub use crate::lower::op_to_str;
 
 use crate::{
     error::Info,
@@ -37,15 +42,19 @@ impl TripleTag {
         }
     }
     pub fn from_opt(tags: &Option<Tags>) -> Self {
-        tags.as_ref().map_or_else(|| Self::from_owned_opt(None), |tags| Self::from_tags(tags))
+        tags.as_ref()
+            .map_or_else(|| Self::from_owned_opt(None), |tags| Self::from_tags(tags))
     }
 
     pub fn from_owned_opt(tags: Option<Tags>) -> Self {
-        tags.map_or_else(|| Self {
+        tags.map_or_else(
+            || Self {
                 value: Tag::new_unspecified(SpecType::Value),
                 spatial: Tag::new_unspecified(SpecType::Spatial),
                 timeline: Tag::new_unspecified(SpecType::Timeline),
-            }, Self::from_tag_vec)
+            },
+            Self::from_tag_vec,
+        )
     }
 
     pub fn from_tag_vec(tags: Vec<Tag>) -> Self {
@@ -53,16 +62,16 @@ impl TripleTag {
         let mut spatial = None;
         let mut timeline = None;
         for tag in tags {
-                match tag.quot_var.spec_type {
-                    SpecType::Value => value = Some(tag.clone()),
-                    SpecType::Spatial => spatial = Some(tag.clone()),
-                    SpecType::Timeline => timeline = Some(tag.clone()),
-                }     
+            match tag.quot_var.spec_type {
+                SpecType::Value => value = Some(tag.clone()),
+                SpecType::Spatial => spatial = Some(tag.clone()),
+                SpecType::Timeline => timeline = Some(tag.clone()),
+            }
         }
         Self {
             value: value.unwrap_or_else(|| Tag::new_unspecified(SpecType::Value)),
             spatial: spatial.unwrap_or_else(|| Tag::new_unspecified(SpecType::Spatial)),
-            timeline: timeline.unwrap_or_else(|| Tag::new_unspecified(SpecType::Timeline),)
+            timeline: timeline.unwrap_or_else(|| Tag::new_unspecified(SpecType::Timeline)),
         }
     }
 
@@ -71,11 +80,11 @@ impl TripleTag {
         let mut spatial = None;
         let mut timeline = None;
         for tag in tags {
-                match tag.quot_var.spec_type {
-                    SpecType::Value => value = Some(tag.clone()),
-                    SpecType::Spatial => spatial = Some(tag.clone()),
-                    SpecType::Timeline => timeline = Some(tag.clone()),
-                }
+            match tag.quot_var.spec_type {
+                SpecType::Value => value = Some(tag.clone()),
+                SpecType::Spatial => spatial = Some(tag.clone()),
+                SpecType::Timeline => timeline = Some(tag.clone()),
+            }
         }
         Self {
             value: value.unwrap_or_else(|| Tag::new_unspecified(SpecType::Value)),
@@ -89,7 +98,8 @@ impl TripleTag {
     }
 
     pub fn from_fulltype_opt(ft: &Option<FullType>) -> Self {
-        ft.as_ref().map_or_else(|| Self::from_owned_opt(None), Self::from_fulltype)
+        ft.as_ref()
+            .map_or_else(|| Self::from_owned_opt(None), Self::from_fulltype)
     }
 
     /// Updates the tag so that all non-null parts of `other` are added to `self`
@@ -128,9 +138,7 @@ impl TripleTag {
             tag_to_tag(&self.timeline),
         ]
     }
-
 }
-
 
 impl From<TripleTag> for Tags {
     fn from(val: TripleTag) -> Self {
@@ -259,14 +267,14 @@ pub enum HirBody {
         tags: TripleTag,
     },
     /// A sync-fence folowed by copying all the encoded variables in `src` to
-    /// local ones in `dests`. 
+    /// local ones in `dests`.
     Sync {
         info: Info,
         /// the local versions of the encoded variables or the name of the record
         /// destination.
         dests: FillIn<(Name, TripleTag), Vec<(Name, TripleTag)>>,
         /// fence name or fence followed by all the variables being copied to the local device
-        srcs: FillIn<Name, Vec<Name>>, 
+        srcs: FillIn<Name, Vec<Name>>,
         // sync does not require an extraction
         tags: TripleTag,
     },
@@ -284,7 +292,11 @@ pub enum HirBody {
         lhs_tag: TripleTag,
         rhs: Option<HirTerm>,
     },
-    Hole(Info),
+    Hole {
+        dests: Vec<(String, TripleTag)>,
+        info: Info,
+        uses: FillIn<(), Vec<String>>,
+    },
     /// External operation (performs a const decl for the destinations)
     Op {
         info: Info,
@@ -297,7 +309,7 @@ pub enum HirBody {
     Phi {
         info: Info,
         dest: Name,
-        /// Map from incoming block id to the incoming variable name 
+        /// Map from incoming block id to the incoming variable name
         /// from that block
         inputs: HashMap<usize, Name>,
         /// original name of the variable
@@ -321,8 +333,8 @@ pub enum HirTerm {
     },
     Hole {
         #[allow(unused)]
-        info: Info, 
-        uses: FillIn<(), Vec<String>>
+        info: Info,
+        uses: FillIn<(), Vec<String>>,
     },
 }
 
@@ -331,24 +343,24 @@ impl HirTerm {
     /// otherwise returns `None` if this term is a literal
     pub const fn hole_or_var(&self) -> Option<Hole<&String>> {
         match self {
-            Self::Hole { ..} => Some(Hole::Empty),
-            Self::Var { name, ..} => Some(Hole::Filled(name)),
-            Self::Lit { ..} => None,
+            Self::Hole { .. } => Some(Hole::Empty),
+            Self::Var { name, .. } => Some(Hole::Filled(name)),
+            Self::Lit { .. } => None,
         }
     }
 
     /// Gets the tags of this term, or `None` if it's a hole
     pub const fn get_tags(&self) -> Option<&TripleTag> {
         match self {
-            Self::Lit { tag, ..} | Self::Var { tag, ..}=> Some(tag),
-            Self::Hole {..} => None,
+            Self::Lit { tag, .. } | Self::Var { tag, .. } => Some(tag),
+            Self::Hole { .. } => None,
         }
     }
 
     /// If this term is a hole, fills the uses of the hole by the result of calling
     /// the given function
     pub fn fill_uses(&mut self, f: impl Fn() -> Vec<String>) {
-        if let Self::Hole { uses, ..} = self {
+        if let Self::Hole { uses, .. } = self {
             uses.process(|()| f());
         }
     }
@@ -356,22 +368,22 @@ impl HirTerm {
     /// Gets the uses of the term
     pub fn get_uses(&self) -> Vec<String> {
         match self {
-            Self::Hole { uses, ..} => uses.processed().clone(),
-            Self::Var { name, ..} => vec![name.clone()],
-            Self::Lit { ..} => vec![],
+            Self::Hole { uses, .. } => uses.processed().clone(),
+            Self::Var { name, .. } => vec![name.clone()],
+            Self::Lit { .. } => vec![],
         }
     }
 
     /// Renames the uses of this term, with the provided use type
     pub fn rename_uses(&mut self, ut: UseType, f: &mut dyn FnMut(&str, UseType) -> String) {
         match self {
-            Self::Hole { uses, ..} => {
+            Self::Hole { uses, .. } => {
                 for u in uses.processed_mut() {
                     *u = f(u, ut);
                 }
             }
-            Self::Var { name, ..} => *name = f(name, ut),
-            Self::Lit { .. }=> (),
+            Self::Var { name, .. } => *name = f(name, ut),
+            Self::Lit { .. } => (),
         }
     }
 }
@@ -381,12 +393,21 @@ impl TryFrom<SchedTerm> for HirTerm {
 
     fn try_from(value: SchedTerm) -> Result<Self, Self::Error> {
         match value {
-            SchedTerm::Lit {info, lit, tag} => Ok(Self::Lit {
-                info, lit, tag: TripleTag::from_opt(&tag)
+            SchedTerm::Lit { info, lit, tag } => Ok(Self::Lit {
+                info,
+                lit,
+                tag: TripleTag::from_opt(&tag),
             }),
-            SchedTerm::Var { info, name, tag} => Ok(Self::Var { info, name, tag: TripleTag::from_opt(&tag)}),
-            SchedTerm::Hole(info) => Ok(Self::Hole { info, uses: FillIn::Initial(())}),
-            _ => Err(())
+            SchedTerm::Var { info, name, tag } => Ok(Self::Var {
+                info,
+                name,
+                tag: TripleTag::from_opt(&tag),
+            }),
+            SchedTerm::Hole { info, .. } => Ok(Self::Hole {
+                info,
+                uses: FillIn::Initial(()),
+            }),
+            _ => Err(()),
         }
     }
 }
@@ -395,13 +416,13 @@ impl TryFrom<SchedTerm> for HirTerm {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum HirOp {
-    /// an unlowered binary operation or a pair of a binop name and vector of 
+    /// an unlowered binary operation or a pair of a binop name and vector of
     /// argument type names
     Binary(FillIn<Binop, (Name, Vec<Option<String>>)>),
     /// an unlowered unary operation or a pair of a uop name and argument type name
     Unary(FillIn<Uop, (Name, Option<String>)>),
     /// an external call
-    External(Name)
+    External(Name),
 }
 
 impl HirOp {
@@ -414,18 +435,20 @@ impl HirOp {
                 if arg_types.iter().any(std::option::Option::is_none) {
                     // some arg type is unknown
                     Hole::Empty
-                } 
-                else {
-                    Hole::Filled(op_to_str(basename, arg_types.iter().map(|x| x.as_ref().unwrap())))
+                } else {
+                    Hole::Filled(op_to_str(
+                        basename,
+                        arg_types.iter().map(|x| x.as_ref().unwrap()),
+                    ))
                 }
             }
             Self::Unary(name) => {
                 let (basename, arg_type) = name.processed();
-                arg_type.as_ref().map_or(Hole::Empty, |arg_type| Hole::Filled(op_to_str(basename, std::iter::once(arg_type))))
-            },
+                arg_type.as_ref().map_or(Hole::Empty, |arg_type| {
+                    Hole::Filled(op_to_str(basename, std::iter::once(arg_type)))
+                })
+            }
             Self::External(name) => Hole::Filled(name.clone()),
-            
-            
         }
     }
 }
@@ -438,7 +461,7 @@ pub struct HirFuncCall {
     pub target: String,
     pub args: Vec<Hole<String>>,
     pub tag: TripleTag,
-    /// The number of value template arguments that occur in `args` before the 
+    /// The number of value template arguments that occur in `args` before the
     /// normal arguments
     pub num_dims: usize,
     /// If any arg is a hole, these are the extra uses of the function call due to
@@ -447,13 +470,15 @@ pub struct HirFuncCall {
 }
 
 impl HirFuncCall {
-    pub fn new(value: SchedFuncCall) ->Self {
+    pub fn new(value: SchedFuncCall) -> Self {
         if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
             let mut starting_args = vec![];
-            let num_dims = value.templates.as_ref().map_or(0, |t| if let TemplateArgs::Vals(v) = t {
-                v.len()
-            } else {
-                0
+            let num_dims = value.templates.as_ref().map_or(0, |t| {
+                if let TemplateArgs::Vals(v) = t {
+                    v.len()
+                } else {
+                    0
+                }
             });
             match value.templates {
                 Some(TemplateArgs::Vals(vs)) => {
@@ -464,20 +489,26 @@ impl HirFuncCall {
                             panic!("Invalid template argument {v:?}")
                         }
                     }
-                },
+                }
                 Some(TemplateArgs::Type(_)) => unimplemented!("Type template arguments"),
                 None => (),
-
             }
-            let args: Vec<_> = starting_args.into_iter().chain(value.args
+            let args: Vec<_> = starting_args
                 .into_iter()
-                .map(|a| {
-                    hole_or_var(&a).unwrap().cloned()
-                }))
+                .chain(
+                    value
+                        .args
+                        .into_iter()
+                        .map(|a| hole_or_var(&a).unwrap().cloned()),
+                )
                 .collect();
             return Self {
                 info: value.info,
-                extra_uses: if args.iter().any(Hole::is_empty) { Some(FillIn::Initial(()))} else { None },
+                extra_uses: if args.iter().any(Hole::is_empty) {
+                    Some(FillIn::Initial(()))
+                } else {
+                    None
+                },
                 target: name,
                 args,
                 tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
@@ -594,7 +625,12 @@ impl Hir for Terminator {
     fn get_info(&self) -> Info {
         match self {
             Self::Call(_, call) | Self::CaptureCall { call, .. } => call.info,
-            Self::Select { info, .. } | Self::Return { info, .. } | Self::FinalReturn(info, ..) | Self::None(info) | Self::Next(info, ..) | Self::Yield(info, ..) => *info,
+            Self::Select { info, .. }
+            | Self::Return { info, .. }
+            | Self::FinalReturn(info, ..)
+            | Self::None(info)
+            | Self::Next(info, ..)
+            | Self::Yield(info, ..) => *info,
         }
     }
     fn get_defs(&self) -> Option<Vec<String>> {
@@ -606,7 +642,11 @@ impl Hir for Terminator {
             }
             // we don't consider the defs of a select to be defs of this terminator,
             // but rather they are the defs of the left and right funclets
-            Self::FinalReturn(..) | Self::Select { .. } | Self::None(..) | Self::Next(..) | Self::Yield(..) => None,
+            Self::FinalReturn(..)
+            | Self::Select { .. }
+            | Self::None(..)
+            | Self::Next(..)
+            | Self::Yield(..) => None,
         }
     }
     fn get_write_uses(&self) -> Option<Vec<String>> {
@@ -630,12 +670,18 @@ impl Hir for Terminator {
                     uses.insert(guard.clone());
                 }
             }
-            Self::Return { rets, passthrough, ..}  => {
-                for node in rets.iter().filter_map(|x| x.as_ref().opt()).chain(passthrough.iter()) {
+            Self::Return {
+                rets, passthrough, ..
+            } => {
+                for node in rets
+                    .iter()
+                    .filter_map(|x| x.as_ref().opt())
+                    .chain(passthrough.iter())
+                {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(_, names) | Self::Next(_, names) | Self::Yield(_, names)=> {
+            Self::FinalReturn(_, names) | Self::Next(_, names) | Self::Yield(_, names) => {
                 uses.extend(names.iter().cloned());
             }
             Self::None(..) => (),
@@ -671,8 +717,14 @@ impl Hir for Terminator {
                     *name = f(name, UseType::Read);
                 }
             }
-            Self::Return { rets, passthrough, .. } => {
-                for node in rets.iter_mut().filter_map(|x| x.as_mut().opt()).chain(passthrough.iter_mut()) {
+            Self::Return {
+                rets, passthrough, ..
+            } => {
+                for node in rets
+                    .iter_mut()
+                    .filter_map(|x| x.as_mut().opt())
+                    .chain(passthrough.iter_mut())
+                {
                     *node = f(node, UseType::Read);
                 }
             }
@@ -689,7 +741,11 @@ impl Hir for Terminator {
                     *dest = f(dest);
                 }
             }
-            Self::FinalReturn(..) | Self::Select { .. } | Self::None(..) | Self::Next(..) | Self::Yield(..) => (),
+            Self::FinalReturn(..)
+            | Self::Select { .. }
+            | Self::None(..)
+            | Self::Next(..)
+            | Self::Yield(..) => (),
         }
     }
 }
@@ -727,16 +783,12 @@ impl std::ops::DerefMut for HirInstr<'_> {
 }
 
 impl HirBody {
+    #[allow(clippy::too_many_lines)]
     pub fn new(stmt: SchedStmt) -> Self {
         match stmt {
-            SchedStmt::Assign {
-                info,
-                lhs,
-                rhs,
-                ..
-            } => {   
-                if let SchedExpr::Term(SchedTerm::Var { name, tag, ..}) = lhs {
-                        let rhs = enum_cast!(SchedExpr::Term, rhs);
+            SchedStmt::Assign { info, lhs, rhs, .. } => {
+                if let SchedExpr::Term(SchedTerm::Var { name, tag, .. }) = lhs {
+                    let rhs = enum_cast!(SchedExpr::Term, rhs);
                     Self::RefStore {
                         info,
                         lhs_tags: TripleTag::from_opt(&tag),
@@ -745,8 +797,31 @@ impl HirBody {
                     }
                 } else {
                     panic!("Invalid assignment")
-                }       
-            },
+                }
+            }
+            SchedStmt::Decl {
+                info,
+                lhs,
+                is_const,
+                expr:
+                    Some(SchedExpr::Term(SchedTerm::Hole {
+                        can_generate_code: true,
+                        ..
+                    })),
+            } => {
+                assert!(
+                    is_const,
+                    "Variable decl with holes is currently unsupported"
+                );
+                Self::Hole {
+                    dests: lhs
+                        .into_iter()
+                        .map(|(nm, typ)| (nm, TripleTag::from_fulltype_opt(&typ)))
+                        .collect(),
+                    info,
+                    uses: FillIn::Initial(()),
+                }
+            }
             SchedStmt::Decl {
                 info,
                 lhs,
@@ -767,26 +842,43 @@ impl HirBody {
                     rhs: rhs.map(|x| HirTerm::try_from(x).unwrap()),
                 }
             }
-            SchedStmt::Encode { info, stmt, encoder, cmd, .. } => {
-                match cmd {
-                    EncodedCommand::Copy => {
-                        assert_eq!(stmt.lhs.len(), 1);  
-                        Self::DeviceCopy { info, dest: stmt.lhs[0].0.clone(), 
-                            dest_tag: TripleTag::from_opt(&stmt.lhs[0].1), 
-                            src: HirTerm::try_from(enum_cast!(SchedExpr::Term, stmt.rhs)).unwrap(), 
-                            dir: DataMovement::HostToDevice, encoder }
-                    },
-                    EncodedCommand::Invoke => {
-                        let dests = stmt.lhs.into_iter().map(|(nm, tag)| (nm, TripleTag::from_opt(&tag))).collect();
-                        if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, stmt.rhs) {
-                            let func = HirFuncCall::new(call);
-                            Self::EncodeDo { info, dests, func, encoder}
-                        } else {
-                            panic!("Invalid encode")
-                        }
-                    },
+            SchedStmt::Encode {
+                info,
+                stmt,
+                encoder,
+                cmd,
+                ..
+            } => match cmd {
+                EncodedCommand::Copy => {
+                    assert_eq!(stmt.lhs.len(), 1);
+                    Self::DeviceCopy {
+                        info,
+                        dest: stmt.lhs[0].0.clone(),
+                        dest_tag: TripleTag::from_opt(&stmt.lhs[0].1),
+                        src: HirTerm::try_from(enum_cast!(SchedExpr::Term, stmt.rhs)).unwrap(),
+                        dir: DataMovement::HostToDevice,
+                        encoder,
+                    }
                 }
-            }
+                EncodedCommand::Invoke => {
+                    let dests = stmt
+                        .lhs
+                        .into_iter()
+                        .map(|(nm, tag)| (nm, TripleTag::from_opt(&tag)))
+                        .collect();
+                    if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, stmt.rhs) {
+                        let func = HirFuncCall::new(call);
+                        Self::EncodeDo {
+                            info,
+                            dests,
+                            func,
+                            encoder,
+                        }
+                    } else {
+                        panic!("Invalid encode")
+                    }
+                }
+            },
             SchedStmt::Decl { .. } => panic!("Invalid declaration"),
             SchedStmt::Return(..)
             | SchedStmt::Block(..)
@@ -795,9 +887,23 @@ impl HirBody {
             | SchedStmt::Call(..) => {
                 panic!("Unexpected stmt")
             }
-            SchedStmt::Hole(info) => Self::Hole(info),
-            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags))).collect()),
-            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags))).collect()),
+            SchedStmt::Hole(info) => Self::Hole {
+                info,
+                dests: vec![],
+                uses: FillIn::Initial(()),
+            },
+            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(
+                info,
+                tags.into_iter()
+                    .map(|(name, tags)| (name, TripleTag::from_tag_vec(tags)))
+                    .collect(),
+            ),
+            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(
+                info,
+                tags.into_iter()
+                    .map(|(name, tags)| (name, TripleTag::from_tag_vec(tags)))
+                    .collect(),
+            ),
         }
     }
 
@@ -811,51 +917,108 @@ impl HirBody {
     }
 
     /// Constructs a new `HirBody` from a constant declaration.
+    #[allow(clippy::too_many_lines)]
     fn from_const_decl(expr: SchedExpr, info: Info, lhs: Vec<(String, Option<FullType>)>) -> Self {
         match expr {
-            SchedExpr::Term(rhs) => {
-                match rhs {
-                    SchedTerm::Call(info, call) => {
-                        let target = enum_cast!(SchedTerm::Var { name, ..}, name, enum_cast!(SchedExpr::Term, &*call.target));
-                        Self::Op {
-                            info,
-                            dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                            op: HirOp::External(target.clone()),
-                            args: call.args.iter().map(|x| HirTerm::try_from(enum_cast!(SchedExpr::Term, x).clone()).unwrap()).collect(),
-                        }
-                    },
-                    SchedTerm::TimelineOperation { info, op: TimelineOperation::Submit, arg, tag } => 
-                        Self::Submit { info, dest: lhs[0].0.clone(),
-                            src: enum_cast!(SchedTerm::Var {name, .. }, name, enum_cast!(SchedExpr::Term, *arg)), 
-                            tags: TripleTag::from_opt(&tag) }
-                        ,
-                    SchedTerm::TimelineOperation { info, op: TimelineOperation::Await, arg, tag } => {
-                        let arg_name = enum_cast!(SchedTerm::Var {name, .. }, name, enum_cast!(SchedExpr::Term, *arg));
-                        Self::Sync { info, dests: FillIn::Initial((lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))), 
-                            srcs: FillIn::Initial(arg_name), tags: TripleTag::from_opt(&tag) }
-                    },
-                    SchedTerm::EncodeBegin { info, device, tag, defs } => {
-                        Self::BeginEncoding {
-                            info,
-                            device,
-                            device_vars: defs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                            tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
-                            encoder: (lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1)),
-                            active_fences: vec![],
-                        }
-                    },
-                    _ => Self::ConstDecl {
+            SchedExpr::Term(rhs) => match rhs {
+                SchedTerm::Call(info, call) => {
+                    let target = enum_cast!(
+                        SchedTerm::Var { name, .. },
+                        name,
+                        enum_cast!(SchedExpr::Term, &*call.target)
+                    );
+                    Self::Op {
                         info,
-                        lhs: lhs[0].0.clone(),
-                        lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                        rhs: HirTerm::try_from(rhs).unwrap(),
+                        dests: lhs
+                            .into_iter()
+                            .map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags)))
+                            .collect(),
+                        op: HirOp::External(target.clone()),
+                        args: call
+                            .args
+                            .iter()
+                            .map(|x| {
+                                HirTerm::try_from(enum_cast!(SchedExpr::Term, x).clone()).unwrap()
+                            })
+                            .collect(),
                     }
                 }
+                SchedTerm::TimelineOperation {
+                    info,
+                    op: TimelineOperation::Submit,
+                    arg,
+                    tag,
+                } => Self::Submit {
+                    info,
+                    dest: lhs[0].0.clone(),
+                    src: enum_cast!(
+                        SchedTerm::Var { name, .. },
+                        name,
+                        enum_cast!(SchedExpr::Term, *arg)
+                    ),
+                    tags: TripleTag::from_opt(&tag),
+                },
+                SchedTerm::TimelineOperation {
+                    info,
+                    op: TimelineOperation::Await,
+                    arg,
+                    tag,
+                } => {
+                    let arg_name = enum_cast!(
+                        SchedTerm::Var { name, .. },
+                        name,
+                        enum_cast!(SchedExpr::Term, *arg)
+                    );
+                    Self::Sync {
+                        info,
+                        dests: FillIn::Initial((
+                            lhs[0].0.clone(),
+                            TripleTag::from_fulltype_opt(&lhs[0].1),
+                        )),
+                        srcs: FillIn::Initial(arg_name),
+                        tags: TripleTag::from_opt(&tag),
+                    }
+                }
+                SchedTerm::EncodeBegin {
+                    info,
+                    device,
+                    tag,
+                    defs,
+                } => Self::BeginEncoding {
+                    info,
+                    device,
+                    device_vars: defs
+                        .into_iter()
+                        .map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags)))
+                        .collect(),
+                    tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
+                    encoder: (lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1)),
+                    active_fences: vec![],
+                },
+                _ => Self::ConstDecl {
+                    info,
+                    lhs: lhs[0].0.clone(),
+                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                    rhs: HirTerm::try_from(rhs).unwrap(),
+                },
             },
-            SchedExpr::Binop { info, op: Binop::Dot, lhs: op_lhs, rhs: op_rhs} => {
+            SchedExpr::Binop {
+                info,
+                op: Binop::Dot,
+                lhs: op_lhs,
+                rhs: op_rhs,
+            } => {
                 assert_eq!(lhs.len(), 1);
-                let op_lhs_name = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *op_lhs));
-                let rhs_name = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *op_rhs));
+                let op_lhs_name = enum_cast!(
+                    SchedTerm::Var { name, .. },
+                    name,
+                    enum_cast!(SchedExpr::Term, *op_lhs)
+                );
+                let rhs_name = enum_cast!(
+                    SchedTerm::Var { name, .. },
+                    name,
+                    enum_cast!(SchedExpr::Term, *op_rhs)
+                );
                 Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
@@ -864,7 +1027,7 @@ impl HirBody {
                         name: format!("{op_lhs_name}::{rhs_name}"),
                         tag: TripleTag::new_unspecified(),
                         info,
-                    }
+                    },
                 }
             }
             SchedExpr::Binop {
@@ -878,38 +1041,53 @@ impl HirBody {
                 assert_eq!(lhs.len(), 1);
                 Self::Op {
                     info,
-                    dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
+                    dests: lhs
+                        .into_iter()
+                        .map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags)))
+                        .collect(),
                     op: HirOp::Binary(FillIn::Initial(op)),
-                    args: vec![HirTerm::try_from(lhs_term.clone()).unwrap(), HirTerm::try_from(rhs_term.clone()).unwrap()],
+                    args: vec![
+                        HirTerm::try_from(lhs_term.clone()).unwrap(),
+                        HirTerm::try_from(rhs_term.clone()).unwrap(),
+                    ],
                 }
-            },
-            SchedExpr::Uop { 
-                info, op, expr
-            } => {
+            }
+            SchedExpr::Uop { info, op, expr } => {
                 let term = enum_cast!(SchedExpr::Term, *expr);
                 assert_eq!(lhs.len(), 1);
                 Self::Op {
                     info,
-                    dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
+                    dests: lhs
+                        .into_iter()
+                        .map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags)))
+                        .collect(),
                     op: HirOp::Unary(FillIn::Initial(op)),
                     args: vec![HirTerm::try_from(term).unwrap()],
                 }
-            },
-            SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
+            }
+            SchedExpr::Conditional { .. } => {
+                panic!("Inline conditonal expresssions not allowed in schedule")
+            }
         }
     }
-
 }
 impl Hir for HirBody {
     fn get_info(&self) -> Info {
         match self {
-            Self::RefStore { info, .. } | Self::RefLoad { info, .. } 
-            | Self::DeviceCopy { info, .. } | Self::BeginEncoding { info, .. } 
-            | Self::EncodeDo { info, .. } 
-            | Self::Submit { info, .. } | Self::ConstDecl { info, .. } 
-            | Self::VarDecl { info, .. } | Self::Hole(info) | Self::Op { info, .. } 
-            | Self::InAnnotation(info, ..) | Self::OutAnnotation(info, ..) 
-            | Self::Phi { info, .. } | Self::Sync { info, ..} => *info,
+            Self::RefStore { info, .. }
+            | Self::RefLoad { info, .. }
+            | Self::DeviceCopy { info, .. }
+            | Self::BeginEncoding { info, .. }
+            | Self::EncodeDo { info, .. }
+            | Self::Submit { info, .. }
+            | Self::ConstDecl { info, .. }
+            | Self::VarDecl { info, .. }
+            | Self::Hole { info, .. }
+            | Self::Op { info, .. }
+            | Self::InAnnotation(info, ..)
+            | Self::OutAnnotation(info, ..)
+            | Self::Phi { info, .. }
+            | Self::Sync { info, .. } => *info,
         }
     }
     fn get_uses(&self, res: &mut BTreeSet<String>) {
@@ -936,11 +1114,21 @@ impl Hir for HirBody {
                     term_get_uses(arg, res);
                 }
             }
-            Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) | Self::BeginEncoding { .. } => (),
-            Self::Phi {inputs, ..} => {
+            Self::Hole { uses, .. } => {
+                for u in uses.processed() {
+                    res.insert(u.clone());
+                }
+            }
+            Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::BeginEncoding { .. } => (),
+            Self::Phi { inputs, .. } => {
                 res.extend(inputs.iter().map(|(_, name)| name.clone()));
             }
-            Self::EncodeDo { dests, func, encoder, ..} => {
+            Self::EncodeDo {
+                dests,
+                func,
+                encoder,
+                ..
+            } => {
                 for arg in &func.args {
                     if let Hole::Filled(arg) = arg {
                         res.insert(arg.clone());
@@ -955,110 +1143,123 @@ impl Hir for HirBody {
                 }
                 res.insert(encoder.clone());
             }
-            Self::DeviceCopy { dest, src, encoder, .. } => {
+            Self::DeviceCopy {
+                dest, src, encoder, ..
+            } => {
                 res.insert(dest.clone());
                 res.extend(src.get_uses());
                 res.insert(encoder.clone());
             }
-            Self::Sync { srcs, .. } => {
-                match srcs {
-                    FillIn::Initial(name) => {
-                        res.insert(name.clone());
-                    }
-                    FillIn::Processed(srcs) => {
-                        res.extend(srcs.iter().cloned());
-                    }
+            Self::Sync { srcs, .. } => match srcs {
+                FillIn::Initial(name) => {
+                    res.insert(name.clone());
                 }
-            }
-            
+                FillIn::Processed(srcs) => {
+                    res.extend(srcs.iter().cloned());
+                }
+            },
         }
     }
 
     fn get_write_uses(&self) -> Option<Vec<String>> {
         match self {
-            Self::RefStore { lhs, ..} => Some(vec![lhs.clone()]),
-            Self::EncodeDo { dests, ..} => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
+            Self::RefStore { lhs, .. } => Some(vec![lhs.clone()]),
+            Self::EncodeDo { dests, .. } => {
+                Some(dests.iter().map(|(name, _)| name.clone()).collect())
+            }
             Self::DeviceCopy { dest, .. } => Some(vec![dest.clone()]),
-            Self::ConstDecl { .. } | Self::VarDecl { .. } | Self::RefLoad { .. } 
-            | Self::Op { .. } | Self::Hole(..) | Self::InAnnotation(..) 
-            | Self::OutAnnotation(..) | Self::BeginEncoding { .. } 
+            Self::ConstDecl { .. }
+            | Self::VarDecl { .. }
+            | Self::RefLoad { .. }
+            | Self::Op { .. }
+            | Self::Hole { .. }
+            | Self::InAnnotation(..)
+            | Self::OutAnnotation(..)
+            | Self::BeginEncoding { .. }
             | Self::Phi { .. }
-            | Self::Submit { .. } 
-            |Self::Sync { .. } => None,
+            | Self::Submit { .. }
+            | Self::Sync { .. } => None,
         }
     }
 
     fn get_defs(&self) -> Option<Vec<String>> {
         match self {
-            Self::ConstDecl { lhs,  .. } | Self::VarDecl { lhs, .. } 
-            | Self::RefLoad { dest: lhs, ..} | 
-            Self::Phi { dest: lhs, ..} => {
-                Some(vec![lhs.clone()])
-            }
-            Self::Op { dests, ..} => {
+            Self::ConstDecl { lhs, .. }
+            | Self::VarDecl { lhs, .. }
+            | Self::RefLoad { dest: lhs, .. }
+            | Self::Phi { dest: lhs, .. } => Some(vec![lhs.clone()]),
+            Self::Op { dests, .. } | Self::Hole { dests, .. } => {
                 Some(dests.iter().map(|(name, _)| name.clone()).collect())
             }
-            Self::BeginEncoding { device_vars, encoder, .. } => {
-                let mut res = device_vars.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>();
+            Self::BeginEncoding {
+                device_vars,
+                encoder,
+                ..
+            } => {
+                let mut res = device_vars
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>();
                 res.push(encoder.0.clone());
                 Some(res)
-                
             }
-            Self::Submit { dest, ..} => Some(vec![dest.clone()]),
+            Self::Submit { dest, .. } => Some(vec![dest.clone()]),
             Self::Sync { dests, .. } => match dests {
                 FillIn::Initial((name, _)) => Some(vec![name.clone()]),
-                FillIn::Processed(dests) => Some(dests.iter().map(|(name, _)| name.clone()).collect()),
-            }
-            Self::Hole(..)
+                FillIn::Processed(dests) => {
+                    Some(dests.iter().map(|(name, _)| name.clone()).collect())
+                }
+            },
             // RefStore doesn't have a def bc it's a store to a reference
-            | Self::RefStore { .. }
+            Self::RefStore { .. }
             | Self::InAnnotation(..)
-            | Self::OutAnnotation(..) 
+            | Self::OutAnnotation(..)
             | Self::DeviceCopy { .. }
-            | Self::EncodeDo {..} => None,
+            | Self::EncodeDo { .. } => None,
         }
     }
 
     fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
         match self {
-            Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } 
-            | Self::RefLoad { dest: lhs, ..} |
-            Self::Phi { dest: lhs, ..} => {
+            Self::ConstDecl { lhs, .. }
+            | Self::VarDecl { lhs, .. }
+            | Self::RefLoad { dest: lhs, .. }
+            | Self::Phi { dest: lhs, .. } => {
                 *lhs = f(lhs);
             }
-            Self::Op { dests, ..} => {
+            Self::Op { dests, .. } | Self::Hole { dests, .. } => {
                 for (name, _) in dests {
                     *name = f(name);
                 }
             }
-            Self::BeginEncoding { device_vars, encoder, ..  } => {
+            Self::BeginEncoding {
+                device_vars,
+                encoder,
+                ..
+            } => {
                 for (name, _) in device_vars {
                     *name = f(name);
                 }
                 *encoder = (f(&encoder.0), encoder.1.clone());
             }
-            Self::Submit { dest, ..} => {
+            Self::Submit { dest, .. } => {
                 *dest = f(dest);
-                
             }
-            Self::Sync { dests, ..} => {
-                match dests {
-                    FillIn::Initial((name, _)) => {
+            Self::Sync { dests, .. } => match dests {
+                FillIn::Initial((name, _)) => {
+                    *name = f(name);
+                }
+                FillIn::Processed(dests) => {
+                    for (name, _) in dests {
                         *name = f(name);
                     }
-                    FillIn::Processed(dests) => {
-                        for (name, _) in dests {
-                            *name = f(name);
-                        }
-                    }
                 }
-            }
-            Self::Hole(..)
-            | Self::RefStore { .. }
+            },
+            Self::RefStore { .. }
             | Self::InAnnotation(..)
-            | Self::OutAnnotation(..) 
-            | Self::EncodeDo {..} 
-            | Self::DeviceCopy {..}=> (),
+            | Self::OutAnnotation(..)
+            | Self::EncodeDo { .. }
+            | Self::DeviceCopy { .. } => (),
         }
     }
 
@@ -1076,26 +1277,33 @@ impl Hir for HirBody {
                     term_rename_uses(arg, &mut |name| f(name, UseType::Read));
                 }
             }
-            Self::RefLoad { src, .. } | Self::Submit { src, ..} => {
+            Self::RefLoad { src, .. } | Self::Submit { src, .. } => {
                 *src = f(src, UseType::Read);
             }
             Self::Phi { .. } => {
                 // don't rename uses of phi nodes
-            },
+            }
             Self::InAnnotation(_, annots) | Self::OutAnnotation(_, annots) => {
                 for (name, _) in annots {
                     *name = f(name, UseType::Read);
                 }
             }
-            Self::DeviceCopy { src, dest, encoder, ..} => {
+            Self::DeviceCopy {
+                src, dest, encoder, ..
+            } => {
                 src.rename_uses(UseType::Read, f);
                 *dest = f(dest, UseType::Write);
                 *encoder = f(encoder, UseType::Read);
             }
-            Self::EncodeDo { func, encoder, dests, ..} => {
+            Self::EncodeDo {
+                func,
+                encoder,
+                dests,
+                ..
+            } => {
                 for arg in &mut func.args {
                     if let Hole::Filled(arg) = arg {
-                         *arg = f(arg, UseType::Read);
+                        *arg = f(arg, UseType::Read);
                     }
                 }
                 for (dest, _) in dests {
@@ -1108,28 +1316,29 @@ impl Hir for HirBody {
                 }
                 *encoder = f(encoder, UseType::Read);
             }
-            Self::Sync { srcs, ..} => {
-                match srcs {
-                    FillIn::Initial(src) => {
+            Self::Sync { srcs, .. } => match srcs {
+                FillIn::Initial(src) => {
+                    *src = f(src, UseType::Read);
+                }
+                FillIn::Processed(srcs) => {
+                    for src in srcs {
                         *src = f(src, UseType::Read);
                     }
-                    FillIn::Processed(srcs) => {
-                        for src in srcs {
-                            *src = f(src, UseType::Read);
-                        }
-                    }
+                }
+            },
+            Self::Hole { uses, .. } => {
+                for u in uses.processed_mut() {
+                    *u = f(u, UseType::Read);
                 }
             }
-            Self::Hole(..)
-            | Self::VarDecl { rhs: None, .. } 
-            | Self::BeginEncoding { .. } => (),
+            Self::VarDecl { rhs: None, .. } | Self::BeginEncoding { .. } => (),
         }
     }
 }
 
 /// Convert a list of `SchedStmts` to a list of Hirs
 #[allow(clippy::module_name_repetitions)]
-pub fn stmts_to_hir(stmts: Vec<SchedStmt>, ) -> Vec<HirBody> {
+pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<HirBody> {
     stmts.into_iter().map(HirBody::new).collect()
 }
 
@@ -1139,10 +1348,10 @@ fn term_get_uses(t: &HirTerm, res: &mut BTreeSet<String>) {
         HirTerm::Var { name, .. } => {
             res.insert(name.clone());
         }
-        HirTerm::Hole {uses, ..} => {
+        HirTerm::Hole { uses, .. } => {
             res.extend(uses.processed().iter().cloned());
         }
-        HirTerm::Lit { ..} => {}
+        HirTerm::Lit { .. } => {}
     }
 }
 
@@ -1151,7 +1360,7 @@ fn term_rename_uses(t: &mut HirTerm, f: &mut dyn FnMut(&str) -> String) {
     match t {
         HirTerm::Var { name, .. } => *name = f(name),
         HirTerm::Lit { .. } => (),
-        HirTerm::Hole { uses, ..} => {
+        HirTerm::Hole { uses, .. } => {
             for u in uses.processed_mut() {
                 *u = f(u);
             }

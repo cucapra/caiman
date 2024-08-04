@@ -388,6 +388,7 @@ SchedCallStmt: SchedFuncCall = {
 #[inline]
 SchedAtom<L>: SchedTerm = {
     <@L> "?" <@R> => astf.sched_hole_expr(<>),
+    <@L> "???" <@R> => astf.sched_big_hole_expr(<>),
     <@L> <Id> <TagOp?> <@R> => astf.sched_var(<>),
     <l: @L> <s: r"_dim[0-9]"> <k: TagOp?> <r: @R> => astf.sched_var(l, s.to_string(), k, r),
     <@L> <L> <TagOp?> <@R> => astf.sched_lit(<>),

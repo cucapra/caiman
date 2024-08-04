@@ -56,9 +56,6 @@ pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
     type_info: analysis::InOutFacts<TagAnalysis>,
-    /// Mapping from variable names to their local type. The local type of a variable
-    /// is a reference
-    // types: HashMap<String, asm::TypeId>,
     /// Mapping from variable names to their data type
     data_types: HashMap<String, DataType>,
     finfo: FuncInfo,
@@ -419,7 +416,7 @@ impl<'a> Funclet<'a> {
     /// the data type of a variable will be the data type of the value,
     /// not a reference data type
     #[inline]
-    fn get_dtype(&self, var: &str) -> Option<&DataType> {
+    pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
     }
 

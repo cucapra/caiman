@@ -237,8 +237,15 @@ fn collect_seq_body(
         SchedStmt::If {
             true_block,
             false_block,
+            guard,
+            info,
             ..
         } => {
+            if let Hole::Filled(guard_name) =
+                enum_cast!(SchedExpr::Term, guard).hole_or_var().unwrap()
+            {
+                env.add_dtype_constraint(guard_name, DataType::Bool, *info)?;
+            }
             let true_rets =
                 collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
             let false_rets =
@@ -583,12 +590,12 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
         match stmt {
             SchedStmt::Decl {
                 lhs: dest,
-                expr: None | Some(SchedExpr::Term(SchedTerm::Hole(_))),
+                expr: None | Some(SchedExpr::Term(SchedTerm::Hole { .. })),
                 info,
                 ..
             } => collect_null_decl(env, dest, *info)?,
             SchedStmt::Assign {
-                rhs: SchedExpr::Term(SchedTerm::Hole(_)),
+                rhs: SchedExpr::Term(SchedTerm::Hole { .. }),
                 ..
             }
             | SchedStmt::InEdgeAnnotation { .. }
@@ -697,7 +704,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                         }
                         return Ok(ret_names);
                     }
-                    SchedExpr::Term(SchedTerm::Hole(_)) => {
+                    SchedExpr::Term(SchedTerm::Hole { .. }) => {
                         return Ok(vec![Hole::Empty]);
                     }
                     _ => unreachable!(),

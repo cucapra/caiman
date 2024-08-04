@@ -603,7 +603,10 @@ pub enum SchedTerm {
         tag: Option<Tags>,
     },
     Call(Info, SchedFuncCall),
-    Hole(Info),
+    Hole {
+        info: Info,
+        can_generate_code: bool,
+    },
     TimelineOperation {
         info: Info,
         op: TimelineOperation,
@@ -626,7 +629,7 @@ impl HasInfo for SchedTerm {
             | Self::Var { info, .. }
             | Self::TimelineOperation { info, .. }
             | Self::EncodeBegin { info, .. }
-            | Self::Hole(info) => *info,
+            | Self::Hole { info, .. } => *info,
         }
     }
 }
@@ -640,7 +643,7 @@ impl SchedTerm {
             | Self::TimelineOperation { tag, .. }
             | Self::EncodeBegin { tag, .. } => tag.as_ref(),
             Self::Call(_, call) => call.tag.as_ref(),
-            Self::Hole(_) => None,
+            Self::Hole { .. } => None,
         }
     }
 
@@ -649,7 +652,7 @@ impl SchedTerm {
     #[must_use]
     pub const fn hole_or_var(&self) -> Option<Hole<&String>> {
         match self {
-            Self::Hole(_) => Some(Hole::Empty),
+            Self::Hole { .. } => Some(Hole::Empty),
             Self::Var { name, .. } => Some(Hole::Filled(name)),
             _ => None,
         }

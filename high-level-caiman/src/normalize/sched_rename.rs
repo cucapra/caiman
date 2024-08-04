@@ -263,7 +263,7 @@ fn rename_expr_uses(expr: &mut SchedExpr, cur_names: &HashMap<String, u64>) {
             }
         }
         SchedExpr::Term(
-            SchedTerm::Lit { .. } | SchedTerm::Hole(_) | SchedTerm::EncodeBegin { .. },
+            SchedTerm::Lit { .. } | SchedTerm::Hole { .. } | SchedTerm::EncodeBegin { .. },
         ) => {}
         SchedExpr::Term(SchedTerm::TimelineOperation { arg, .. }) => {
             rename_expr_uses(arg, cur_names);

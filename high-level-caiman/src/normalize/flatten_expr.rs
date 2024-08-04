@@ -599,7 +599,30 @@ fn flatten_sched_term(
                 }),
             )
         }
-        x @ SchedTerm::Hole(_) => (vec![], temp_num, NestedExpr::Term(x)),
+        x @ SchedTerm::Hole {
+            can_generate_code: false,
+            ..
+        } => (vec![], temp_num, NestedExpr::Term(x)),
+        SchedTerm::Hole {
+            info,
+            can_generate_code: true,
+        } => (
+            vec![SchedStmt::Decl {
+                info,
+                lhs: vec![(format!("_h{temp_num}"), None)],
+                is_const: true,
+                expr: Some(NestedExpr::Term(SchedTerm::Hole {
+                    info,
+                    can_generate_code: true,
+                })),
+            }],
+            temp_num + 1,
+            NestedExpr::Term(SchedTerm::Var {
+                info,
+                name: format!("_h{temp_num}"),
+                tag: None,
+            }),
+        ),
     }
 }
 
