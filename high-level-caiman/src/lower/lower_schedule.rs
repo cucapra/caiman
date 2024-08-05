@@ -9,7 +9,6 @@ use caiman::explication::Hole;
 
 use crate::error::Info;
 use crate::{
-    enum_cast,
     error::{type_error, LocalError},
     lower::IN_STEM,
     parse::ast::{self, DataType, Flow, SchedulingFunc, SpecType, Tag},
@@ -35,9 +34,16 @@ fn temp_var_name(temp_id: usize) -> String {
     format!("_t{temp_id}")
 }
 
-/// Constructs a copy from `src` to `dest` using either a local copy or a local
-/// do builtin, depending on whether `src` is atomic in the value spec.
-fn build_copy_cmd(dest: &str, src: &HirTerm, f: &Funclet, backup_tag: &TripleTag) -> asm::Command {
+/// Constructs a copy from `src` to `dest` using either a local copy, local
+/// do builtin or write ref, depending on whether `src` is atomic in the value spec
+/// and whether `dest` is a value or reference type
+fn build_copy_cmd(
+    dest: &str,
+    dest_type: Option<&DataType>,
+    src: &HirTerm,
+    f: &Funclet,
+    backup_tag: &TripleTag,
+) -> asm::Command {
     // returns a remote id if the value remote id has been specified, else `None`
     let get_tag_opt = |t: &TripleTag| {
         if t.value.quot_var.spec_var.is_some() || t.value.quot.is_some() {
@@ -62,32 +68,58 @@ fn build_copy_cmd(dest: &str, src: &HirTerm, f: &Funclet, backup_tag: &TripleTag
             });
         }
     }
-    if let HirTerm::Lit { info, lit, .. } = src {
-        panic!(
-            "{info}: Missing or mismatched tags for literal value {lit:#?}\nQuotient: {val_quot:#?}",
-        );
-    }
-    let src = enum_cast!(HirTerm::Var { name, .. }, name, src);
-    if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
-        asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::LocalCopy {
-                input: Hole::Filled(asm::NodeId(src.clone())),
-                output: Hole::Filled(asm::NodeId(dest.to_string())),
-            },
-        })
-    } else {
-        asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::WriteRef {
-                source: Hole::Filled(asm::NodeId(src.clone())),
-                destination: Hole::Filled(asm::NodeId(dest.to_string())),
-                storage_type: Hole::Filled(
-                    f.get_storage_type(dest)
-                        .unwrap_or_else(|| f.get_storage_type(src).unwrap()),
-                ),
-            },
-        })
+    match src {
+        HirTerm::Lit { info, lit, .. } => {
+            panic!(
+                "{info}: Missing or mismatched tags for literal value {lit:#?}\nQuotient: {val_quot:#?}",
+            );
+        }
+        HirTerm::Var { name: src, .. } => {
+            if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::LocalCopy {
+                        input: Hole::Filled(asm::NodeId(src.clone())),
+                        output: Hole::Filled(asm::NodeId(dest.to_string())),
+                    },
+                })
+            } else {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::WriteRef {
+                        source: Hole::Filled(asm::NodeId(src.clone())),
+                        destination: Hole::Filled(asm::NodeId(dest.to_string())),
+                        storage_type: Hole::Filled(
+                            f.get_storage_type(dest)
+                                .unwrap_or_else(|| f.get_storage_type(src).unwrap()),
+                        ),
+                    },
+                })
+            }
+        }
+        HirTerm::Hole { info, .. } => {
+            if matches!(
+                dest_type.unwrap_or_else(|| panic!("{info}: {dest} needs a type annotation")),
+                DataType::Ref(_)
+            ) {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::LocalCopy {
+                        input: Hole::Empty,
+                        output: Hole::Filled(asm::NodeId(dest.to_string())),
+                    },
+                })
+            } else {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::WriteRef {
+                        source: Hole::Empty,
+                        destination: Hole::Filled(asm::NodeId(dest.to_string())),
+                        storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
+                    },
+                })
+            }
+        }
     }
 }
 
@@ -111,7 +143,7 @@ fn lower_flat_decl(
             storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
         },
     });
-    let mv = build_copy_cmd(&temp_node_name, rhs, f, dest_tag);
+    let mv = build_copy_cmd(&temp_node_name, f.get_var_dtype(dest), rhs, f, dest_tag);
     let rd_ref = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
@@ -129,7 +161,7 @@ fn lower_flat_decl(
 fn lower_var_decl(
     dest: &str,
     dest_tag: &TripleTag,
-    rhs: &Option<HirTerm>,
+    rhs: Option<&HirTerm>,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -142,7 +174,13 @@ fn lower_var_decl(
         },
     }))];
     if let Some(rhs) = rhs {
-        result.push(Hole::Filled(build_copy_cmd(dest, rhs, f, dest_tag)));
+        result.push(Hole::Filled(build_copy_cmd(
+            dest,
+            f.get_var_dtype(dest),
+            rhs,
+            f,
+            dest_tag,
+        )));
     }
     (result, temp_id)
 }
@@ -156,7 +194,13 @@ fn lower_store(
     f: &Funclet,
 ) -> (CommandVec, usize) {
     (
-        vec![Hole::Filled(build_copy_cmd(lhs, rhs, f, lhs_tags))],
+        vec![Hole::Filled(build_copy_cmd(
+            lhs,
+            f.get_var_dtype(lhs),
+            rhs,
+            f,
+            lhs_tags,
+        ))],
         temp_id,
     )
 }
@@ -556,10 +600,16 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
     match s {
         HirBody::ConstDecl {
             lhs, rhs, lhs_tag, ..
-        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f),
+        } => {
+            if f.is_var_or_ref(lhs) {
+                lower_var_decl(lhs, lhs_tag, Some(rhs), temp_id, f)
+            } else {
+                lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f)
+            }
+        }
         HirBody::VarDecl {
             lhs, lhs_tag, rhs, ..
-        } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
+        } => lower_var_decl(lhs, lhs_tag, rhs.as_ref(), temp_id, f),
         HirBody::RefStore {
             lhs, rhs, lhs_tags, ..
         } => lower_store(lhs, lhs_tags, rhs, temp_id, f),

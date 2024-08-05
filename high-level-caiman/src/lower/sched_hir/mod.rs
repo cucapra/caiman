@@ -56,7 +56,8 @@ pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
     type_info: analysis::InOutFacts<TagAnalysis>,
-    /// Mapping from variable names to their data type
+    /// Mapping from variable names to their data type. Note that a mutable
+    /// will be stored as a reference type
     data_types: HashMap<String, DataType>,
     finfo: FuncInfo,
     specs: Rc<Specs>,
@@ -65,7 +66,9 @@ pub struct Funclets {
     captured_out: HashMap<usize, BTreeSet<String>>,
     /// Set of value quotients which are literals in the value specification
     literal_value_classes: HashSet<String>,
-    /// Set of variables used in the schedule
+    /// Set of mutables used in the schedule. This set includes the frontend names
+    /// of mutables and the `_ref` suffixed versions which actually stor
+    /// the mutables' dat in the HIR
     variables: HashSet<String>,
     /// Mapping from device variable to its buffer flags
     flags: HashMap<String, ir::BufferFlags>,
@@ -412,12 +415,26 @@ impl<'a> Funclet<'a> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 
-    /// Gets the data type of the specified variable. Note that
-    /// the data type of a variable will be the data type of the value,
-    /// not a reference data type
+    /// Gets the data type of the specified variable or constant. Note that
+    /// the data type of a mutable will be a reference type.
     #[inline]
     pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
+    }
+
+    /// Gets the data type of the specified variable or constant. If the specified
+    /// name is the name of a mutable variable, then this function will "unwrap",
+    /// the reference type of the variable and return the type of the mutable data.
+    pub fn get_var_dtype(&self, var: &str) -> Option<&DataType> {
+        if self.parent.variables.contains(var) {
+            match self.get_dtype(var) {
+                Some(DataType::Ref(r)) => Some(r),
+                None => None,
+                _ => panic!("Variable does not have reference type"),
+            }
+        } else {
+            self.get_dtype(var)
+        }
     }
 
     #[inline]
@@ -668,7 +685,9 @@ impl Funclets {
     /// * `f` - The scheduling function information to collect types from
     /// # Returns
     /// A tuple of the map of variable names to their local types and the map of
-    /// variable names to their data types, and a set of mutable variables
+    /// variable names to their data types, and a set of mutable variables, including
+    /// the `_ref` suffixed versions which are the actual reference storing the variable's
+    /// data
     #[allow(clippy::type_complexity)]
     fn collect_types(
         f: &SchedInfo,
@@ -685,6 +704,7 @@ impl Funclets {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
+                variables.insert(format!("_{var}_ref"));
             }
         }
         for (id, out_ty) in cur_outputs.iter().enumerate() {

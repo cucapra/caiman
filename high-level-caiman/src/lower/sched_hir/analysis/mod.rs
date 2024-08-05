@@ -20,6 +20,7 @@ use super::{
     HirBody, Terminator,
 };
 
+use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
 pub use op_transform::op_transform_pass;
 pub use quot::deduce_tmln_quots;
@@ -491,10 +492,16 @@ impl Fact for ReachingDefs {
                     }
                 }
                 if let Terminator::Call(dests, func) = x {
-                    for arg in func.args.iter().filter_map(|x| x.as_ref().opt()) {
-                        // arguments that are consumed are also no longer reachable
-                        if !self.variables.contains(arg) {
-                            self.kill_set.insert(arg.clone());
+                    for arg in &func.args {
+                        if let Hole::Filled(arg) = arg {
+                            // arguments that are consumed are also no longer reachable
+                            if !self.variables.contains(arg) {
+                                self.kill_set.insert(arg.clone());
+                            }
+                        } else {
+                            // If we use `?` in a function argument, we have to kill everything because
+                            // we don't know what might be consumed here.
+                            self.kill_set.extend(self.available_set.iter().cloned());
                         }
                     }
                     for (dest, _) in dests {

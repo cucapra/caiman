@@ -292,12 +292,15 @@ pub enum HirBody {
         lhs_tag: TripleTag,
         rhs: Option<HirTerm>,
     },
+    /// A hole, which may have one or more definitions if a hole is on the RHS
+    /// of a declaration.
     Hole {
         dests: Vec<(String, TripleTag)>,
         info: Info,
+        /// all the variables that the hole might use. Filled in by reaching defs
         uses: FillIn<(), Vec<String>>,
     },
-    /// External operation (performs a const decl for the destinations)
+    /// External pure operation (performs a const decl for the destinations)
     Op {
         info: Info,
         dests: Vec<(Name, TripleTag)>,
