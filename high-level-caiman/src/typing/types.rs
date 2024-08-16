@@ -46,6 +46,19 @@ pub enum RecordConstraint {
     Any,
 }
 
+impl TryFrom<DTypeConstraint> for RecordConstraint {
+    type Error = String;
+
+    fn try_from(value: DTypeConstraint) -> Result<Self, Self::Error> {
+        match value {
+            DTypeConstraint::Any => Ok(Self::Any),
+            DTypeConstraint::Var(s) => Ok(Self::Var(s)),
+            DTypeConstraint::Record(r) => Ok(r),
+            x => Err(format!("Unexpected constraint {x:?}")),
+        }
+    }
+}
+
 /// A high-level data type constraint. Holes in a data type
 /// constraint are universally quantified. To get multiple
 /// copies of the same constraint, clone the constraint
@@ -308,6 +321,48 @@ impl TryFrom<DTypeConstraint> for DataType {
                     write,
                 })
             }
+            DTypeConstraint::RemoteObj {
+                all: RecordConstraint::Any,
+                read: RecordConstraint::Record { fields: read, .. },
+                write: RecordConstraint::Record { fields: write, .. },
+            } => {
+                let mut all = Vec::new();
+                for (r, dt) in &read {
+                    if write.get(r) != Some(dt) {
+                        return Err(());
+                    }
+                    all.push((r.clone(), Self::try_from(dt.clone())?));
+                }
+                for (w, dt) in &write {
+                    all.push((w.clone(), Self::try_from(dt.clone())?));
+                }
+                let read = read.into_keys().collect();
+                let write = write.into_keys().collect();
+                Ok(Self::RemoteObj { all, read, write })
+            }
+            DTypeConstraint::RemoteObj {
+                all: RecordConstraint::Any,
+                read: RecordConstraint::Any,
+                write: RecordConstraint::Record { fields, .. },
+            }
+            | DTypeConstraint::RemoteObj {
+                all: RecordConstraint::Any,
+                write: RecordConstraint::Any,
+                read: RecordConstraint::Record { fields, .. },
+            } => {
+                let all = fields
+                    .iter()
+                    .map(|(nm, constraint)| {
+                        (nm.clone(), Self::try_from(constraint.clone()).unwrap())
+                    })
+                    .collect();
+                let rw: BTreeSet<_> = fields.into_keys().collect();
+                Ok(Self::RemoteObj {
+                    all,
+                    read: rw.clone(),
+                    write: rw,
+                })
+            }
             DTypeConstraint::Encoder(typ) => {
                 Ok(Self::Encoder(Some(Box::new(Self::try_from(*typ)?))))
             }
@@ -395,13 +450,11 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                 let write = Self::try_from(v.pop().unwrap())?;
                 let read = Self::try_from(v.pop().unwrap())?;
                 let all = Self::try_from(v.pop().unwrap())?;
-                if let (Self::Record(all), Self::Record(read), Self::Record(write)) =
-                    (all, read, write)
-                {
-                    Ok(Self::RemoteObj { all, read, write })
-                } else {
-                    Err("RemoteObj constraint should have record children".to_string())
-                }
+                Ok(Self::RemoteObj {
+                    all: RecordConstraint::try_from(all)?,
+                    read: RecordConstraint::try_from(read)?,
+                    write: RecordConstraint::try_from(write)?,
+                })
             }
             Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
             Constraint::Atom(ADataType::SpecFence) => Ok(Self::SpecFence),

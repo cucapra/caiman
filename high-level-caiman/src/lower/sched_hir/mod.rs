@@ -437,9 +437,13 @@ impl<'a> Funclet<'a> {
         }
     }
 
+    /// Gets the storage type of the variable. Reference types are unwrapped, to
+    /// get the actual type stored in memory. Returns `None` if `var` does not have
+    /// a data type or if its data type cannot be converted to a storage type
     #[inline]
     pub fn get_storage_type(&self, var: &str) -> Option<asm::FFIType> {
-        self.get_dtype(var).map(DataType::storage_type)
+        let t = self.get_dtype(var);
+        t.and_then(DataType::storage_type)
     }
 
     /// Gets the assembly type for a variable, considering the place of the

@@ -294,7 +294,10 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
                 source: Hole::Filled(asm::NodeId(src.to_string())),
-                storage_type: Hole::Filled(typ.storage_type()),
+                storage_type: Hole::Filled(
+                    typ.storage_type()
+                        .unwrap_or_else(|| panic!("{src} missing storage type")),
+                ),
             },
         }))],
         temp_id,
@@ -487,14 +490,6 @@ fn lower_submit(dest: &str, src: &str, tags: &TripleTag, temp_id: usize) -> (Com
             event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
         },
     });
-    //     FenceOp::Sync => asm::Command::Node(asm::NamedNode {
-    //         name: None,
-    //         node: asm::Node::SyncFence {
-    //             fence: Hole::Filled(asm::NodeId(src)),
-    //             event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
-    //         },
-    //     }),
-    // };
     (vec![Hole::Filled(local_do)], temp_id)
 }
 
@@ -521,7 +516,11 @@ fn lower_sync(
             name: Some(asm::NodeId(t.clone())),
             node: asm::Node::AllocTemporary {
                 place: Hole::Filled(ir::Place::Local),
-                storage_type: Hole::Filled(f.get_storage_type(dest).unwrap().clone()),
+                storage_type: Hole::Filled(
+                    f.get_storage_type(dest)
+                        .unwrap_or_else(|| panic!("{dest} needs a type annotation"))
+                        .clone(),
+                ),
                 buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
             },
         })));
@@ -545,7 +544,7 @@ fn lower_sync(
 
 fn lower_hole(
     dests: &[(String, TripleTag)],
-    info: Info,
+    _info: Info,
     mut temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -560,32 +559,33 @@ fn lower_hole(
             temp_id += 1;
             n
         };
-        let place = if f.get_flags().contains_key(d) {
-            ir::Place::Gpu
-        } else {
-            ir::Place::Local
-        };
-        let storage_type = Hole::Filled(
-            f.get_storage_type(d)
-                .unwrap_or_else(|| panic!("{info}: {d} needs a type annotation")),
-        );
-        allocations.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(name.clone())),
-            node: asm::Node::AllocTemporary {
-                place: Hole::Filled(place),
-                storage_type: storage_type.clone(),
-                buffer_flags: Hole::Filled(*f.get_flags().get(d).unwrap_or(&LOCAL_TEMP_FLAGS)),
-            },
-        })));
-        if !is_ref {
-            reads.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
-                name: Some(asm::NodeId(d.clone())),
-                node: asm::Node::ReadRef {
-                    storage_type,
-                    source: Hole::Filled(asm::NodeId(name)),
+        if let Some(storage_type) = f.get_storage_type(d) {
+            let place = if f.get_flags().contains_key(d) {
+                ir::Place::Gpu
+            } else {
+                ir::Place::Local
+            };
+            let storage_type = Hole::Filled(storage_type);
+            allocations.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.clone())),
+                node: asm::Node::AllocTemporary {
+                    place: Hole::Filled(place),
+                    storage_type: storage_type.clone(),
+                    buffer_flags: Hole::Filled(*f.get_flags().get(d).unwrap_or(&LOCAL_TEMP_FLAGS)),
                 },
             })));
+            if !is_ref {
+                reads.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(d.clone())),
+                    node: asm::Node::ReadRef {
+                        storage_type,
+                        source: Hole::Filled(asm::NodeId(name)),
+                    },
+                })));
+            }
         }
+        // No storage type, just let the explicator try and figure it out
+        // TODO: is it better to give the explicator a template and a `???` or just a `???`
     }
     allocations.push(Hole::Empty);
     allocations.extend(reads);

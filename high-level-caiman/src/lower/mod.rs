@@ -67,12 +67,13 @@ impl DataType {
 
     /// For types that can be stored in memory, converts a high-level caiman data type
     /// to the caiman assembly type that an allocation would have to store a value
-    /// of this type. References are unwrapped to get the underlying type.
+    /// of this type. References are unwrapped to get the underlying type. 
+    /// Returns `None` otherwise.
     #[must_use]
-    pub fn storage_type(&self) -> asm::FFIType {
+    pub fn storage_type(&self) -> Option<asm::FFIType> {
         match self {
             Self::Ref(d) => d.storage_type(),
-            _ => self.ffi().unwrap_or_else(|| unimplemented!("Undefined type {self:?}")),
+            _ => self.ffi()
         }
     }
 

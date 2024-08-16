@@ -267,7 +267,9 @@ fn resolve_types(
 ) -> Result<(), LocalError> {
     for name in names.keys() {
         if let Some(dt) = env.env.get_type(name) {
-            if let Ok(dt) = DTypeConstraint::try_from(dt) {
+            //if let Ok(dt) = DTypeConstraint::try_from(dt) {
+            let dt = DTypeConstraint::try_from(dt).unwrap();
+            {
                 if let Ok(dt) = DataType::try_from(dt) {
                     if matches!(&dt, DataType::Ref(inner) if matches!(**inner, DataType::Ref(_)))
                         || (matches!(dt, DataType::Ref(_)) && names[name] == Mutability::Mut)

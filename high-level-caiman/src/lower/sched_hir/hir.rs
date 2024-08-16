@@ -138,6 +138,21 @@ impl TripleTag {
             tag_to_tag(&self.timeline),
         ]
     }
+
+    /// Resets all specs to be unspecified except for the specs in `e`
+    pub fn retain(mut self, e: &[SpecType]) -> Self {
+        const SPECS: [SpecType; 3] = [SpecType::Value, SpecType::Timeline, SpecType::Spatial];
+        for s in SPECS {
+            if !e.contains(&s) {
+                match s {
+                    SpecType::Spatial => self.spatial = Tag::new_unspecified(SpecType::Spatial),
+                    SpecType::Timeline => self.timeline = Tag::new_unspecified(SpecType::Timeline),
+                    SpecType::Value => self.value = Tag::new_unspecified(SpecType::Value),
+                }
+            }
+        }
+        self
+    }
 }
 
 impl From<TripleTag> for Tags {
@@ -1005,6 +1020,22 @@ impl HirBody {
                     rhs: HirTerm::try_from(rhs).unwrap(),
                 },
             },
+            SchedExpr::Binop {
+                info,
+                op: Binop::Dot,
+                lhs: op_lhs,
+                rhs: op_rhs,
+            } if matches!(*op_rhs, SchedExpr::Term(SchedTerm::Hole { .. }))
+                || matches!(*op_lhs, SchedExpr::Term(SchedTerm::Hole { .. })) =>
+            {
+                // TODO: give holes names for typing
+                assert_eq!(lhs.len(), 1);
+                Self::Hole {
+                    dests: vec![(lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))],
+                    info,
+                    uses: FillIn::Initial(()),
+                }
+            }
             SchedExpr::Binop {
                 info,
                 op: Binop::Dot,

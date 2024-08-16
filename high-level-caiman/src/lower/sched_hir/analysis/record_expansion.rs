@@ -124,7 +124,11 @@ impl<'a> EncodeTransform<'a> {
         &self,
         args: T,
     ) -> Vec<(String, TripleTag)> {
-        self.expand_arg_helper(args, |arg, _| self.data_types.get(arg).unwrap())
+        self.expand_arg_helper(args, |arg, _| {
+            self.data_types
+                .get(arg)
+                .unwrap_or_else(|| panic!("Unknown data type for {arg}"))
+        })
     }
 
     /// Expands the return values of a function call based on the signature of the
@@ -348,7 +352,9 @@ impl<'a> Fact for EncodeTransform<'a> {
             HirInstr::Stmt(HirBody::Sync { dests, srcs, .. }) => {
                 dests.process(|(record, rec_tag)| {
                     let dt = self.data_types;
-                    let record_type = dt.get(record).unwrap();
+                    let record_type = dt
+                        .get(record)
+                        .unwrap_or_else(|| panic!("Unknown data type for {record}"));
                     let rt = enum_cast!(DataType::Record, record_type);
                     let mut v: Vec<_> = rt
                         .iter()
@@ -361,7 +367,9 @@ impl<'a> Fact for EncodeTransform<'a> {
                 srcs.process(|src| {
                     let dt = self.data_types;
                     let mut ret = vec![src.clone()];
-                    let src_type = dt.get(src).unwrap();
+                    let src_type = dt
+                        .get(src)
+                        .unwrap_or_else(|| panic!("Unknown data type for {src}"));
                     if let DataType::Fence(Some(t)) = src_type {
                         if let DataType::RemoteObj { read, .. } = &**t {
                             for var in read {

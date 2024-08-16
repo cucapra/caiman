@@ -57,6 +57,18 @@ fn override_none_usable(
     tag
 }
 
+/// Overrides the unknown information in `tag` with `none()-usable` unless
+/// and overrrides the spatial information with `none()-save`
+fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
+    tag.spatial
+        .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
+    tag.timeline
+        .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
+    tag.value
+        .override_unknown_info(none_tag(SpecType::Value, Flow::Usable));
+    tag
+}
+
 /// Overrrides unknown info in `tag` with `none()-save` for spatial,
 /// `none()-usable` for timeline, and `none()-dead` for value
 fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
@@ -309,6 +321,60 @@ impl TagAnalysis {
                             self.flags.get(dest),
                         ),
                     );
+                    let dest_tag = self.tags[dest].clone().retain(&[SpecType::Timeline]);
+                    match self.data_types.get(dest) {
+                        Some(DataType::Encoder(Some(ro))) => {
+                            if let DataType::RemoteObj { all, .. } = &**ro {
+                                for (e, _) in all {
+                                    match self.tags.entry(format!("{dest}::{e}")) {
+                                        Entry::Occupied(mut e) => {
+                                            e.get_mut().override_unknown_info(
+                                                override_defaults_ref(dest_tag.clone()),
+                                            );
+                                        }
+                                        Entry::Vacant(e) => {
+                                            e.insert(override_defaults_ref(dest_tag.clone()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Some(DataType::Fence(Some(ro))) => {
+                            if let DataType::RemoteObj { all, .. } = &**ro {
+                                for (e, _) in all {
+                                    match self.tags.entry(format!("{dest}::{e}")) {
+                                        Entry::Occupied(mut e) => e
+                                            .get_mut()
+                                            .override_unknown_info(override_none_usable_ref(
+                                                TripleTag::new_unspecified(),
+                                            )),
+                                        Entry::Vacant(e) => {
+                                            e.insert(override_none_usable_ref(
+                                                TripleTag::new_unspecified(),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Some(DataType::Record(all)) => {
+                            for (e, t) in all {
+                                match self.tags.entry(format!("{dest}::{e}")) {
+                                    Entry::Occupied(mut e) => e.get_mut().override_unknown_info(
+                                        override_none_usable(TripleTag::new_unspecified(), t, None),
+                                    ),
+                                    Entry::Vacant(e) => {
+                                        e.insert(override_none_usable(
+                                            TripleTag::new_unspecified(),
+                                            t,
+                                            None,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
                 }
             }
             HirBody::Op { dests, .. } => {
