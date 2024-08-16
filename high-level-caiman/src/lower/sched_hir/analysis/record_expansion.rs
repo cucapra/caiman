@@ -253,7 +253,7 @@ impl<'a> EncodeTransform<'a> {
         }
     }
 
-    /// Renames annatiions to use the canonical name of a fence or an encoder.
+    /// Renames annations to use the canonical name of a fence or an encoder.
     /// Also copies any timeline annotations to all fields of a record if
     /// that record is a part of a fence or encoder.
     fn expand_annotations(&self, annot: &mut Vec<(String, TripleTag)>) {
@@ -383,7 +383,12 @@ impl<'a> Fact for EncodeTransform<'a> {
                     ret
                 });
             }
-            HirInstr::Stmt(HirBody::InAnnotation(_, annot) | HirBody::OutAnnotation(_, annot)) => {
+            HirInstr::Stmt(
+                HirBody::InAnnotation(_, annot)
+                | HirBody::OutAnnotation(_, annot)
+                | HirBody::Hole { dests: annot, .. },
+            ) => {
+                // expand the destinations of a hole (`???`) so that we can annotate them
                 self.expand_annotations(annot);
             }
             HirInstr::Stmt(_) => (),

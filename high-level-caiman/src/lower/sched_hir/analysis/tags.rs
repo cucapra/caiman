@@ -343,15 +343,13 @@ impl TagAnalysis {
                             if let DataType::RemoteObj { all, .. } = &**ro {
                                 for (e, _) in all {
                                     match self.tags.entry(format!("{dest}::{e}")) {
-                                        Entry::Occupied(mut e) => e
-                                            .get_mut()
-                                            .override_unknown_info(override_none_usable_ref(
-                                                TripleTag::new_unspecified(),
-                                            )),
+                                        Entry::Occupied(mut e) => {
+                                            e.get_mut().override_unknown_info(
+                                                override_none_usable_ref(dest_tag.clone()),
+                                            );
+                                        }
                                         Entry::Vacant(e) => {
-                                            e.insert(override_none_usable_ref(
-                                                TripleTag::new_unspecified(),
-                                            ));
+                                            e.insert(override_none_usable_ref(dest_tag.clone()));
                                         }
                                     }
                                 }
@@ -361,14 +359,10 @@ impl TagAnalysis {
                             for (e, t) in all {
                                 match self.tags.entry(format!("{dest}::{e}")) {
                                     Entry::Occupied(mut e) => e.get_mut().override_unknown_info(
-                                        override_none_usable(TripleTag::new_unspecified(), t, None),
+                                        override_none_usable(dest_tag.clone(), t, None),
                                     ),
                                     Entry::Vacant(e) => {
-                                        e.insert(override_none_usable(
-                                            TripleTag::new_unspecified(),
-                                            t,
-                                            None,
-                                        ));
+                                        e.insert(override_none_usable(dest_tag.clone(), t, None));
                                     }
                                 }
                             }

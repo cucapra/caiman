@@ -1089,7 +1089,9 @@ fn fill_tmln_tags(
                         add_tmln_quotient(&local_event, t, env, block.id);
                     }
                 }
-                HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
+                HirBody::InAnnotation(_, tags)
+                | HirBody::OutAnnotation(_, tags)
+                | HirBody::Hole { dests: tags, .. } => {
                     for (name, tag) in tags {
                         fill_tmln_quotient(name, tag, env, block.id);
                         if name.contains("::") {

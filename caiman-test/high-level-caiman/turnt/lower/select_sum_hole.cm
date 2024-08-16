@@ -82,9 +82,67 @@ fn select_sum_gpu_wait(a: i32, b: i32, c: i32) -> i32
                     Empty,
     #END */
     let x = (await f1).x_gpu;
-    @out { f2: node(tmln.sub2) };
     if x < 0 {
         /* #CHECK:
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "f2_0",
+                ),
+            ),
+            typ: TypeId(
+                "Fence",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "sptl",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "tmln",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "sub2",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+            ],
+        },
+        #END
+        #CHECK:
         FuncletArgument {
             name: Some(
                 NodeId(

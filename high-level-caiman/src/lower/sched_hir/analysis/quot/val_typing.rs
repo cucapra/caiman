@@ -796,12 +796,10 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 } => {
                     fill_val_quotient(lhs, lhs_tag, env, block.id);
                 }
-                HirBody::Op { dests, .. } | HirBody::Hole { dests, .. } => {
-                    for (d, t) in dests {
-                        fill_val_quotient(d, t, env, block.id);
-                    }
-                }
-                HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
+                HirBody::InAnnotation(_, tags)
+                | HirBody::OutAnnotation(_, tags)
+                | HirBody::Hole { dests: tags, .. }
+                | HirBody::Op { dests: tags, .. } => {
                     for (name, tag) in tags {
                         fill_val_quotient(name, tag, env, block.id);
                     }
