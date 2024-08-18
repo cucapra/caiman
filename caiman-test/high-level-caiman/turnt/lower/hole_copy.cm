@@ -1,0 +1,122 @@
+val bar(a: i64) -> i64 {
+    b :- foo(a)
+    h :- 0 - a if a < 0 else a
+    returns b + h
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn main(a: i64) -> i64 impls bar, time, space {
+    var b = ?;
+    /* #CHECK:
+    NamedNode {
+        name: None,
+        node: WriteRef {
+            storage_type: Filled(
+                I64,
+            ),
+            destination: Filled(
+                NodeId(
+                    "_b_0_ref",
+                ),
+            ),
+            source: Empty,
+        },
+    },
+    #END */
+    let h = if a < 0 {
+        0 - a
+    } else {
+        a
+    };
+    /* #CHECK:
+    name: FuncletId(
+        "_main4",
+    ),
+    args: [...
+    FuncletArgument {
+        name: Some(
+            NodeId(
+                "_b_0_ref",
+            ),
+        ),
+        typ: TypeId(
+            "&i64",
+        ),
+        tags: [
+            Tag {
+                quot: Filled(
+                    RemoteNodeId {
+                        funclet: MetaId(
+                            "val",
+                        ),
+                        node: Some(
+                            Filled(
+                                NodeId(
+                                    "a",
+                                ),
+                            ),
+                        ),
+                    },
+                ),
+                flow: Filled(
+                    Usable,
+                ),
+            },
+            Tag {
+                quot: Filled(
+                    RemoteNodeId {
+                        funclet: MetaId(
+                            "sptl",
+                        ),
+                        node: None,
+                    },
+                ),
+                flow: Filled(
+                    Saved,
+                ),
+            },
+            Tag {
+                quot: Filled(
+                    RemoteNodeId {
+                        funclet: MetaId(
+                            "tmln",
+                        ),
+                        node: None,
+                    },
+                ),
+                flow: Filled(
+                    Usable,
+                ),
+            },
+        ],
+    },
+    #END */
+    let b = foo_impl(&b);
+    ? + ?
+}
+
+val foo(a: i64) -> i64 {
+    returns a
+}
+
+fn foo_impl(a: &i64) -> i64 impls foo, time, space {
+    let x = ?;
+    /* #CHECK:
+    NamedNode {
+        name: None,
+        node: LocalCopy {
+            input: Empty,
+            output: Filled(
+                NodeId(
+                    "x_0",
+                ),
+            ),
+        },
+    },
+    #END */
+    *x
+}
+
+pipeline main { main }

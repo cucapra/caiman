@@ -1,0 +1,91 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main(a: i64) -> o: i64 {
+    c :- 10 if a < 0 else 20
+}
+
+fn main_func() -> i64 impls main, time, space  {
+    /* #CHECK:
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "[[temp:[a-zA-Z0-9_]+]]",
+                    ),
+                ),
+                node: AllocTemporary {
+                    ...
+                    storage_type: Filled(
+                        ${bool_t},
+                    ),
+                    ...
+                },
+            },
+        ),
+    ),
+    Empty,
+    #END
+    #CHECK:
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "[[val:[a-zA-Z0-9_]+]]",
+                    ),
+                ),
+                node: ReadRef {
+                    storage_type: Filled(
+                        ${bool_t},
+                    ),
+                    source: Filled(
+                        NodeId(
+                            "[[temp]]",
+                        ),
+                    ),
+                },
+            },
+        ),
+    ),
+    #END
+    #CHECK
+    ScheduleSelect {
+        operations: Filled(
+            [
+                Filled(
+                    RemoteNodeId {
+                        funclet: MetaId(
+                            "val",
+                        ),
+                        node: Some(
+                            Filled(
+                                NodeId(
+                                    "c",
+                                ),
+                            ),
+                        ),
+                    },
+                ),
+                ...
+            ],
+        ),
+        condition: Filled(
+            NodeId(
+                "[[val]]",
+            ),
+        ),
+
+    #END
+    */
+    if ??? {
+        ???
+    } else {
+        ???
+    }
+}
+
+pipeline main { main_func }
