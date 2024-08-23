@@ -75,7 +75,7 @@ fn build_copy_cmd(
             );
         }
         HirTerm::Var { name: src, .. } => {
-            if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
+            if f.is_var_or_ref(src) || f.get_flag(src).is_some() {
                 asm::Command::Node(asm::NamedNode {
                     name: None,
                     node: asm::Node::LocalCopy {
@@ -334,7 +334,10 @@ fn lower_begin_encode(
             name: Some(asm::NodeId(var.clone())),
             node: asm::Node::AllocTemporary {
                 place: Hole::Filled(place),
-                buffer_flags: Hole::Filled(f.get_flags()[var]),
+                buffer_flags: Hole::Filled(
+                    f.get_flag(var)
+                        .unwrap_or_else(|| panic!("{var} is not a GPU variable")),
+                ),
                 storage_type: Hole::Filled(f.get_storage_type(var).unwrap()),
             },
         })));
@@ -560,7 +563,7 @@ fn lower_hole(
             n
         };
         if let Some(storage_type) = f.get_storage_type(d) {
-            let place = if f.get_flags().contains_key(d) {
+            let place = if f.get_flag(d).is_some() {
                 ir::Place::Gpu
             } else {
                 ir::Place::Local
@@ -571,7 +574,7 @@ fn lower_hole(
                 node: asm::Node::AllocTemporary {
                     place: Hole::Filled(place),
                     storage_type: storage_type.clone(),
-                    buffer_flags: Hole::Filled(*f.get_flags().get(d).unwrap_or(&LOCAL_TEMP_FLAGS)),
+                    buffer_flags: Hole::Filled(f.get_flag(d).unwrap_or(LOCAL_TEMP_FLAGS)),
                 },
             })));
             if !is_ref {

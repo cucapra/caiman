@@ -421,17 +421,7 @@ impl DTypeEnv {
 
     /// Adds a constraint that a device variable is used in a particular way.
     pub fn add_usage(&mut self, name: &str, flag: WGPUFlags) {
-        let f = self
-            .flags
-            .entry(name.to_string())
-            .or_insert_with(|| ir::BufferFlags {
-                map_read: false,
-                map_write: false,
-                storage: true,
-                uniform: false,
-                copy_dst: false,
-                copy_src: false,
-            });
+        let f = self.flags.entry(name.to_string()).or_default();
         flag.apply_flag(f);
     }
 

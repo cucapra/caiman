@@ -57,7 +57,7 @@ fn override_none_usable(
     tag
 }
 
-/// Overrides the unknown information in `tag` with `none()-usable` unless
+/// Overrides the unknown information in `tag` with `none()-usable`
 /// and overrrides the spatial information with `none()-save`
 fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
     tag.spatial

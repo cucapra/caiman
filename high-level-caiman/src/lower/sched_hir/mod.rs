@@ -450,13 +450,13 @@ impl<'a> Funclet<'a> {
     /// variable
     fn get_asm_type(&self, var: &str) -> Result<asm::TypeId, String> {
         if let Some(flags) = self.parent.flags.get(var) {
-            let suffix = if *flags == ENCODE_SRC_FLAGS {
-                "::gs"
-            } else if *flags == ENCODE_DST_FLAGS {
-                "::gd"
-            } else if *flags == ENCODE_STORAGE_FLAGS {
-                "::g"
-            } else if *flags == ENCODE_IO_FLAGS {
+            // TODO: don't give everything all the flags if we don't need to
+            // we do this to support holes.
+            let suffix = if *flags == ENCODE_DST_FLAGS
+                || *flags == ENCODE_SRC_FLAGS
+                || *flags == ENCODE_IO_FLAGS
+                || *flags == ENCODE_STORAGE_FLAGS
+            {
                 "::gds"
             } else {
                 return Err(format!("{}: Invalid flags for {var}", self.block.src_loc));
@@ -487,9 +487,16 @@ impl<'a> Funclet<'a> {
         self.parent.variables.contains(v) || matches!(self.get_dtype(v), Some(DataType::Ref(_)))
     }
 
-    /// Gets a map of device variables to their buffer flags
-    pub const fn get_flags(&self) -> &'a HashMap<String, ir::BufferFlags> {
-        self.parent.get_flags()
+    /// Gets the buffer flags for the given variable, or `None` if `var` is not a GPU variable
+    pub fn get_flag(&self, var: &str) -> Option<ir::BufferFlags> {
+        // TODO: don't give everything all the flags if we don't have to,
+        // we do this as an easy way to support holes
+        if self.parent.get_flags().contains_key(var) {
+            Some(ENCODE_IO_FLAGS)
+        } else {
+            None
+        }
+        // self.parent.get_flags().get(var)
     }
 }
 

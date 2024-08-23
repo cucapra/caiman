@@ -461,6 +461,10 @@ impl TryFrom<&str> for WGPUFlags {
 impl WGPUFlags {
     /// Applies the flag to a buffer flags struct
     pub fn apply_flag(self, flags: &mut ir::BufferFlags) {
+        // TODO: don't always give these flags regardless. We do this for holes
+        flags.storage = true;
+        flags.map_read = true;
+        flags.copy_dst = true;
         match self {
             Self::Storage => flags.storage = true,
             Self::MapWrite => flags.map_write = true,
