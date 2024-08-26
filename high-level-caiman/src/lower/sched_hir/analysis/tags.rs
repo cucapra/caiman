@@ -20,7 +20,7 @@ use crate::lower::sched_hir::{
 };
 use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SpecType, Tag};
 
-use super::{Fact, Forwards, RET_VAR};
+use super::{Fact, Forwards, TransferData, RET_VAR};
 
 /// Creates a `none()` tag with the given flow
 const fn none_tag(spec_type: SpecType, flow: Flow) -> Tag {
@@ -70,14 +70,20 @@ fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
 }
 
 /// Overrrides unknown info in `tag` with `none()-save` for spatial,
-/// `none()-usable` for timeline, and `none()-dead` for value
-fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
+/// `none()-usable` for timeline, and `none()-dead` for value if `override_dead` is true
+fn override_defaults_ref(mut tag: TripleTag, override_dead: bool) -> TripleTag {
     tag.spatial
         .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
     tag.timeline
         .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
-    tag.value
-        .override_unknown_info(none_tag(SpecType::Value, Flow::Dead));
+    tag.value.override_unknown_info(none_tag(
+        SpecType::Value,
+        if override_dead {
+            Flow::Dead
+        } else {
+            Flow::Usable
+        },
+    ));
     tag
 }
 
@@ -311,29 +317,32 @@ impl TagAnalysis {
                     override_none_usable(tag, &self.data_types[dest], self.flags.get(dest)),
                 );
             }
-            HirBody::Hole { dests, .. } => {
-                for (dest, tag) in dests {
-                    self.tags.insert(
-                        dest.clone(),
-                        override_none_usable(
-                            tag.clone(),
-                            self.data_types.get(dest).unwrap(),
-                            self.flags.get(dest),
-                        ),
-                    );
+            HirBody::Hole {
+                dests, initialized, ..
+            } => {
+                for (dest, tag) in dests.iter() {
+                    // records have been expanded, so ignore them here
+                    self.tags.insert(dest.clone(), tag.clone());
                     let dest_tag = self.tags[dest].clone().retain(&[SpecType::Timeline]);
                     match self.data_types.get(dest) {
                         Some(DataType::Encoder(Some(ro))) => {
                             if let DataType::RemoteObj { all, .. } = &**ro {
                                 for (e, _) in all {
-                                    match self.tags.entry(format!("{dest}::{e}")) {
+                                    let full_name = format!("{dest}::{e}");
+                                    match self.tags.entry(full_name.clone()) {
                                         Entry::Occupied(mut e) => {
                                             e.get_mut().override_unknown_info(
-                                                override_defaults_ref(dest_tag.clone()),
+                                                override_defaults_ref(
+                                                    dest_tag.clone(),
+                                                    !initialized.contains(&full_name),
+                                                ),
                                             );
                                         }
                                         Entry::Vacant(e) => {
-                                            e.insert(override_defaults_ref(dest_tag.clone()));
+                                            e.insert(override_defaults_ref(
+                                                dest_tag.clone(),
+                                                !initialized.contains(&full_name),
+                                            ));
                                         }
                                     }
                                 }
@@ -369,6 +378,16 @@ impl TagAnalysis {
                         }
                         _ => (),
                     }
+                }
+                for (dest, _) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(
+                            self.tags[dest].clone(),
+                            self.data_types.get(dest).unwrap(),
+                            self.flags.get(dest),
+                        ),
+                    );
                 }
             }
             HirBody::Op { dests, .. } => {
@@ -429,7 +448,7 @@ impl TagAnalysis {
                 );
                 for (var, tag) in device_vars {
                     self.tags
-                        .insert(var.clone(), override_defaults_ref(tag.clone()));
+                        .insert(var.clone(), override_defaults_ref(tag.clone(), true));
                 }
             }
             HirBody::Submit {
@@ -605,10 +624,10 @@ impl Fact for TagAnalysis {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize, _: Option<usize>) {
-        self.special_process_block(block_id);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) {
+        self.special_process_block(data.block_id);
         match stmt {
-            HirInstr::Tail(t) => self.transfer_tail(t, block_id),
+            HirInstr::Tail(t) => self.transfer_tail(t, data.block_id),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }

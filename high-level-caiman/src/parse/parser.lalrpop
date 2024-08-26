@@ -184,6 +184,21 @@ MaybeArgFullType: (String, Option<FullType>) = {
         tags: t,
     })),
     <i: Id> => (String::from(i), None),
+
+    "_" ":" <b: FlaggedType> => (String::from("_"), Some(FullType {
+        base: Some(b),
+        tags: vec![],
+    })),
+    "_" ":" <b: FlaggedType> <t: TagOp> => (String::from("_"), Some(FullType {
+        base: Some(b),
+        tags: t,
+    })),
+    "_" <t: TagOp> => (String::from("_"), Some(FullType {
+        base: None,
+        tags: t,
+    })),
+    "_" => (String::from("_"), None),
+    
 }
 
 MaybeArgTaggedType: (String, Option<Vec<Tag>>) = { 

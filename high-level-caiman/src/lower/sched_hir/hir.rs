@@ -314,6 +314,8 @@ pub enum HirBody {
         info: Info,
         /// all the variables that the hole might use. Filled in by reaching defs
         uses: FillIn<(), Vec<String>>,
+        /// variables that must be initialized at this hole
+        initialized: Vec<String>,
     },
     /// External pure operation (performs a const decl for the destinations)
     Op {
@@ -583,7 +585,8 @@ pub enum Terminator {
     /// `_out0`, `_out1`, etc.
     Return {
         info: Info,
-        /// The destination names and tags for the return values in the **parent** scope
+        /// The destination names and tags for the return values in the **parent** scope.
+        /// Note: this is the only case where Hir may not be in SSA form
         dests: Vec<(String, TripleTag)>,
         /// The returned variables in the child scope
         rets: Vec<Hole<String>>,
@@ -838,6 +841,7 @@ impl HirBody {
                         .collect(),
                     info,
                     uses: FillIn::Initial(()),
+                    initialized: vec![],
                 }
             }
             SchedStmt::Decl {
@@ -909,6 +913,7 @@ impl HirBody {
                 info,
                 dests: vec![],
                 uses: FillIn::Initial(()),
+                initialized: vec![],
             },
             SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(
                 info,
@@ -1034,6 +1039,7 @@ impl HirBody {
                     dests: vec![(lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))],
                     info,
                     uses: FillIn::Initial(()),
+                    initialized: vec![],
                 }
             }
             SchedExpr::Binop {

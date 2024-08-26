@@ -45,7 +45,7 @@ use crate::{
     parse::ast::{DataType, Uop},
 };
 
-use super::{analyze, Fact, Forwards, InOutFacts, LiveVars};
+use super::{analyze, Fact, Forwards, InOutFacts, LiveVars, TransferData};
 
 /// Transforms uses of references into uses of values by inserting
 /// deref instructions (loads). A loaded value is reused within a block
@@ -213,7 +213,7 @@ impl Fact for RefPropagation {
         self
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize, _: Option<usize>) {
+    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: TransferData) {
         // assume single assignment
         stmt.rename_uses(&mut |name, _| {
             self.aliases

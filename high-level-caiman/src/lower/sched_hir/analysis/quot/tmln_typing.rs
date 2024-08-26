@@ -12,7 +12,7 @@
 //! local event that is active right after the instruction takes effect.
 
 use std::{
-    collections::{hash_map::Entry, HashMap, VecDeque},
+    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
     vec,
 };
 
@@ -177,6 +177,7 @@ fn unify_nodes(
     // the last globally used local event number
     let mut latest_loc = 0;
     let mut implicit_annotations = ImplicitAnnotations::new(cfg);
+    let mut hole_local_events = HashSet::new();
     while let Some(bb) = node_q.pop_front() {
         let bb = &cfg.blocks[&bb];
         // the last local event number for the current path
@@ -192,6 +193,7 @@ fn unify_nodes(
             &mut implicit_annotations,
             &mut local_events,
             dtypes,
+            &mut hole_local_events,
         )?;
         env = unify_terminator(
             bb,
@@ -238,6 +240,16 @@ fn unify_nodes(
             &format!("Failed to converge node types:\n {e}"),
         )
     })?;
+    for ev in hole_local_events {
+        // for holes, unify the events we created for each hole if we don't need them
+        if env.get_node_name(&format!("{LOCAL_STEM}{ev}")).is_none() {
+            env.add_node_eq(
+                &format!("{LOCAL_STEM}{ev}"),
+                &format!("{LOCAL_STEM}{}", ev + 1),
+            )
+            .map_err(|s| type_error(Info::default(), &s))?;
+        }
+    }
     let io_evs = into_input_output_annotations(cfg, &env, &block_loc_events)?;
     Ok((env, io_evs))
 }
@@ -383,7 +395,7 @@ impl<'a> ImplicitAnnotations<'a> {
 /// The updated environment
 /// # Errors
 /// If a constraint cannot be added to the environment
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn unify_instrs(
     bb: &BasicBlock,
     mut env: NodeEnv,
@@ -392,6 +404,7 @@ fn unify_instrs(
     implicit_annotations: &mut ImplicitAnnotations,
     local_events: &mut Vec<i32>,
     dtypes: &HashMap<String, DataType>,
+    hole_locs: &mut HashSet<i32>,
 ) -> Result<NodeEnv, LocalError> {
     let input_loc = format!("{LOCAL_STEM}{}", *last_loc);
     for instr in &bb.stmts {
@@ -497,8 +510,46 @@ fn unify_instrs(
             HirBody::Op { .. }
             | HirBody::Phi { .. }
             | HirBody::EncodeDo { .. }
-            | HirBody::DeviceCopy { .. }
-            | HirBody::Hole { .. } => env,
+            | HirBody::DeviceCopy { .. } => env,
+            HirBody::Hole { dests, info, .. } => {
+                let mut inced = false;
+                for (d, t) in dests {
+                    match dtypes.get(d) {
+                        // TODO: what if they are returned from calls?
+                        Some(DataType::Encoder(Some(_))) => {
+                            inced = true;
+                            env = unify_begin_encode(
+                                &(d.clone(), t.clone()),
+                                &[],
+                                t,
+                                env,
+                                *info,
+                                last_loc,
+                                latest_loc,
+                            )?;
+                        }
+                        Some(DataType::Record(_)) => {
+                            inced = true;
+                            env = unify_sync(
+                                d,
+                                &env.new_temp().into_string(),
+                                t,
+                                *info,
+                                env,
+                                last_loc,
+                                latest_loc,
+                            )?;
+                        }
+                        _ => {}
+                    }
+                }
+                if !inced {
+                    hole_locs.insert(*latest_loc);
+                    *latest_loc += 1;
+                    *last_loc = *latest_loc;
+                }
+                env
+            }
         };
         local_events.push(*last_loc);
     }

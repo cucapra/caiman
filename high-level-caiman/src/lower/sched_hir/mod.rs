@@ -7,7 +7,9 @@ use std::{
     rc::Rc,
 };
 
-use analysis::{bft_transform, deduce_tmln_quots, ReachingDefs};
+use analysis::{
+    bft_transform, compute_dominators, deduce_tmln_quots, fill_hole_initializers, ReachingDefs,
+};
 pub use hir::*;
 
 use crate::{
@@ -631,6 +633,8 @@ impl Funclets {
         );
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
+        let doms = compute_dominators(&cfg);
+        fill_hole_initializers(&mut cfg, &f.input, &doms)?;
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let specs_rc = Rc::new(specs.clone());
@@ -649,7 +653,7 @@ impl Funclets {
                 &specs.timeline.0,
                 &live_vars,
             )?;
-            cfg = transform_to_ssa(cfg, &live_vars);
+            cfg = transform_to_ssa(cfg, &live_vars, &doms);
 
             deduce_val_quots(
                 &mut hir_inputs,

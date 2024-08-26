@@ -6,6 +6,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::lower::sched_hir::cfg::Cfg;
 
 /// A node in the dominator tree.
+#[derive(Clone)]
 pub struct DomNode {
     /// The block id
     #[allow(dead_code)]
@@ -31,6 +32,7 @@ impl DomNode {
 
 /// A dominator tree. The dominator tree is a tree where each node
 /// immediately dominates its children.
+#[derive(Clone)]
 pub struct DomTree {
     /// A map from each block id to `DomTree` node
     nodes: HashMap<usize, DomNode>,
@@ -113,6 +115,14 @@ impl DomTree {
     #[must_use]
     pub fn immediately_dominated(&self, block: usize) -> HashSet<usize> {
         self.nodes[&block].dominated.iter().copied().collect()
+    }
+
+    /// Returns all the blocks dominated by `block`
+    #[must_use]
+    pub fn dominated(&self, block: usize) -> HashSet<usize> {
+        let mut s = self.nodes[&block].dominated(&self.nodes, HashSet::new());
+        s.insert(block);
+        s
     }
 }
 

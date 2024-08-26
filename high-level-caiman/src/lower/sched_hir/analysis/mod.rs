@@ -5,6 +5,7 @@ use std::{
 
 mod continuations;
 mod dominators;
+mod hole_expansion;
 mod op_transform;
 mod quot;
 mod record_expansion;
@@ -22,6 +23,8 @@ use super::{
 
 use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
+pub use dominators::compute_dominators;
+pub use hole_expansion::fill_hole_initializers;
 pub use op_transform::op_transform_pass;
 pub use quot::deduce_tmln_quots;
 pub use quot::deduce_val_quots;
@@ -32,6 +35,14 @@ pub use ssa::transform_to_ssa;
 #[allow(clippy::module_name_repetitions)]
 pub use tags::TagAnalysis;
 
+#[derive(Default, PartialEq, Eq, Clone)]
+#[allow(clippy::struct_field_names)]
+pub struct TransferData {
+    pub block_id: usize,
+    pub cont_id: Option<usize>,
+    pub local_instr_id: usize,
+}
+
 /// A dataflow analysis fact
 pub trait Fact: PartialEq + Clone {
     /// Performs a meet operation on two facts
@@ -40,7 +51,7 @@ pub trait Fact: PartialEq + Clone {
 
     /// Updates the basic block's fact after propagating the fact through the given
     /// statement or terminator.
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize, cont_id: Option<usize>);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData);
 
     type Dir: Direction;
 }
@@ -58,8 +69,8 @@ pub trait Direction {
     ///    The function is called on instructions in the order of the direction
     ///    of the analysis
     fn local_iter<'a>(
-        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
-        func: &mut dyn FnMut(HirInstr<'a>),
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
+        func: &mut dyn FnMut(HirInstr<'a>, usize),
     );
 
     /// Gets the starting point for the analysis in this direction
@@ -100,14 +111,23 @@ fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> 
     let mut fact = in_fact.clone();
     let block = cfg.blocks.get_mut(&block_id).unwrap();
     let cont_id = block.ret_block;
+    let sz = block.stmts.len();
     T::Dir::local_iter(
         &mut block
             .stmts
             .iter_mut()
-            .map(HirInstr::Stmt)
-            .chain(std::iter::once(HirInstr::Tail(&mut block.terminator))),
-        &mut |instr| {
-            fact.transfer_instr(instr, block_id, cont_id);
+            .enumerate()
+            .map(|(id, x)| (id, HirInstr::Stmt(x)))
+            .chain(std::iter::once((sz, HirInstr::Tail(&mut block.terminator)))),
+        &mut |instr, local_instr_id| {
+            fact.transfer_instr(
+                instr,
+                TransferData {
+                    block_id,
+                    cont_id,
+                    local_instr_id,
+                },
+            );
         },
     );
     fact
@@ -261,11 +281,11 @@ impl Direction for Backwards {
     }
 
     fn local_iter<'a>(
-        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
-        func: &mut dyn FnMut(HirInstr<'a>),
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
+        func: &mut dyn FnMut(HirInstr<'a>, usize),
     ) {
-        for instr in it.rev() {
-            func(instr);
+        for (id, instr) in it.rev() {
+            func(instr, id);
         }
     }
 
@@ -318,11 +338,11 @@ impl Direction for Forwards {
     }
 
     fn local_iter<'a>(
-        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
-        func: &mut dyn FnMut(HirInstr<'a>),
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
+        func: &mut dyn FnMut(HirInstr<'a>, usize),
     ) {
-        for instr in it {
-            func(instr);
+        for (id, instr) in it {
+            func(instr, id);
         }
     }
 
@@ -433,9 +453,9 @@ impl Fact for ReachingDefs {
         self
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, block_id: usize, cont_id: Option<usize>) {
+    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, data: TransferData) {
         self.set_hole_uses(&mut stmt);
-        if let Some(newly_available) = self.becomes_available.get(&block_id) {
+        if let Some(newly_available) = self.becomes_available.get(&data.block_id) {
             self.available_set.extend(newly_available.iter().cloned());
         }
         match stmt {
@@ -516,7 +536,7 @@ impl Fact for ReachingDefs {
                     .extend(rets.iter().filter_map(|x| x.as_ref().opt().cloned()));
             }
             HirInstr::Tail(Terminator::Select { dests, .. }) => {
-                let cont_id = cont_id.expect("Select should have a continuation");
+                let cont_id = data.cont_id.expect("Select should have a continuation");
                 // dests of a select become available at the continuation
                 match self.becomes_available.entry(cont_id) {
                     Entry::Vacant(e) => {
@@ -534,7 +554,7 @@ impl Fact for ReachingDefs {
     type Dir = Forwards;
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, Debug)]
 pub struct LiveVars {
     pub(super) live_set: BTreeSet<String>,
 }
@@ -551,6 +571,12 @@ impl LiveVars {
     }
 }
 
+impl PartialEq for LiveVars {
+    fn eq(&self, other: &Self) -> bool {
+        self.live_set == other.live_set
+    }
+}
+
 /// The stem of the special variables used for return values. Each return variable
 /// will have a number appended to this stem.
 pub const RET_VAR: &str = "_out";
@@ -563,7 +589,7 @@ impl Fact for LiveVars {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize, _: Option<usize>) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) {
         if let Some(defs) = stmt.get_defs() {
             for var in defs {
                 self.live_set.remove(&var);
@@ -600,7 +626,7 @@ impl Fact for ActiveFences {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize, _: Option<usize>) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();
@@ -616,4 +642,28 @@ impl Fact for ActiveFences {
     }
 
     type Dir = Forwards;
+}
+
+pub type UseMap = HashMap<String, HashSet<(usize, usize)>>;
+
+/// Gets a map from variable name to a set of `(block_idx, block_local_instr_idx)`
+/// for every use of that variable.
+pub fn get_uses(cfg: &mut Cfg) -> UseMap {
+    let mut res = UseMap::new();
+    for block in cfg.blocks.values_mut() {
+        for (loc_id, instr) in block
+            .stmts
+            .iter_mut()
+            .map(HirInstr::Stmt)
+            .chain(std::iter::once(HirInstr::Tail(&mut block.terminator)))
+            .enumerate()
+        {
+            let mut uses = BTreeSet::new();
+            instr.get_uses(&mut uses);
+            for u in uses {
+                res.entry(u).or_default().insert((block.id, loc_id));
+            }
+        }
+    }
+    res
 }

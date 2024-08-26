@@ -1,2 +1,5 @@
-Error: At "seq_in_if.cm" 1:0, 
-  Parsing Error: Invalid token
+Error: At "seq_in_if.cm" 9:5, 
+  Parsing Error: Unrecognized token: 'let', expected one of [
+    "\";\"",
+    "\"}\"",
+]

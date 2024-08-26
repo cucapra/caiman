@@ -1,0 +1,328 @@
+#version 0.1.0
+
+extern(gpu) simple(x : i32) -> out: i32
+{
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+extern(gpu) simple2(x : i32) -> out: i32
+{
+    path : "gpu_external2.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x: i32, b: bool) -> out: i32
+{
+    y :- simple'<1, 1, 1>(x)
+    y2 :- simple2'<1, 1, 1>(x)
+    ret :- y if b else y2
+    returns ret
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc1, rem1 :- encode_event(e)
+    sub :- submit_event(rem1)
+    snc :- sync_event(loc1, sub)
+    returns snc
+}
+
+sptl space(bs: BufferSpace) -> out: BufferSpace {
+    returns bs
+}
+
+
+fn foo_impl(x: &i32, b: bool) -> i32 impls space, foo_time, foo {
+    let e = ???;
+    let f = if b {
+        /* #CHECK:
+        header: FuncletHeader {
+        name: FuncletId(
+            "_foo_impl3",
+        ),
+        args: [
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "b_0",
+                    ),
+                ),
+                typ: TypeId(
+                    "bool",
+                ),...
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "e_0",
+                    ),
+                ),
+                typ: TypeId(
+                    "Encoder",
+                ),
+                tags: [...
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem1",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "e_0::x_gpu",
+                    ),
+                ),
+                typ: TypeId(
+                    "i32::g{{d?}}s",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "x",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem1",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "e_0::y_gpu",
+                    ),
+                ),
+                typ: TypeId(
+                    "i32::gd{{s?}}",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem1",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },...
+        ],
+        ret: [...
+            FuncletArgument {
+                name: None,
+                typ: TypeId(
+                    "i32::gd{{s?}}",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "y",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },...
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "sub",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },...
+        ],
+        binding: ScheduleBinding(
+            ScheduleBinding {
+                implicit_tags: (
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "loc1",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "loc1",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ),
+        #END */
+        encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+        submit e
+    } else {
+        encode e.call[y_gpu <- simple2'<1, 1, 1>(x_gpu)];
+        submit e
+    };
+    ???
+}
+
+pipeline main { foo_impl }

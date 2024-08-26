@@ -22,10 +22,7 @@ use crate::lower::sched_hir::{
     Hir, HirBody, UseType,
 };
 
-use super::{
-    dominators::{compute_dominators, DomTree},
-    InOutFacts, LiveVars,
-};
+use super::{dominators::DomTree, InOutFacts, LiveVars};
 
 /// Inserts a phi node as the first instruction of a block if one with the
 /// same destination does not already exist. If one does exist, nothing
@@ -263,15 +260,14 @@ fn ssa_rename_vars(
 /// v.3 = phi(v.1, v.2);
 /// ```
 #[must_use]
-pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>) -> Cfg {
-    let doms = compute_dominators(&cfg);
-    add_phi_nodes(&mut cfg, &doms, live_vars);
+pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>, doms: &DomTree) -> Cfg {
+    add_phi_nodes(&mut cfg, doms, live_vars);
     ssa_rename_vars(
         &mut cfg,
         START_BLOCK_ID,
         HashMap::new(),
         &mut HashMap::new(),
-        &doms,
+        doms,
     );
     cfg
 }

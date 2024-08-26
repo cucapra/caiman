@@ -36,7 +36,7 @@ use crate::{
     typing::{Context, SchedOrExtern},
 };
 
-use super::{bft_transform, Fact, Forwards};
+use super::{bft_transform, Fact, Forwards, TransferData};
 
 /// Dataflow for transforming the encoded variables to become scoped
 /// and expanding records into all their fields.
@@ -299,12 +299,7 @@ impl<'a> Fact for EncodeTransform<'a> {
         self
     }
 
-    fn transfer_instr(
-        &mut self,
-        stmt: crate::lower::sched_hir::HirInstr<'_>,
-        _: usize,
-        _: Option<usize>,
-    ) {
+    fn transfer_instr(&mut self, stmt: crate::lower::sched_hir::HirInstr<'_>, _: TransferData) {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding {
                 encoder,
