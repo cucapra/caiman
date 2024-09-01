@@ -7,9 +7,7 @@ use std::{
     rc::Rc,
 };
 
-use analysis::{
-    analyze, compute_dominators, deduce_tmln_quots, fill_hole_initializers, ReachingDefs,
-};
+use analysis::{analyze, compute_dominators, deduce_tmln_quots, set_hole_defs, ReachingDefs};
 pub use hir::*;
 
 use crate::{
@@ -27,7 +25,7 @@ use caiman::ir;
 use self::{
     analysis::{
         deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
-        transform_out_ssa, transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
+        transform_out_ssa, transform_to_ssa, ActiveFences, FlowAnalysis, InOutFacts, LiveVars,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
@@ -57,7 +55,7 @@ struct FuncInfo {
 pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
-    type_info: analysis::InOutFacts<TagAnalysis>,
+    type_info: analysis::InOutFacts<FlowAnalysis>,
     /// Mapping from variable names to their data type. Note that a mutable
     /// will be stored as a reference type
     data_types: HashMap<String, DataType>,
@@ -589,24 +587,6 @@ impl Funclets {
         let (mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
-        analyze(
-            &mut cfg,
-            ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
-                if let Some(FullType {
-                    base:
-                        Some(FlaggedType {
-                            base: DataType::Fence(_),
-                            ..
-                        }),
-                    ..
-                }) = t
-                {
-                    Some(n)
-                } else {
-                    None
-                }
-            })),
-        );
         let mut hir_inputs: Vec<_> = f
             .input
             .iter()
@@ -627,14 +607,32 @@ impl Funclets {
             // the unexpanded output types
             &ctx.scheds[&f.name].unwrap_sched().dtype_sig.output,
         );
+        let doms = compute_dominators(&cfg);
+        set_hole_defs(&mut cfg, &f.input, &doms)?;
+        analyze(
+            &mut cfg,
+            ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
+                if let Some(FullType {
+                    base:
+                        Some(FlaggedType {
+                            base: DataType::Fence(_),
+                            ..
+                        }),
+                    ..
+                }) = t
+                {
+                    Some(n)
+                } else {
+                    None
+                }
+            })),
+        );
         analyze(
             &mut cfg,
             ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types, &variables),
         );
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
-        let doms = compute_dominators(&cfg);
-        fill_hole_initializers(&mut cfg, &f.input, &doms)?;
         let live_vars = analyze(&mut cfg, LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let specs_rc = Rc::new(specs.clone());
@@ -671,7 +669,7 @@ impl Funclets {
         }
         let type_info = analyze(
             &mut cfg,
-            TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
+            FlowAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
         );
 
         let finfo = FuncInfo {

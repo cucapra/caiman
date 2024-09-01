@@ -688,7 +688,9 @@ impl Hir for Terminator {
                     }
                 }
                 if let Some(extras) = &call.extra_uses {
-                    uses.extend(extras.processed().iter().cloned());
+                    if !extras.is_initial() {
+                        uses.extend(extras.processed().iter().cloned());
+                    }
                 }
             }
             Self::Select { guard, .. } => {
@@ -1160,8 +1162,10 @@ impl Hir for HirBody {
                 }
             }
             Self::Hole { uses, .. } => {
-                for u in uses.processed() {
-                    res.insert(u.clone());
+                if !uses.is_initial() {
+                    for u in uses.processed() {
+                        res.insert(u.clone());
+                    }
                 }
             }
             Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::BeginEncoding { .. } => (),
@@ -1394,7 +1398,9 @@ fn term_get_uses(t: &HirTerm, res: &mut BTreeSet<String>) {
             res.insert(name.clone());
         }
         HirTerm::Hole { uses, .. } => {
-            res.extend(uses.processed().iter().cloned());
+            if !uses.is_initial() {
+                res.extend(uses.processed().iter().cloned());
+            }
         }
         HirTerm::Lit { .. } => {}
     }

@@ -23,14 +23,10 @@ use super::{
     LiveVars, TransferData, UseMap,
 };
 
-/// Sets variables a hole should define or initialize. For a given variable that
-/// is undefined or uninitialized, the hole that dominates all uses of the variable
-/// which has the shortest path to the terminator block is chosen to initialize or
-/// define those variables.
-///
-/// In this context, initialize means to make usable. All definitions initialize
-/// a variable except for reference variables.
-pub fn fill_hole_initializers(
+/// Sets variables a hole should define. For a given variable that
+/// is undefined, the hole that dominates all uses of the variable
+/// which has the shortest path to the terminator block is chosen to define those variables.
+pub fn set_hole_defs(
     cfg: &mut Cfg,
     input_args: &[(String, Option<FullType>)],
     dom: &DomTree,
@@ -139,9 +135,7 @@ impl<'a> Fact for FillHoleInits<'a> {
     type Dir = Backwards;
 }
 
-/// An analysis that identifies variables which are used but not initialized.
-///
-/// This is effectively live vars where writing to a ref constitutes a definition.
+/// An analysis that identifies variables that need to be initialized (made usable).
 #[derive(Clone)]
 pub struct UsabilityAnalysis<'a> {
     /// variables that need to be made usable at this point
@@ -300,13 +294,13 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
     type Dir = Backwards;
 }
 
+/// Follow up pass to usability analysis that errors if something can be used before it is initialized
 #[derive(Clone)]
 pub struct UninitCheck {
     maybe_uninit: HashSet<String>,
     pub error: Option<LocalError>,
 }
 
-/// Follow up pass to usability analysis that errors if something can be used before it is initialized
 impl UninitCheck {
     pub fn top<'a>(
         mut maybe_uninit: HashSet<String>,

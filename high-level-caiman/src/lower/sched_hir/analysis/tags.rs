@@ -86,7 +86,7 @@ fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
 /// Meet: union
 #[derive(Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub struct TagAnalysis {
+pub struct FlowAnalysis {
     tags: HashMap<String, TripleTag>,
     /// For an output fact, thse are the input tags to be overridden.
     /// Input overrides are not carried over between blocks
@@ -100,14 +100,14 @@ pub struct TagAnalysis {
     block: Option<usize>,
 }
 
-impl PartialEq for TagAnalysis {
+impl PartialEq for FlowAnalysis {
     fn eq(&self, other: &Self) -> bool {
         self.tags == other.tags && self.input_overrides == other.input_overrides
     }
 }
 
 #[allow(clippy::missing_fields_in_debug)]
-impl std::fmt::Debug for TagAnalysis {
+impl std::fmt::Debug for FlowAnalysis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TagAnalysis")
             .field("tags", &self.tags)
@@ -116,9 +116,9 @@ impl std::fmt::Debug for TagAnalysis {
     }
 }
 
-impl Eq for TagAnalysis {}
+impl Eq for FlowAnalysis {}
 
-impl TagAnalysis {
+impl FlowAnalysis {
     /// Constructs tags for special input arguments
     /// # Arguments
     /// * `tags` - The tags to insert into
@@ -197,7 +197,7 @@ impl TagAnalysis {
     }
 }
 
-impl TagAnalysis {
+impl FlowAnalysis {
     /// Special processing for the final blocks
     fn special_process_block(&mut self, block_id: usize) {
         use std::collections::hash_map::Entry;
@@ -596,7 +596,7 @@ fn input_to_node(mut t: TripleTag) -> TripleTag {
     t
 }
 
-impl Fact for TagAnalysis {
+impl Fact for FlowAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;

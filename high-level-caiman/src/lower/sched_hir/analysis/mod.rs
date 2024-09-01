@@ -21,7 +21,7 @@ use super::{
 use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
 pub use dominators::compute_dominators;
-pub use hole_expansion::fill_hole_initializers;
+pub use hole_expansion::set_hole_defs;
 pub use op_transform::op_transform_pass;
 pub use quot::deduce_tmln_quots;
 pub use quot::deduce_val_quots;
@@ -30,7 +30,7 @@ pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;
 pub use ssa::transform_to_ssa;
 #[allow(clippy::module_name_repetitions)]
-pub use tags::TagAnalysis;
+pub use tags::FlowAnalysis;
 
 #[derive(Default, PartialEq, Eq, Clone)]
 #[allow(clippy::struct_field_names)]
@@ -158,6 +158,7 @@ impl<T: Fact> InOutFacts<T> {
     }
 }
 
+/// Reverse topological order
 fn topo_order_rev(adj_lst: &HashMap<usize, Vec<usize>>, start_id: usize) -> Vec<usize> {
     enum Node {
         Start(usize),
@@ -633,7 +634,7 @@ impl Fact for ActiveFences {
                 self.active_fences.insert((*dest).to_string());
             }
             HirInstr::Stmt(HirBody::Sync { srcs, .. }) => {
-                self.active_fences.remove(srcs.initial());
+                self.active_fences.remove(&srcs.processed()[0]);
             }
             _ => {}
         }
