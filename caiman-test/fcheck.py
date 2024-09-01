@@ -18,6 +18,12 @@ Notes:
         you defined it
     * globals can be defined on the command line with the -d flag (Ex: `-d name=val`)
         and can be used in your search key with the syntax `${name}`.
+
+Supported Features:
+    * CHECK-NOT (partial, checks for no match after the last match only)
+    * CHECK-LABEL
+    * Regexes
+    * Substitution blocks
 """
 
 import sys
@@ -91,10 +97,26 @@ def get_src_ir_file() -> tuple[str, TextIO]:
 
 src_file, f_ir = get_src_ir_file()
 
+
+def in_any_group(start_pos: int, end_pos: int, groups: list[dict]) -> bool:
+    """
+    Returns `True` if `start_pos` and `end_pos` overlap with any group in `groups`
+    where a group is defined by a dict with a `start` and `end` key-value pair
+    """
+    for group in groups:
+        if start_pos >= group["start"] and (
+            "end" not in group or end_pos < group["end"]
+        ):
+            return True
+    return False
+
+
 with open(src_file) as f_src:
     s_in = f_src.read()
     s_out = f_ir.read()
+    groups: list[dict] = []
     last_src_pos = -1
+    groups.append({"start": 0})
     names = {}
 
     for match in re.finditer(
@@ -182,8 +204,16 @@ with open(src_file) as f_src:
         # overlapping regexes
         regex = f"(?=({regex}))"
         success = opt == "NOT"
+        if opt == "LABEL":
+            groups[-1]["end"] = last_src_pos
+            last_src_pos = -1
         for out_match in re.finditer(re.compile(regex), s_out):
-            if out_match.start() >= last_src_pos:
+            # Allowing overlapping matches means that a match technically
+            # has 0 length. Thus we do the end calculation manually
+            match_end = out_match.start() + len(out_match.group(1))
+            if out_match.start() >= last_src_pos and not in_any_group(
+                out_match.start(), match_end, groups[:-1]
+            ):
                 for name in defined_names:
                     # for any defined names in this pattern, add them to the
                     # variable environment
@@ -204,10 +234,10 @@ with open(src_file) as f_src:
                     # print(out_match.start(), file=sys.stderr)
                     success = False
                 else:
-                    # Allowing overlapping matches means that a match technically
-                    # Has 0 length
-                    last_src_pos = out_match.start() + len(out_match.group(1))
+                    last_src_pos = match_end
                     success = True
+                    if opt == "LABEL":
+                        groups.append({"start": out_match.start()})
                 break
 
         if not success:

@@ -69,7 +69,7 @@ pub fn deref_transform_pass(
     // replaces uses of references with the use of the original variable
 
     // we must do the derefernce of variable uses first
-    let _ = analyze(cfg, &RefPropagation::default());
+    let _ = analyze(cfg, RefPropagation::default());
     for bb in cfg.blocks.values_mut() {
         remove_refs_ops(bb);
     }
@@ -104,7 +104,7 @@ fn insert_capture_copies(
     data_types: &mut HashMap<String, DataType>,
     variables: &HashSet<String>,
 ) {
-    let live_vars = analyze(cfg, &LiveVars::top());
+    let live_vars = analyze(cfg, LiveVars::top());
     let mut preceded_by_call = HashSet::new();
     let mut terminated_by_call = HashSet::new();
     for bb in cfg.blocks.values() {

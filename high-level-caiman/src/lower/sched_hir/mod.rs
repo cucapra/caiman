@@ -8,7 +8,7 @@ use std::{
 };
 
 use analysis::{
-    bft_transform, compute_dominators, deduce_tmln_quots, fill_hole_initializers, ReachingDefs,
+    analyze, compute_dominators, deduce_tmln_quots, fill_hole_initializers, ReachingDefs,
 };
 pub use hir::*;
 
@@ -26,7 +26,7 @@ use caiman::ir;
 
 use self::{
     analysis::{
-        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
+        deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
         transform_out_ssa, transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
@@ -589,9 +589,9 @@ impl Funclets {
         let (mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
-        bft_transform(
+        analyze(
             &mut cfg,
-            &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
+            ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
                 if let Some(FullType {
                     base:
                         Some(FlaggedType {
@@ -627,15 +627,15 @@ impl Funclets {
             // the unexpanded output types
             &ctx.scheds[&f.name].unwrap_sched().dtype_sig.output,
         );
-        bft_transform(
+        analyze(
             &mut cfg,
-            &ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types, &variables),
+            ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types, &variables),
         );
         deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
         let doms = compute_dominators(&cfg);
         fill_hole_initializers(&mut cfg, &f.input, &doms)?;
-        let live_vars = analyze(&mut cfg, &LiveVars::top());
+        let live_vars = analyze(&mut cfg, LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let specs_rc = Rc::new(specs.clone());
 
@@ -663,14 +663,15 @@ impl Funclets {
                 &ctx.specs[&specs.value.0],
                 ctx,
                 &data_types,
+                &flags,
                 f.info,
             )?;
 
             cfg = transform_out_ssa(cfg);
         }
-        let type_info = bft_transform(
+        let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
+            TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
         );
 
         let finfo = FuncInfo {

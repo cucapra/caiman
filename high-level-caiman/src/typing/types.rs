@@ -556,6 +556,16 @@ impl MetaVar {
     pub fn get(&self) -> &str {
         &self.0
     }
+
+    /// If this is a class name, returns that name without the leading `$`
+    #[must_use]
+    pub fn get_class_name(&self) -> Option<&str> {
+        if self.0.starts_with('$') {
+            Some(&self.0[1..])
+        } else {
+            None
+        }
+    }
 }
 
 /// A constraint on a value quotient

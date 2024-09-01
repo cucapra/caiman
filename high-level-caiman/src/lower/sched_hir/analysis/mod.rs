@@ -1,7 +1,4 @@
-use std::{
-    collections::{hash_map::Entry, BTreeSet, HashMap, HashSet, VecDeque},
-    rc::Rc,
-};
+use std::collections::{hash_map::Entry, BTreeSet, HashMap, HashSet};
 
 mod continuations;
 mod dominators;
@@ -161,15 +158,47 @@ impl<T: Fact> InOutFacts<T> {
     }
 }
 
-/// Performs a dataflow analysis using the worklist algorithm
-#[must_use]
-pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
+fn topo_order_rev(adj_lst: &HashMap<usize, Vec<usize>>, start_id: usize) -> Vec<usize> {
+    enum Node {
+        Start(usize),
+        Finished(usize),
+    }
+    use Node::{Finished, Start};
+
+    let mut reversed_order = vec![];
+    let mut is_done = HashSet::new();
+    let mut stack = vec![];
+    stack.push(Start(start_id));
+    while let Some(n) = stack.pop() {
+        match n {
+            Start(n) => {
+                if is_done.contains(&n) {
+                    continue;
+                }
+                stack.push(Finished(n));
+                for next in &adj_lst[&n] {
+                    stack.push(Start(*next));
+                }
+            }
+            Finished(n) => {
+                reversed_order.push(n);
+                is_done.insert(n);
+            }
+        }
+    }
+    reversed_order
+}
+
+/// Performs a data flow analysis. Requires that `cfg` has a topological order
+/// and does not contain loops.
+///
+/// Furthermore, we assume that any `x` met with Top results in `x`.
+pub fn analyze<T: Fact>(cfg: &mut Cfg, top: T) -> InOutFacts<T> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
     let mut out_facts: HashMap<usize, T> = HashMap::new();
-    let mut worklist: Vec<usize> = Vec::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
-    in_facts.extend(cfg.graph.keys().map(|k| (*k, top.clone())));
-    worklist.push(T::Dir::root_id());
+    in_facts.insert(T::Dir::root_id(), top);
+    let mut worklist = topo_order_rev(&adj_lst, T::Dir::root_id());
 
     while let Some(block) = worklist.pop() {
         let in_fact = in_facts.get(&block).unwrap();
@@ -177,40 +206,7 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
         let add_neighbors = out_facts.get(&block) != Some(&out_fact);
         if add_neighbors {
             in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
-            worklist.extend(adj_lst.get(&block).unwrap());
-        }
-        out_facts.insert(block, out_fact);
-    }
-    InOutFacts {
-        in_facts,
-        out_facts,
-    }
-}
-
-/// Performs a breadth first traversal, only performing a dataflow analysis
-/// once per block. Similar to `analyze`, but we won't ever reanalyze a block.
-///
-/// Furthermore, we don't meet with top. Only the input fact of the initial block
-/// is initialized to top.
-pub fn bft_transform<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
-    let mut in_facts: HashMap<usize, T> = HashMap::new();
-    let mut out_facts: HashMap<usize, T> = HashMap::new();
-    let mut worklist: VecDeque<usize> = VecDeque::new();
-    let mut visited: HashSet<usize> = HashSet::new();
-    let adj_lst = T::Dir::get_adj_list(cfg);
-    in_facts.insert(T::Dir::root_id(), top.clone());
-    worklist.push_back(T::Dir::root_id());
-
-    while let Some(block) = worklist.pop_front() {
-        if !visited.insert(block) {
-            continue;
-        }
-        let in_fact = in_facts.get(&block).unwrap();
-        let out_fact = analyze_basic_block(cfg, block, in_fact);
-        let add_neighbors = out_facts.get(&block) != Some(&out_fact);
-        if add_neighbors {
-            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
-            worklist.extend(adj_lst.get(&block).unwrap());
+            // use topo order, so don't add to worklist
         }
         out_facts.insert(block, out_fact);
     }
@@ -368,26 +364,26 @@ impl Direction for Forwards {
 /// Computes reaching definitions and uses the information to fill the uses
 /// for holes
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ReachingDefs {
+pub struct ReachingDefs<'a> {
     available_set: BTreeSet<String>,
     kill_set: BTreeSet<String>,
-    data_types: Rc<HashMap<String, DataType>>,
-    variables: Rc<HashSet<String>>,
+    data_types: &'a HashMap<String, DataType>,
+    variables: &'a HashSet<String>,
     /// Map from block id to list of defs that become available at that block
     becomes_available: HashMap<usize, Vec<String>>,
 }
 
-impl ReachingDefs {
-    pub fn top<'a>(
-        inputs: impl Iterator<Item = &'a String>,
-        dt: &HashMap<String, DataType>,
-        variables: &HashSet<String>,
+impl<'a> ReachingDefs<'a> {
+    pub fn top<'b>(
+        inputs: impl Iterator<Item = &'b String>,
+        dt: &'a HashMap<String, DataType>,
+        variables: &'a HashSet<String>,
     ) -> Self {
         Self {
             available_set: inputs.cloned().collect(),
             kill_set: BTreeSet::new(),
-            data_types: Rc::new(dt.clone()),
-            variables: Rc::new(variables.clone()),
+            data_types: dt,
+            variables,
             becomes_available: HashMap::new(),
         }
     }
@@ -406,11 +402,13 @@ impl ReachingDefs {
                 | HirBody::DeviceCopy { src: rhs, .. },
             ) => rhs.fill_uses(|| self.reaching_defs().cloned().collect()),
             HirInstr::Stmt(HirBody::Hole { uses, .. }) => {
+                assert!(uses.is_initial());
                 uses.process(|()| self.reaching_defs().cloned().collect());
             }
             HirInstr::Stmt(HirBody::EncodeDo { func, .. })
             | HirInstr::Tail(Terminator::Call(_, func)) => {
                 if let Some(x) = func.extra_uses.as_mut() {
+                    assert!(x.is_initial());
                     x.process(|()| self.reaching_defs().cloned().collect());
                 }
             }
@@ -435,7 +433,7 @@ impl ReachingDefs {
     }
 }
 
-impl Fact for ReachingDefs {
+impl<'a> Fact for ReachingDefs<'a> {
     fn meet(mut self, other: &Self) -> Self {
         self.kill_set.extend(other.kill_set.iter().cloned());
         for item in &self.available_set {

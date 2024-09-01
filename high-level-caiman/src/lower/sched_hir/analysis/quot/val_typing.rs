@@ -77,13 +77,17 @@
 
 use std::collections::HashMap;
 
-use caiman::explication::Hole;
+use caiman::explication::{expir::BufferFlags, Hole};
 
 use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
+            analysis::{
+                analyze,
+                hole_expansion::{UninitCheck, UsabilityAnalysis},
+            },
+            cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
             FillIn, HirBody, HirFuncCall, HirOp, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
@@ -109,6 +113,7 @@ pub fn deduce_val_quots(
     spec_info: &SpecInfo,
     ctx: &Context,
     dtypes: &HashMap<String, DataType>,
+    flags: &HashMap<String, BufferFlags>,
     info: Info,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
@@ -133,7 +138,19 @@ pub fn deduce_val_quots(
         .map_err(|e| type_error(Info::default(), &format!("Convergence failure: {e}")))?;
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, output_dtypes, &env);
-    Ok(())
+
+    let res = analyze(cfg, UsabilityAnalysis::top(&env, dtypes, flags, &selects));
+    let res = analyze(
+        cfg,
+        UninitCheck::top(
+            res.get_in_fact(START_BLOCK_ID).to_init.clone(),
+            inputs.iter().map(|(x, _)| x),
+        ),
+    );
+    res.get_out_fact(FINAL_BLOCK_ID)
+        .error
+        .clone()
+        .map_or(Ok(()), Err)
 }
 
 /// Adds constraints to the environment based on input and output annotations.
@@ -168,7 +185,7 @@ fn add_io_constraints(
     }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
-        .filter(|(arg, _)| is_value_dtype(&dtypes[&ssa::original_name(arg)]))
+        .filter(|(arg, _)| is_value_dtype(&dtypes[&ssa::ssa_original_name(arg)]))
         .enumerate()
     {
         if fn_in_tag.value.quot == Some(Quotient::None) {
@@ -522,8 +539,8 @@ fn unify_call(
                 .iter()
                 .filter_map(|arg| {
                     if let Hole::Filled(arg) = arg {
-                        let t = dtypes.get(&ssa::original_name(arg)).unwrap_or_else(|| {
-                            panic!("Missing type info for {}", ssa::original_name(arg))
+                        let t = dtypes.get(&ssa::ssa_original_name(arg)).unwrap_or_else(|| {
+                            panic!("Missing type info for {}", ssa::ssa_original_name(arg))
                         });
                         if is_value_dtype(t) {
                             Some(MetaVar::new_var_name(arg))
@@ -539,16 +556,15 @@ fn unify_call(
         info,
         env,
     )?;
-    for (idx, (dest, tag)) in dests
-        .iter()
-        .filter(|(x, _)| {
-            is_value_dtype(
-                dtypes
-                    .get(&ssa::original_name(x))
-                    .unwrap_or_else(|| panic!("Missing type info for {}", ssa::original_name(x))),
-            )
-        })
-        .enumerate()
+    for (idx, (dest, tag)) in
+        dests
+            .iter()
+            .filter(|(x, _)| {
+                is_value_dtype(dtypes.get(&ssa::ssa_original_name(x)).unwrap_or_else(|| {
+                    panic!("Missing type info for {}", ssa::ssa_original_name(x))
+                }))
+            })
+            .enumerate()
     {
         env = add_type_annot(dest, tag, info, env)?;
         env = add_overrideable_constraint(
@@ -618,7 +634,7 @@ fn unify_nodes(
                 } => unify_op(dests, op, args, *info, ctx, env)?,
                 HirBody::Phi { dest, inputs, .. }
                     if !matches!(
-                        dtypes.get(&ssa::original_name(dest)),
+                        dtypes.get(&ssa::ssa_original_name(dest)),
                         Some(DataType::Fence(_) | DataType::Encoder(_) | DataType::Event),
                     ) =>
                 {
@@ -695,9 +711,14 @@ fn unify_terminator(
             for (idx, (ret_name, class)) in ret_names
                 .iter()
                 .filter(|rname| {
-                    is_value_dtype(dtypes.get(&ssa::original_name(rname)).unwrap_or_else(|| {
-                        panic!("{info}: Missing dtype for {}", ssa::original_name(rname))
-                    }))
+                    is_value_dtype(dtypes.get(&ssa::ssa_original_name(rname)).unwrap_or_else(
+                        || {
+                            panic!(
+                                "{info}: Missing dtype for {}",
+                                ssa::ssa_original_name(rname)
+                            )
+                        },
+                    ))
                 })
                 .zip(output_classes.into_iter())
                 .enumerate()

@@ -1,5 +1,5 @@
 #![allow(clippy::module_name_repetitions)]
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub use crate::lower::op_to_str;
 use crate::{
@@ -218,6 +218,10 @@ impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
             Self::Processed(_) => panic!("Processed value"),
         }
     }
+
+    pub const fn is_initial(&self) -> bool {
+        matches!(self, Self::Initial(..))
+    }
 }
 
 /// High-level caiman IR, excluding tail edges.
@@ -315,7 +319,7 @@ pub enum HirBody {
         /// all the variables that the hole might use. Filled in by reaching defs
         uses: FillIn<(), Vec<String>>,
         /// variables that must be initialized at this hole
-        initialized: Vec<String>,
+        initialized: HashSet<String>,
     },
     /// External pure operation (performs a const decl for the destinations)
     Op {
@@ -381,6 +385,7 @@ impl HirTerm {
     /// the given function
     pub fn fill_uses(&mut self, f: impl Fn() -> Vec<String>) {
         if let Self::Hole { uses, .. } = self {
+            assert!(uses.is_initial());
             uses.process(|()| f());
         }
     }
@@ -841,7 +846,7 @@ impl HirBody {
                         .collect(),
                     info,
                     uses: FillIn::Initial(()),
-                    initialized: vec![],
+                    initialized: HashSet::new(),
                 }
             }
             SchedStmt::Decl {
@@ -913,7 +918,7 @@ impl HirBody {
                 info,
                 dests: vec![],
                 uses: FillIn::Initial(()),
-                initialized: vec![],
+                initialized: HashSet::new(),
             },
             SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(
                 info,
@@ -1039,7 +1044,7 @@ impl HirBody {
                     dests: vec![(lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))],
                     info,
                     uses: FillIn::Initial(()),
-                    initialized: vec![],
+                    initialized: HashSet::new(),
                 }
             }
             SchedExpr::Binop {

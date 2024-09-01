@@ -117,6 +117,11 @@ impl NodeEnv {
         self.env.get_type(&format!("${class}"))
     }
 
+    #[must_use]
+    pub fn dependencies(&self, node_name: &MetaVar) -> HashSet<String> {
+        self.env.dependencies(node_name.get())
+    }
+
     /// Adds a quotient class and its constraints to the environment.
     /// If the constraint is an input constraint, adds the class name to the
     /// list of input class names.
@@ -321,6 +326,10 @@ impl NodeEnv {
             }
         }
         Ok(())
+    }
+
+    pub fn get_sched_vars(&self) -> impl Iterator<Item = &String> {
+        self.env.node_names().filter(|x| !x.starts_with('$'))
     }
 }
 

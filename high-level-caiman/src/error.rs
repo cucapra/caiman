@@ -76,7 +76,7 @@ impl From<Info> for ErrorLocation {
 }
 
 /// An error that occurs in a single file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalError {
     pub kind: ErrorKind,
     pub location: ErrorLocation,

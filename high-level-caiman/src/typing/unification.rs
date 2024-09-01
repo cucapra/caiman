@@ -17,7 +17,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -213,6 +213,45 @@ impl<T: Kind, A: Kind> Node<T, A> {
             | Self::DynamicTerm { class_id, .. }
             | Self::DropTerm { class_id, .. } => class_id.as_ref(),
             Self::Atom(_) => None,
+        }
+    }
+
+    /// Gets the name of all classes which this node depends on
+    pub fn dependencies(&self, deps: &mut HashSet<String>) {
+        match self {
+            Self::Var {
+                class_id, parent, ..
+            } => {
+                if let Some(class) = class_id {
+                    deps.insert(class.clone());
+                }
+                if let Some(parent) = parent {
+                    parent.borrow().dependencies(deps);
+                }
+            }
+            Self::Atom(_) => {}
+            Self::Term {
+                // parent,
+                args,
+                class_id,
+                ..
+            }
+            | Self::DropTerm { args, class_id, .. } => {
+                if let Some(class) = class_id {
+                    deps.insert(class.clone());
+                }
+                for arg in args {
+                    arg.borrow().dependencies(deps);
+                }
+            }
+            Self::DynamicTerm { args, class_id, .. } => {
+                if let Some(class) = class_id {
+                    deps.insert(class.clone());
+                }
+                for arg in args.values() {
+                    arg.borrow().dependencies(deps);
+                }
+            }
         }
     }
 }
@@ -772,6 +811,9 @@ impl<T: Kind, A: Kind> Env<T, A> {
         }))
     }
 
+    pub fn node_names(&self) -> impl Iterator<Item = &String> {
+        self.nodes.keys()
+    }
     /// Creates a fresh type variable that represents a named class if one
     /// does not already exist. If a type variable already exists with the
     /// given name, it will be reused and made into a class node.
@@ -817,6 +859,14 @@ impl<T: Kind, A: Kind> Env<T, A> {
         if !self.nodes.contains_key(name) {
             self.new_type(name);
         }
+    }
+
+    pub fn dependencies(&self, node_name: &str) -> HashSet<String> {
+        let mut set = HashSet::new();
+        if let Some(node) = self.nodes.get(node_name) {
+            node.borrow().dependencies(&mut set);
+        }
+        set
     }
 
     /// Adds a constraint to the environment.

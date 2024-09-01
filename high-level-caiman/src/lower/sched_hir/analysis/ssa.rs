@@ -275,7 +275,7 @@ pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>, doms: &D
 /// Returns the original name of a variable. For example, `x.0` would become
 /// `x`. If the variable name is not fromatted correctly, this function will return the
 /// passed in name.
-pub fn original_name(name: &str) -> String {
+pub fn ssa_original_name(name: &str) -> String {
     Regex::new(r"\.\d+$").unwrap().replace(name, "").to_string()
 }
 
@@ -322,13 +322,16 @@ pub fn original_name(name: &str) -> String {
 pub fn transform_out_ssa(mut cfg: Cfg) -> Cfg {
     for bb in cfg.blocks.values_mut() {
         bb.stmts.retain(|stmt| !matches!(stmt, HirBody::Phi { .. }));
-        for stmt in &mut bb.stmts {
-            stmt.rename_uses(&mut |name, _| original_name(name));
-            stmt.rename_defs(&mut original_name);
+        for mut stmt in &mut bb.stmts {
+            stmt.rename_uses(&mut |name, _| ssa_original_name(name));
+            stmt.rename_defs(&mut ssa_original_name);
+            if let HirBody::Hole { initialized, .. } = &mut stmt {
+                initialized.clone_from(&initialized.iter().map(|x| ssa_original_name(x)).collect());
+            }
         }
         bb.terminator
-            .rename_uses(&mut |name, _| original_name(name));
-        bb.terminator.rename_defs(&mut original_name);
+            .rename_uses(&mut |name, _| ssa_original_name(name));
+        bb.terminator.rename_defs(&mut ssa_original_name);
     }
     cfg
 }

@@ -71,19 +71,13 @@ fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
 
 /// Overrrides unknown info in `tag` with `none()-save` for spatial,
 /// `none()-usable` for timeline, and `none()-dead` for value if `override_dead` is true
-fn override_defaults_ref(mut tag: TripleTag, override_dead: bool) -> TripleTag {
+fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
     tag.spatial
         .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
     tag.timeline
         .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
-    tag.value.override_unknown_info(none_tag(
-        SpecType::Value,
-        if override_dead {
-            Flow::Dead
-        } else {
-            Flow::Usable
-        },
-    ));
+    tag.value
+        .override_unknown_info(none_tag(SpecType::Value, Flow::Dead));
     tag
 }
 
@@ -332,17 +326,11 @@ impl TagAnalysis {
                                     match self.tags.entry(full_name.clone()) {
                                         Entry::Occupied(mut e) => {
                                             e.get_mut().override_unknown_info(
-                                                override_defaults_ref(
-                                                    dest_tag.clone(),
-                                                    !initialized.contains(&full_name),
-                                                ),
+                                                override_defaults_ref(dest_tag.clone()),
                                             );
                                         }
                                         Entry::Vacant(e) => {
-                                            e.insert(override_defaults_ref(
-                                                dest_tag.clone(),
-                                                !initialized.contains(&full_name),
-                                            ));
+                                            e.insert(override_defaults_ref(dest_tag.clone()));
                                         }
                                     }
                                 }
@@ -388,6 +376,13 @@ impl TagAnalysis {
                             self.flags.get(dest),
                         ),
                     );
+                }
+                for init in initialized.iter() {
+                    self.tags
+                        .entry(init.clone())
+                        .or_insert_with(TripleTag::new_none_usable)
+                        .value
+                        .flow = Some(Flow::Usable);
                 }
             }
             HirBody::Op { dests, .. } => {
@@ -448,7 +443,7 @@ impl TagAnalysis {
                 );
                 for (var, tag) in device_vars {
                     self.tags
-                        .insert(var.clone(), override_defaults_ref(tag.clone(), true));
+                        .insert(var.clone(), override_defaults_ref(tag.clone()));
                 }
             }
             HirBody::Submit {
