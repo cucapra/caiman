@@ -555,7 +555,12 @@ fn lower_hole(
     let mut reads = vec![];
     for (d, _) in dests {
         let is_ref = matches!(f.get_dtype(d), Some(DataType::Ref(_)));
-        let name = if is_ref {
+        let place = if f.get_flag(d).is_some() {
+            ir::Place::Gpu
+        } else {
+            ir::Place::Local
+        };
+        let name = if is_ref || place == ir::Place::Gpu {
             d.clone()
         } else {
             let n = temp_var_name(temp_id);
@@ -563,11 +568,6 @@ fn lower_hole(
             n
         };
         if let Some(storage_type) = f.get_storage_type(d) {
-            let place = if f.get_flag(d).is_some() {
-                ir::Place::Gpu
-            } else {
-                ir::Place::Local
-            };
             let storage_type = Hole::Filled(storage_type);
             allocations.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(name.clone())),
@@ -577,7 +577,7 @@ fn lower_hole(
                     buffer_flags: Hole::Filled(f.get_flag(d).unwrap_or(LOCAL_TEMP_FLAGS)),
                 },
             })));
-            if !is_ref {
+            if !is_ref && place == ir::Place::Local {
                 reads.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
                     name: Some(asm::NodeId(d.clone())),
                     node: asm::Node::ReadRef {

@@ -40,7 +40,7 @@ pub fn set_hole_defs(
         .difference(&inputs)
         .map(|x| (x.clone(), uses.get(x).unwrap().clone()));
 
-    let r = analyze(cfg, FillHoleInits::top(undef_vars.collect(), dom));
+    let r = analyze(cfg, FillHoleDefs::top(undef_vars.collect(), dom));
     let start = r.get_in_fact(START_BLOCK_ID);
     if let Some(cannot_init) = start.undefined.keys().next() {
         let (block, local) = uses.get(cannot_init).unwrap().iter().next().unwrap();
@@ -59,17 +59,17 @@ pub fn set_hole_defs(
 /// An analysis that sets an undefined variable as a destination of the hole
 /// closest to the exit block which dominates all uses
 #[derive(Clone)]
-struct FillHoleInits<'a> {
+struct FillHoleDefs<'a> {
     undefined: UseMap,
     dom: &'a DomTree,
 }
 
-impl<'a> PartialEq for FillHoleInits<'a> {
+impl<'a> PartialEq for FillHoleDefs<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.undefined.keys().eq(other.undefined.keys())
     }
 }
-impl<'a> FillHoleInits<'a> {
+impl<'a> FillHoleDefs<'a> {
     fn top(mut undefined: UseMap, doms: &'a DomTree) -> Self {
         for i in 0..3 {
             undefined.remove(&format!("_dim{i}"));
@@ -108,7 +108,7 @@ impl<'a> FillHoleInits<'a> {
         }
     }
 }
-impl<'a> Fact for FillHoleInits<'a> {
+impl<'a> Fact for FillHoleDefs<'a> {
     fn meet(mut self, other: &Self) -> Self {
         let mut to_remove = vec![];
         for u in self.undefined.keys() {
@@ -294,7 +294,8 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
     type Dir = Backwards;
 }
 
-/// Follow up pass to usability analysis that errors if something can be used before it is initialized
+/// Follow up pass to usability analysis that errors if something that should be
+/// initialized by a hole can be used before it is initialized
 #[derive(Clone)]
 pub struct UninitCheck {
     maybe_uninit: HashSet<String>,

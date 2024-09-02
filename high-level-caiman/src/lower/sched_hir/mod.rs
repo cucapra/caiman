@@ -611,21 +611,24 @@ impl Funclets {
         set_hole_defs(&mut cfg, &f.input, &doms)?;
         analyze(
             &mut cfg,
-            ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
-                if let Some(FullType {
-                    base:
-                        Some(FlaggedType {
-                            base: DataType::Fence(_),
-                            ..
-                        }),
-                    ..
-                }) = t
-                {
-                    Some(n)
-                } else {
-                    None
-                }
-            })),
+            ActiveFences::top(
+                f.input.iter().filter_map(|(n, t)| {
+                    if let Some(FullType {
+                        base:
+                            Some(FlaggedType {
+                                base: DataType::Fence(_),
+                                ..
+                            }),
+                        ..
+                    }) = t
+                    {
+                        Some(n)
+                    } else {
+                        None
+                    }
+                }),
+                &data_types,
+            ),
         );
         analyze(
             &mut cfg,

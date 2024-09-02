@@ -376,7 +376,12 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     .defined_names
                     .insert(format!("_dim{i}"), Mutability::Const);
             }
-            collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
+            let mut cannot_change_mut = input.iter().map(|(x, _)| x.clone()).collect();
+            collect_sched_names(
+                statements.iter(),
+                &mut sched_info.defined_names,
+                &mut cannot_change_mut,
+            )?;
             resolve_types(
                 &env,
                 &mut sched_info.types,

@@ -366,8 +366,8 @@ impl Direction for Forwards {
 /// for holes
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ReachingDefs<'a> {
-    available_set: BTreeSet<String>,
-    kill_set: BTreeSet<String>,
+    available_set: HashSet<String>,
+    kill_set: HashSet<String>,
     data_types: &'a HashMap<String, DataType>,
     variables: &'a HashSet<String>,
     /// Map from block id to list of defs that become available at that block
@@ -382,7 +382,7 @@ impl<'a> ReachingDefs<'a> {
     ) -> Self {
         Self {
             available_set: inputs.cloned().collect(),
-            kill_set: BTreeSet::new(),
+            kill_set: HashSet::new(),
             data_types: dt,
             variables,
             becomes_available: HashMap::new(),
@@ -603,19 +603,24 @@ impl Fact for LiveVars {
 /// For each `begin-encode` determines the fences that are active at that point
 /// and mutates the `begin-encode` to include the active fences.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ActiveFences {
+pub struct ActiveFences<'a> {
     active_fences: HashSet<String>,
+    data_types: &'a HashMap<String, DataType>,
 }
 
-impl ActiveFences {
-    pub fn top<'a, T: Iterator<Item = &'a String>>(fences: T) -> Self {
+impl<'a> ActiveFences<'a> {
+    pub fn top<'b, T: Iterator<Item = &'b String>>(
+        fences: T,
+        data_types: &'a HashMap<String, DataType>,
+    ) -> Self {
         Self {
             active_fences: fences.cloned().collect(),
+            data_types,
         }
     }
 }
 
-impl Fact for ActiveFences {
+impl<'a> Fact for ActiveFences<'a> {
     fn meet(mut self, other: &Self) -> Self {
         self.active_fences = self
             .active_fences
@@ -630,13 +635,23 @@ impl Fact for ActiveFences {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();
             }
-            HirInstr::Stmt(HirBody::Submit { dest, .. }) => {
-                self.active_fences.insert((*dest).to_string());
+            stmt => {
+                // fences cannot be stored in references or variables, so we only have to worry about defs
+                if let Some(defs) = stmt.get_defs() {
+                    for d in defs {
+                        if matches!(self.data_types.get(&d), Some(DataType::Fence(_))) {
+                            self.active_fences.insert(d);
+                        }
+                    }
+                }
+                let mut use_set = BTreeSet::new();
+                stmt.get_uses(&mut use_set);
+                for u in use_set {
+                    if matches!(self.data_types.get(&u), Some(DataType::Fence(_))) {
+                        self.active_fences.remove(&u);
+                    }
+                }
             }
-            HirInstr::Stmt(HirBody::Sync { srcs, .. }) => {
-                self.active_fences.remove(&srcs.processed()[0]);
-            }
-            _ => {}
         }
     }
 

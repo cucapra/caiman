@@ -488,14 +488,18 @@ impl FlowAnalysis {
     /// Performs tag analysis on the block terminator
     fn transfer_tail(&mut self, tail: &mut Terminator, block_id: usize) {
         match tail {
-            Terminator::Select { dests, tag, .. } => {
+            Terminator::Select {
+                dests, tag, info, ..
+            } => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
                         override_none_usable(
                             dest_tags.clone(),
-                            &self.data_types[dest],
+                            self.data_types.get(dest).unwrap_or_else(|| {
+                                panic!("{info}: {dest} needs a data type annotation")
+                            }),
                             self.flags.get(dest),
                         ),
                     );

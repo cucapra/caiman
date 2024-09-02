@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::{
     enum_cast,
@@ -19,14 +19,16 @@ use super::{
     uop_to_contraints, Context, DTypeEnv, Mutability,
 };
 
-/// Collects all defined names in a spec and errors if any constants
+/// Collects all defined and used names in a spec and errors if any constants
 /// are redefined.
 /// # Arguments
 /// * `stmts` - The statements to collect names from.
 /// * `names` - Mapping of defined names from names to whether they are constant.
+/// * `defs` - Set of names that are explicitly user defined
 pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
     stmts: T,
     names: &mut HashMap<String, Mutability>,
+    defs: &mut HashSet<String>,
 ) -> Result<(), LocalError> {
     let is_const_to_mut = |is_const| {
         if is_const {
@@ -45,48 +47,104 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => {
                 for (d, _) in dests {
                     names.insert(d.clone(), is_const_to_mut(*is_const));
+                    defs.insert(d.clone());
                 }
-                collect_sched_names(once(&**block), names)?;
+                collect_sched_names(once(&**block), names, defs)?;
             }
             SchedStmt::Decl {
                 lhs,
                 is_const,
-                info,
+                expr,
                 ..
             } => {
                 for (d, _) in lhs {
-                    if names.contains_key(d) {
-                        return Err(type_error(*info, &format!("Variable {d} already defined")));
-                    }
                     names.insert(d.clone(), is_const_to_mut(*is_const));
+                    defs.insert(d.clone());
+                }
+                if let Some(expr) = expr {
+                    collect_sched_expr_names(expr, names);
                 }
             }
             SchedStmt::If {
                 true_block,
                 false_block,
+                guard,
                 ..
             } => {
-                collect_sched_names(true_block.iter(), names)?;
-                collect_sched_names(false_block.iter(), names)?;
+                collect_sched_names(true_block.iter(), names, defs)?;
+                collect_sched_names(false_block.iter(), names, defs)?;
+                collect_sched_expr_names(guard, names);
             }
-            SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names)?,
-            SchedStmt::Assign { lhs, .. } => {
+            SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names, defs)?,
+            SchedStmt::Assign {
+                lhs, lhs_is_ref, ..
+            } => {
                 let lhs = expect_var(lhs);
-                assert!(names.contains_key(lhs));
-            }
-            SchedStmt::Encode { stmt, .. } => {
-                for (s, _) in &stmt.lhs {
-                    names.insert(s.clone(), Mutability::Const);
+                if !defs.contains(lhs) {
+                    // only adjust mutability if the variable is not explicitly user defined
+                    names.insert(
+                        lhs.clone(),
+                        if *lhs_is_ref {
+                            Mutability::Const
+                        } else {
+                            Mutability::Mut
+                        },
+                    );
                 }
             }
-            SchedStmt::Call(..)
-            | SchedStmt::Return(..)
-            | SchedStmt::InEdgeAnnotation { .. }
+            SchedStmt::Encode { stmt, encoder, .. } => {
+                for (s, _) in &stmt.lhs {
+                    names.insert(s.clone(), Mutability::Const);
+                    defs.insert(s.clone());
+                }
+                collect_sched_expr_names(&stmt.rhs, names);
+                names.insert(encoder.clone(), Mutability::Const);
+            }
+            SchedStmt::Call(_, call) => {
+                for arg in &call.args {
+                    collect_sched_expr_names(arg, names);
+                }
+            }
+            SchedStmt::Return(_, e) => {
+                collect_sched_expr_names(e, names);
+            }
+            SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
         }
     }
     Ok(())
+}
+
+/// Collects all used names in an expression. If they are not already in `names`,
+/// adds them with mutability `const`
+fn collect_sched_expr_names(expr: &SchedExpr, names: &mut HashMap<String, Mutability>) {
+    match expr {
+        SchedExpr::Binop { lhs, rhs, .. } => {
+            collect_sched_expr_names(lhs, names);
+            collect_sched_expr_names(rhs, names);
+        }
+        SchedExpr::Uop { expr, .. } => {
+            collect_sched_expr_names(expr, names);
+        }
+        SchedExpr::Term(SchedTerm::Var { name, .. }) => {
+            if !names.contains_key(name) {
+                names.insert(name.clone(), Mutability::Const);
+            }
+        }
+        SchedExpr::Term(SchedTerm::Call(_, call)) => {
+            for arg in &call.args {
+                collect_sched_expr_names(arg, names);
+            }
+        }
+        SchedExpr::Term(SchedTerm::TimelineOperation { arg, .. }) => {
+            collect_sched_expr_names(arg, names);
+        }
+        SchedExpr::Term(
+            SchedTerm::Lit { .. } | SchedTerm::EncodeBegin { .. } | SchedTerm::Hole { .. },
+        ) => {}
+        SchedExpr::Conditional { .. } => panic!("Conditionals not allowed in schedules"),
+    }
 }
 
 /// Collects contraints for a binop.
