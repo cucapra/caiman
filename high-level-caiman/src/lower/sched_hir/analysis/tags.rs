@@ -253,7 +253,10 @@ impl FlowAnalysis {
                 } else if let Some(HirTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
-                        info.value = rhs_typ.value;
+                        if rhs_typ.value.flow.is_none() {
+                            info.value.flow = Some(Flow::Usable);
+                        }
+                        info.value.set_specified_info(rhs_typ.value);
                     }
                 }
                 if info.spatial.flow.is_none() {
@@ -274,7 +277,10 @@ impl FlowAnalysis {
                     // TODO: check this
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         let t = self.tags.get_mut(lhs).unwrap();
-                        t.value = rhs_typ.value;
+                        if rhs_typ.value.flow.is_none() {
+                            t.value.flow = Some(Flow::Usable);
+                        }
+                        t.value.set_specified_info(rhs_typ.value);
                     }
                 }
             }
@@ -289,7 +295,10 @@ impl FlowAnalysis {
                 if let HirTerm::Var { name: src, .. } = src {
                     if let Some(rhs_typ) = self.tags.get(src).cloned() {
                         let t = self.tags.get_mut(dest).unwrap();
-                        t.value = rhs_typ.value;
+                        if rhs_typ.value.flow.is_none() {
+                            t.value.flow = Some(Flow::Usable);
+                        }
+                        t.value.set_specified_info(rhs_typ.value);
                     }
                 } else {
                     let t = self.tags.get_mut(dest).unwrap();
@@ -315,8 +324,14 @@ impl FlowAnalysis {
                 dests, initialized, ..
             } => {
                 for (dest, tag) in dests.iter() {
-                    // records have been expanded, so ignore them here
-                    self.tags.insert(dest.clone(), tag.clone());
+                    match self.tags.entry(dest.clone()) {
+                        Entry::Occupied(mut e) => {
+                            e.get_mut().set_specified_info(tag.clone());
+                        }
+                        Entry::Vacant(e) => {
+                            e.insert(tag.clone());
+                        }
+                    }
                     let dest_tag = self.tags[dest].clone().retain(&[SpecType::Timeline]);
                     match self.data_types.get(dest) {
                         Some(DataType::Encoder(Some(ro))) => {

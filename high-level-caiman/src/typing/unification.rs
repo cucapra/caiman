@@ -865,6 +865,8 @@ impl<T: Kind, A: Kind> Env<T, A> {
         let mut set = HashSet::new();
         if let Some(node) = self.nodes.get(node_name) {
             node.borrow().dependencies(&mut set);
+            // we do not depend on ourself
+            node.borrow().get_class().map(|class| set.remove(class));
         }
         set
     }

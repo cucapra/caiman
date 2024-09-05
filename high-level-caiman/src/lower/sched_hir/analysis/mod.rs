@@ -159,7 +159,10 @@ impl<T: Fact> InOutFacts<T> {
 }
 
 /// Reverse topological order
-fn topo_order_rev(adj_lst: &HashMap<usize, Vec<usize>>, start_id: usize) -> Vec<usize> {
+fn topo_order_rev<T>(adj_lst: &HashMap<usize, T>, start_id: usize) -> Vec<usize>
+where
+    for<'a> &'a T: IntoIterator<Item = &'a usize>,
+{
     enum Node {
         Start(usize),
         Finished(usize),

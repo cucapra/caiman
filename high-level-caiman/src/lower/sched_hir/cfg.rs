@@ -84,6 +84,84 @@ impl Edge {
     }
 }
 
+pub struct EdgeIter<T> {
+    one: Option<T>,
+    two: Option<T>,
+    i: u8,
+}
+
+impl<T> Iterator for EdgeIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = match self.i {
+            0 => std::mem::take(&mut self.one),
+            1 => std::mem::take(&mut self.two),
+            _ => None,
+        };
+        self.i += 1;
+        r
+    }
+}
+
+impl<'a> IntoIterator for &'a Edge {
+    type Item = &'a usize;
+
+    type IntoIter = EdgeIter<&'a usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Edge::None => EdgeIter {
+                one: None,
+                two: None,
+                i: 0,
+            },
+            Edge::Next(n) => EdgeIter {
+                one: Some(n),
+                two: None,
+                i: 0,
+            },
+            Edge::Select {
+                true_branch,
+                false_branch,
+            } => EdgeIter {
+                one: Some(true_branch),
+                two: Some(false_branch),
+                i: 0,
+            },
+        }
+    }
+}
+
+impl IntoIterator for Edge {
+    type Item = usize;
+
+    type IntoIter = EdgeIter<usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Edge::None => EdgeIter {
+                one: None,
+                two: None,
+                i: 0,
+            },
+            Edge::Next(n) => EdgeIter {
+                one: Some(n),
+                two: None,
+                i: 0,
+            },
+            Edge::Select {
+                true_branch,
+                false_branch,
+            } => EdgeIter {
+                one: Some(true_branch),
+                two: Some(false_branch),
+                i: 0,
+            },
+        }
+    }
+}
+
 /// Something which can be converted to a collection of block ids.
 pub trait NextSet {
     /// Gets the collection of block ids as a vector.

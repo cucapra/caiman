@@ -12,7 +12,7 @@
 //! local event that is active right after the instruction takes effect.
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    collections::{hash_map::Entry, HashMap, HashSet},
     vec,
 };
 
@@ -22,7 +22,7 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            analysis::{InOutFacts, LiveVars},
+            analysis::{topo_order_rev, InOutFacts, LiveVars},
             cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
             Hir, HirBody, HirFuncCall, HirTerm, Terminator, TripleTag,
         },
@@ -171,14 +171,13 @@ fn unify_nodes(
     let mut seen = HashMap::new();
     env = add_var_constraint(implicit_in, &format!("{LOCAL_STEM}0"), Info::default(), env)?;
     seen.insert(START_BLOCK_ID, 0);
-    let mut node_q = VecDeque::new();
-    node_q.push_back(START_BLOCK_ID);
+    let mut node_q = topo_order_rev(&cfg.graph, START_BLOCK_ID);
     let mut block_loc_events = HashMap::new();
     // the last globally used local event number
     let mut latest_loc = 0;
     let mut implicit_annotations = ImplicitAnnotations::new(cfg);
     let mut hole_local_events = HashSet::new();
-    while let Some(bb) = node_q.pop_front() {
+    while let Some(bb) = node_q.pop() {
         let bb = &cfg.blocks[&bb];
         // the last local event number for the current path
         let mut last_loc = seen[&bb.id];
@@ -229,7 +228,6 @@ fn unify_nodes(
                 Entry::Vacant(entry) => {
                     // input event to successor is the current last event
                     entry.insert(last_loc);
-                    node_q.push_back(succ);
                 }
             }
         }

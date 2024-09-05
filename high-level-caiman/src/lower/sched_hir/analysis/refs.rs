@@ -420,15 +420,30 @@ fn deref_transform_instr(
                     name.to_string()
                 }
             });
-            if let HirBody::VarDecl { lhs, .. } | HirBody::RefStore { lhs, .. } = stmt {
-                match names.entry(lhs.clone()) {
-                    Entry::Occupied(mut entry) => {
-                        *entry.get_mut() += 1;
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(0);
+            match stmt {
+                HirBody::VarDecl { lhs, .. } | HirBody::RefStore { lhs, .. } => {
+                    match names.entry(lhs.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            *entry.get_mut() += 1;
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(0);
+                        }
                     }
                 }
+                HirBody::Hole { dests, .. } => {
+                    for (d, _) in dests {
+                        match names.entry(d.clone()) {
+                            Entry::Occupied(mut entry) => {
+                                *entry.get_mut() += 1;
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(0);
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
             match stmt {
                 HirBody::VarDecl { lhs, .. } => {
@@ -440,6 +455,13 @@ fn deref_transform_instr(
                 HirBody::RefStore { lhs, .. } => {
                     if variables.contains(lhs) {
                         *lhs = format!("_{lhs}_ref");
+                    }
+                }
+                HirBody::Hole { dests, .. } => {
+                    for (d, _) in dests {
+                        if variables.contains(d) {
+                            *d = format!("_{d}_ref");
+                        }
                     }
                 }
                 _ => (),

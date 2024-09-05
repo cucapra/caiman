@@ -1,0 +1,676 @@
+#version 0.1.0
+
+// same as cpu_map_gpu_reduce, but in hlc
+
+extern(cpu) pure baz() -> i32
+extern(cpu) pure bar() -> i32
+extern(gpu) gpu_merge(x : i32, y: i32) -> out: i32
+{
+    path : "gpu_merge.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        input : y
+    },
+    resource {
+        group : 0,
+        binding : 2,
+        output : out
+    }
+}
+
+val foo(c: bool) -> out: i32 {
+    a :- baz()
+    b :- bar()
+
+    snd :- a if c else b
+
+    r :- gpu_merge'<1, 1, 1>(a, snd)
+    returns r
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    loc, rem :- encode_event(e)
+    sub :- submit_event(rem)
+    snc :- sync_event(loc, sub)
+    returns snc
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace {
+    returns bs
+}
+
+fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
+    ???;
+    if c {
+        encode enc.copy[b_gpu <- &a];
+        /* #CHECK:
+        name: FuncletId(
+            "_foo_impl3",
+        ),
+        args: [
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_a_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "a",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "loc",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "b",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "b",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "loc",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "enc",
+                    ),
+                ),
+                typ: TypeId(
+                    "Encoder",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "enc::a_gpu",
+                    ),
+                ),
+                typ: TypeId(
+                    "i32::gds",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "a",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "enc::b_gpu",
+                    ),
+                ),
+                typ: TypeId(
+                    "i32::gds",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "enc::y_gpu",
+                    ),
+                ),
+                typ: TypeId(
+                    "i32::gds",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "sptl",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Saved,
+                        ),
+                    },
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "tmln",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "rem",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+        ],
+        #END */
+    } else {
+        encode enc.copy[b_gpu <- b];
+    }
+    /* #CHECK-LABEL:
+    name: FuncletId(
+        "_foo_impl2",
+    ),
+    args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "enc",
+                ),
+            ),
+            typ: TypeId(
+                "Encoder",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "sptl",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "tmln",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "rem",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+            ],
+        },
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "enc::a_gpu",
+                ),
+            ),
+            typ: TypeId(
+                "i32::gds",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "a",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "sptl",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Saved,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "tmln",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "rem",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+            ],
+        },
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "enc::b_gpu",
+                ),
+            ),
+            typ: TypeId(
+                "i32::gds",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "snd",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "sptl",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Saved,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "tmln",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "rem",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+            ],
+        },
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "enc::y_gpu",
+                ),
+            ),
+            typ: TypeId(
+                "i32::gds",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Dead,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "sptl",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Saved,
+                    ),
+                },
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "tmln",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "rem",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+            ],
+        },
+    ],
+    #END */
+    encode enc.call[y_gpu <- gpu_merge'<1, 1, 1>(a_gpu, b_gpu)];
+    ???;
+    r.y_gpu
+}
+
+pipeline main { foo_impl }

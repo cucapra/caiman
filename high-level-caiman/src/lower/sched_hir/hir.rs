@@ -725,8 +725,10 @@ impl Hir for Terminator {
                     }
                 }
                 if let Some(extras) = &mut call.extra_uses {
-                    for u in extras.processed_mut() {
-                        *u = f(u, UseType::Read);
+                    if !extras.is_initial() {
+                        for u in extras.processed_mut() {
+                            *u = f(u, UseType::Read);
+                        }
                     }
                 }
             }
@@ -1359,8 +1361,10 @@ impl Hir for HirBody {
                     *dest = f(dest, UseType::Write);
                 }
                 if let Some(extras) = &mut func.extra_uses {
-                    for u in extras.processed_mut() {
-                        *u = f(u, UseType::Read);
+                    if !extras.is_initial() {
+                        for u in extras.processed_mut() {
+                            *u = f(u, UseType::Read);
+                        }
                     }
                 }
                 *encoder = f(encoder, UseType::Read);
@@ -1376,8 +1380,10 @@ impl Hir for HirBody {
                 }
             },
             Self::Hole { uses, .. } => {
-                for u in uses.processed_mut() {
-                    *u = f(u, UseType::Read);
+                if !uses.is_initial() {
+                    for u in uses.processed_mut() {
+                        *u = f(u, UseType::Read);
+                    }
                 }
             }
             Self::VarDecl { rhs: None, .. } | Self::BeginEncoding { .. } => (),
@@ -1412,8 +1418,10 @@ fn term_rename_uses(t: &mut HirTerm, f: &mut dyn FnMut(&str) -> String) {
         HirTerm::Var { name, .. } => *name = f(name),
         HirTerm::Lit { .. } => (),
         HirTerm::Hole { uses, .. } => {
-            for u in uses.processed_mut() {
-                *u = f(u);
+            if !uses.is_initial() {
+                for u in uses.processed_mut() {
+                    *u = f(u);
+                }
             }
         }
     }

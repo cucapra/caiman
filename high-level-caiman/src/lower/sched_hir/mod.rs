@@ -609,6 +609,7 @@ impl Funclets {
         );
         let doms = compute_dominators(&cfg);
         set_hole_defs(&mut cfg, &f.input, &doms)?;
+        deref_transform_pass(&mut cfg, &mut data_types, &variables);
         analyze(
             &mut cfg,
             ActiveFences::top(
@@ -634,7 +635,6 @@ impl Funclets {
             &mut cfg,
             ReachingDefs::top(f.input.iter().map(|(x, _)| x), &data_types, &variables),
         );
-        deref_transform_pass(&mut cfg, &mut data_types, &variables);
         op_transform_pass(&mut cfg, &data_types);
         let live_vars = analyze(&mut cfg, LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
@@ -720,6 +720,7 @@ impl Funclets {
         for (var, typ) in &f.types {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
+                data_types.insert(format!("_{var}_ref"), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
                 variables.insert(format!("_{var}_ref"));
             }

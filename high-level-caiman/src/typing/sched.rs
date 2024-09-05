@@ -62,7 +62,7 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                     defs.insert(d.clone());
                 }
                 if let Some(expr) = expr {
-                    collect_sched_expr_names(expr, names);
+                    collect_sched_expr_names(expr, names, defs);
                 }
             }
             SchedStmt::If {
@@ -73,7 +73,7 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => {
                 collect_sched_names(true_block.iter(), names, defs)?;
                 collect_sched_names(false_block.iter(), names, defs)?;
-                collect_sched_expr_names(guard, names);
+                collect_sched_expr_names(guard, names, defs);
             }
             SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names, defs)?,
             SchedStmt::Assign {
@@ -97,16 +97,16 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                     names.insert(s.clone(), Mutability::Const);
                     defs.insert(s.clone());
                 }
-                collect_sched_expr_names(&stmt.rhs, names);
+                collect_sched_expr_names(&stmt.rhs, names, defs);
                 names.insert(encoder.clone(), Mutability::Const);
             }
             SchedStmt::Call(_, call) => {
                 for arg in &call.args {
-                    collect_sched_expr_names(arg, names);
+                    collect_sched_expr_names(arg, names, defs);
                 }
             }
             SchedStmt::Return(_, e) => {
-                collect_sched_expr_names(e, names);
+                collect_sched_expr_names(e, names, defs);
             }
             SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
@@ -118,14 +118,26 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
 
 /// Collects all used names in an expression. If they are not already in `names`,
 /// adds them with mutability `const`
-fn collect_sched_expr_names(expr: &SchedExpr, names: &mut HashMap<String, Mutability>) {
+fn collect_sched_expr_names(
+    expr: &SchedExpr,
+    names: &mut HashMap<String, Mutability>,
+    defs: &HashSet<String>,
+) {
     match expr {
         SchedExpr::Binop { lhs, rhs, .. } => {
-            collect_sched_expr_names(lhs, names);
-            collect_sched_expr_names(rhs, names);
+            collect_sched_expr_names(lhs, names, defs);
+            collect_sched_expr_names(rhs, names, defs);
         }
-        SchedExpr::Uop { expr, .. } => {
-            collect_sched_expr_names(expr, names);
+        SchedExpr::Uop { expr, op, .. } => {
+            if *op == Uop::Ref {
+                if let SchedExpr::Term(SchedTerm::Var { name, .. }) = &**expr {
+                    if !defs.contains(name) {
+                        names.insert(name.clone(), Mutability::Mut);
+                        return;
+                    }
+                }
+            }
+            collect_sched_expr_names(expr, names, defs);
         }
         SchedExpr::Term(SchedTerm::Var { name, .. }) => {
             if !names.contains_key(name) {
@@ -134,11 +146,11 @@ fn collect_sched_expr_names(expr: &SchedExpr, names: &mut HashMap<String, Mutabi
         }
         SchedExpr::Term(SchedTerm::Call(_, call)) => {
             for arg in &call.args {
-                collect_sched_expr_names(arg, names);
+                collect_sched_expr_names(arg, names, defs);
             }
         }
         SchedExpr::Term(SchedTerm::TimelineOperation { arg, .. }) => {
-            collect_sched_expr_names(arg, names);
+            collect_sched_expr_names(arg, names, defs);
         }
         SchedExpr::Term(
             SchedTerm::Lit { .. } | SchedTerm::EncodeBegin { .. } | SchedTerm::Hole { .. },
