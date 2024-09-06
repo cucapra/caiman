@@ -204,21 +204,6 @@ impl<T: std::fmt::Debug, U: std::fmt::Debug> FillIn<T, U> {
         }
     }
 
-    pub fn initial(&self) -> &T {
-        match self {
-            Self::Initial(t) => t,
-            Self::Processed(_) => panic!("Processed value"),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn initial_mut(&mut self) -> &mut T {
-        match self {
-            Self::Initial(t) => t,
-            Self::Processed(_) => panic!("Processed value"),
-        }
-    }
-
     pub const fn is_initial(&self) -> bool {
         matches!(self, Self::Initial(..))
     }
@@ -320,6 +305,8 @@ pub enum HirBody {
         uses: FillIn<(), Vec<String>>,
         /// variables that must be initialized at this hole
         initialized: HashSet<String>,
+        /// the fences that are active at the current point
+        active_fences: Vec<String>,
     },
     /// External pure operation (performs a const decl for the destinations)
     Op {
@@ -851,6 +838,7 @@ impl HirBody {
                     info,
                     uses: FillIn::Initial(()),
                     initialized: HashSet::new(),
+                    active_fences: vec![],
                 }
             }
             SchedStmt::Decl {
@@ -923,6 +911,7 @@ impl HirBody {
                 dests: vec![],
                 uses: FillIn::Initial(()),
                 initialized: HashSet::new(),
+                active_fences: vec![],
             },
             SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(
                 info,
@@ -1049,6 +1038,7 @@ impl HirBody {
                     info,
                     uses: FillIn::Initial(()),
                     initialized: HashSet::new(),
+                    active_fences: vec![],
                 }
             }
             SchedExpr::Binop {

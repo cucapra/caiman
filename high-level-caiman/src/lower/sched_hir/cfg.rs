@@ -140,17 +140,17 @@ impl IntoIterator for Edge {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            Edge::None => EdgeIter {
+            Self::None => EdgeIter {
                 one: None,
                 two: None,
                 i: 0,
             },
-            Edge::Next(n) => EdgeIter {
+            Self::Next(n) => EdgeIter {
                 one: Some(n),
                 two: None,
                 i: 0,
             },
-            Edge::Select {
+            Self::Select {
                 true_branch,
                 false_branch,
             } => EdgeIter {

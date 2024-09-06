@@ -36,6 +36,25 @@ use super::{add_constraint, add_node_eq, add_var_constraint};
 
 const LOCAL_STEM: &str = "_loc";
 
+/// Gets the implicit input variable of the starting basic block of `cfg`. If one
+/// is specified, uses the user-supplied tag, otherwise assumes it's the spec's implicit input
+fn get_implicit_input_var<'a>(cfg: &'a Cfg, spec_in: &'a str) -> &'a str {
+    let mut res = spec_in;
+    for stmt in &cfg.blocks.get(&START_BLOCK_ID).unwrap().stmts {
+        if let HirBody::InAnnotation(_, annots) = stmt {
+            for (a, t) in annots {
+                if a == "input"
+                    && !matches!(t.timeline.quot, Some(Quotient::None))
+                    && t.timeline.quot_var.spec_var.is_some()
+                {
+                    res = t.timeline.quot_var.spec_var.as_ref().unwrap();
+                }
+            }
+        }
+    }
+    res
+}
+
 /// Deduces the timeline quotients and adds them to tags of instructions in the CFG.
 /// Required that active fences pass has been run and record expansion has NOT
 /// been run.
@@ -82,7 +101,8 @@ pub fn deduce_tmln_quots(
         info,
         num_dims,
     )?;
-    let (env, implicit_events) = unify_nodes(cfg, &spec_info.sig.input[0].0, dtypes, ctx, env)?;
+    let implicit_in = get_implicit_input_var(cfg, &spec_info.sig.input[0].0).to_string();
+    let (env, implicit_events) = unify_nodes(cfg, &implicit_in, dtypes, ctx, env)?;
     // sort of a hack to support the previous tests without timeline specs:
     // A timeline spec that is trivial and never called is just not deduced so
     // it can remain none
@@ -169,7 +189,7 @@ fn unify_nodes(
     mut env: NodeEnv,
 ) -> Result<(NodeEnv, InOutEvents), LocalError> {
     let mut seen = HashMap::new();
-    env = add_var_constraint(implicit_in, &format!("{LOCAL_STEM}0"), Info::default(), env)?;
+    env = add_node_eq(&format!("{LOCAL_STEM}0"), implicit_in, Info::default(), env)?;
     seen.insert(START_BLOCK_ID, 0);
     let mut node_q = topo_order_rev(&cfg.graph, START_BLOCK_ID);
     let mut block_loc_events = HashMap::new();
@@ -207,8 +227,8 @@ fn unify_nodes(
         local_events.push(last_loc);
         env = implicit_annotations.unify_outputs(last_loc, env)?;
         block_loc_events.insert(bb.id, local_events);
-        for succ in cfg.graph[&bb.id].targets() {
-            match seen.entry(succ) {
+        for succ in &cfg.graph[&bb.id] {
+            match seen.entry(*succ) {
                 Entry::Occupied(entry) => {
                     // merge last local events to be equal
                     // this must be the case since the timeline doesn't have selects
@@ -217,10 +237,10 @@ fn unify_nodes(
                         env = add_var_constraint(
                             &format!("{LOCAL_STEM}{last_loc}"),
                             &format!("{LOCAL_STEM}{}", entry.get()),
-                            cfg.blocks[&succ]
+                            cfg.blocks[succ]
                                 .stmts
                                 .first()
-                                .map_or(cfg.blocks[&succ].src_loc, Hir::get_info),
+                                .map_or(cfg.blocks[succ].src_loc, Hir::get_info),
                             env,
                         )?;
                     }
@@ -509,16 +529,21 @@ fn unify_instrs(
             | HirBody::Phi { .. }
             | HirBody::EncodeDo { .. }
             | HirBody::DeviceCopy { .. } => env,
-            HirBody::Hole { dests, info, .. } => {
+            HirBody::Hole {
+                dests,
+                info,
+                active_fences,
+                ..
+            } => {
                 let mut inced = false;
                 for (d, t) in dests {
                     match dtypes.get(d) {
-                        // TODO: what if they are returned from calls?
+                        // TODO: what if they should be returned from calls?
                         Some(DataType::Encoder(Some(_))) => {
                             inced = true;
                             env = unify_begin_encode(
                                 &(d.clone(), t.clone()),
-                                &[],
+                                active_fences,
                                 t,
                                 env,
                                 *info,

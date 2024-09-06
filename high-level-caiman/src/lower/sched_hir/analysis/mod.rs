@@ -639,6 +639,9 @@ impl<'a> Fact for ActiveFences<'a> {
                 *active_fences = self.active_fences.iter().cloned().collect();
             }
             stmt => {
+                if let HirInstr::Stmt(HirBody::Hole { active_fences, .. }) = stmt {
+                    *active_fences = self.active_fences.iter().cloned().collect();
+                }
                 // fences cannot be stored in references or variables, so we only have to worry about defs
                 if let Some(defs) = stmt.get_defs() {
                     for d in defs {
