@@ -14,7 +14,7 @@ fn main_func() -> i64 impls main, time, space  {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "[[temp:[a-zA-Z0-9_]+]]",
+                        "[[temp:[a-zA-Z0-9_%]+]]",
                     ),
                 ),
                 node: AllocTemporary {
@@ -35,7 +35,7 @@ fn main_func() -> i64 impls main, time, space  {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "[[val:[a-zA-Z0-9_]+]]",
+                        "[[val:[a-zA-Z0-9_%]+]]",
                     ),
                 ),
                 node: ReadRef {

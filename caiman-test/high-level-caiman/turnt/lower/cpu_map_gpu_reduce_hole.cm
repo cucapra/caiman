@@ -36,8 +36,8 @@ val foo(c: bool) -> out: i32 {
     returns r
 }
 
-tmln foo_time(e: Event) -> out: Event {
-    loc, rem :- encode_event(e)
+tmln foo_time(enc: Event) -> out: Event {
+    loc, rem :- encode_event(enc)
     sub :- submit_event(rem)
     snc :- sync_event(loc, sub)
     returns snc
@@ -59,7 +59,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
             FuncletArgument {
                 name: Some(
                     NodeId(
-                        "_a_ref",
+                        "_a%_ref",
                     ),
                 ),
                 typ: TypeId(
@@ -122,7 +122,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
             FuncletArgument {
                 name: Some(
                     NodeId(
-                        "b",
+                        "b%",
                     ),
                 ),
                 typ: TypeId(
@@ -185,7 +185,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
             FuncletArgument {
                 name: Some(
                     NodeId(
-                        "enc",
+                        "enc%",
                     ),
                 ),
                 typ: TypeId(
@@ -242,7 +242,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
             FuncletArgument {
                 name: Some(
                     NodeId(
-                        "enc::a_gpu",
+                        "enc%::a_gpu",
                     ),
                 ),
                 typ: TypeId(
@@ -305,7 +305,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
             FuncletArgument {
                 name: Some(
                     NodeId(
-                        "enc::b_gpu",
+                        "enc%::b_gpu",
                     ),
                 ),
                 typ: TypeId(
@@ -362,7 +362,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
             FuncletArgument {
                 name: Some(
                     NodeId(
-                        "enc::y_gpu",
+                        "enc%::y_gpu",
                     ),
                 ),
                 typ: TypeId(
@@ -429,7 +429,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
         FuncletArgument {
             name: Some(
                 NodeId(
-                    "enc",
+                    "enc%",
                 ),
             ),
             typ: TypeId(
@@ -486,7 +486,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
         FuncletArgument {
             name: Some(
                 NodeId(
-                    "enc::a_gpu",
+                    "enc%::a_gpu",
                 ),
             ),
             typ: TypeId(
@@ -549,7 +549,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
         FuncletArgument {
             name: Some(
                 NodeId(
-                    "enc::b_gpu",
+                    "enc%::b_gpu",
                 ),
             ),
             typ: TypeId(
@@ -612,7 +612,7 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
         FuncletArgument {
             name: Some(
                 NodeId(
-                    "enc::y_gpu",
+                    "enc%::y_gpu",
                 ),
             ),
             typ: TypeId(

@@ -27,7 +27,7 @@ fn foo_impl() -> i64 impls foo, time, space {
         FuncletArgument {
             name: Some(
                 NodeId(
-                    "x",
+                    "x%",
                 ),
             ),
             typ: TypeId(

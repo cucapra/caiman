@@ -48,7 +48,7 @@ fn foo_impl(x: &i32, z: &i32) -> i32 impls foo, space, time {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "[[f_y_ref:[a-zA-Z_0-9:]+]]",
+                        "[[f_y_ref:[a-zA-Z_0-9:%]+]]",
                     ),
                 ),
                 node: AllocTemporary {
@@ -111,12 +111,12 @@ fn foo_impl(x: &i32, z: &i32) -> i32 impls foo, space, time {
             [
                 Filled(
                     NodeId(
-                        "e2_0::x2",
+                        "e2%0::x2",
                     ),
                 ),
                 Filled(
                     NodeId(
-                        "e2_0::y2",
+                        "e2%0::y2",
                     ),
                 ),
             ],
@@ -125,7 +125,7 @@ fn foo_impl(x: &i32, z: &i32) -> i32 impls foo, space, time {
             [
                 Filled(
                     NodeId(
-                        "f",
+                        "f%",
                     ),
                 ),
             ],

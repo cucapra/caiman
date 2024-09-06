@@ -18,7 +18,7 @@ fn main(a: i64) -> i64 impls bar, time, space {
             ),
             destination: Filled(
                 NodeId(
-                    "_b_0_ref",
+                    "_b%0_ref",
                 ),
             ),
             source: Empty,
@@ -38,7 +38,7 @@ fn main(a: i64) -> i64 impls bar, time, space {
     FuncletArgument {
         name: Some(
             NodeId(
-                "_b_0_ref",
+                "_b%0_ref",
             ),
         ),
         typ: TypeId(
@@ -110,7 +110,7 @@ fn foo_impl(a: &i64) -> i64 impls foo, time, space {
             input: Empty,
             output: Filled(
                 NodeId(
-                    "x_0",
+                    "x%0",
                 ),
             ),
         },

@@ -16,7 +16,7 @@ fn main_func() -> i64 impls main, time, space  {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "[[temp1:[a-zA-Z0-9_]+]]",
+                        "[[temp1:[a-zA-Z0-9_%]+]]",
                     ),
                 ),
                 node: AllocTemporary ...
@@ -28,7 +28,7 @@ fn main_func() -> i64 impls main, time, space  {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "[[temp2:[a-zA-Z0-9_]+]]",
+                        "[[temp2:[a-zA-Z0-9_%]+]]",
                     ),
                 ),
                 node: AllocTemporary ...
@@ -42,7 +42,7 @@ fn main_func() -> i64 impls main, time, space  {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "x_0",
+                        "x%0",
                     ),
                 ),
                 node: ReadRef {
@@ -63,7 +63,7 @@ fn main_func() -> i64 impls main, time, space  {
             NamedNode {
                 name: Some(
                     NodeId(
-                        "y_0",
+                        "y%0",
                     ),
                 ),
                 node: ReadRef {
@@ -97,12 +97,12 @@ fn main_func() -> i64 impls main, time, space  {
         [
             Filled(
                 NodeId(
-                    "x_0",
+                    "x%0",
                 ),
             ),
             Filled(
                 NodeId(
-                    "y_0",
+                    "y%0",
                 ),
             ),
         ],

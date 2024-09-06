@@ -68,7 +68,7 @@ use crate::parse::ast::{
 
 /// Returns the internal name of a variable, given its original name and id.
 fn internal_name(name: &str, id: u64) -> String {
-    format!("{name}_{id}")
+    format!("{name}%{id}")
 }
 
 /// Recursive helper to `rename_vars`.
@@ -211,11 +211,23 @@ fn get_new_name(
     s
 }
 
+fn is_special_name(name: &str) -> bool {
+    name == "input" || name == "output" || name.starts_with('_')
+}
+
 /// Returns the current internal name of a variable, given its original name.
 fn get_cur_name(name: &str, cur_names: &HashMap<String, u64>) -> String {
-    cur_names
-        .get(name)
-        .map_or_else(|| name.to_string(), |id| internal_name(name, *id))
+    cur_names.get(name).map_or_else(
+        || {
+            if is_special_name(name) {
+                name.to_string()
+            } else {
+                // add special character to prevent schedule-spec name conflicts
+                format!("{name}%")
+            }
+        },
+        |id| internal_name(name, *id),
+    )
 }
 
 /// Renames all uses of variables in an expression to their current internal names.
