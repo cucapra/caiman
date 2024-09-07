@@ -1,0 +1,60 @@
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val foo() -> i64 {
+    /* #CHECK:
+    NamedNode {
+        name: Some(
+            NodeId(
+                "[[ten:[a-zA-Z0-9_]+]]",
+            ),
+        ),
+        node: Constant {
+            value: Filled(
+                "10",
+            ),
+            type_id: Filled(
+                TypeId(
+                    "i64",
+                ),
+            ),
+        },
+    },
+    #END */
+    returns 10
+}
+
+fn foo_impl() -> i64 impls foo, time, space {
+    ???;
+    x = 10;
+    /* #CHECK:
+    node: LocalDoBuiltin {
+    operation: Filled(
+        RemoteNodeId {
+            funclet: MetaId(
+                "val",
+            ),
+            node: Some(
+                Filled(
+                    NodeId(
+                        "[[ten]]",
+                    ),
+                ),
+            ),
+        },
+    ),
+    inputs: Filled(
+        [],
+    ),
+    outputs: Filled(
+        [
+            Filled(
+                NodeId(
+                    "_x%_ref",
+                ),
+            ),
+        ],
+    ),
+    #END */
+    ?
+}

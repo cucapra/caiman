@@ -171,13 +171,24 @@ impl<T: Kind, A: Kind> Node<T, A> {
     /// Gets the parent of a node.
     /// # Panics
     /// Panics if the node is an atom.
-    fn parent(&mut self) -> &mut Option<NodePtr<T, A>> {
+    fn parent_mut(&mut self) -> &mut Option<NodePtr<T, A>> {
         match self {
             Self::Var { ref mut parent, .. }
             | Self::Term { ref mut parent, .. }
             | Self::DynamicTerm { ref mut parent, .. }
             | Self::DropTerm { ref mut parent, .. } => parent,
             Self::Atom(_) => panic!("Atoms have no parent"),
+        }
+    }
+
+    /// Gets the parent of a node or None
+    fn parent(&self) -> Option<&NodePtr<T, A>> {
+        match self {
+            Self::Var { ref parent, .. }
+            | Self::Term { ref parent, .. }
+            | Self::DynamicTerm { ref parent, .. }
+            | Self::DropTerm { ref parent, .. } => parent.as_ref(),
+            Self::Atom(_) => None,
         }
     }
 
@@ -408,12 +419,12 @@ fn union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
     }
 
     if a.borrow().is_var() {
-        *a.borrow_mut().parent() = Some(b);
+        *a.borrow_mut().parent_mut() = Some(b);
     } else if !matches!(
         (&*a.borrow(), &*b.borrow()),
         (Node::DynamicTerm { .. }, Node::DynamicTerm { .. })
     ) {
-        *b.borrow_mut().parent() = Some(a);
+        *b.borrow_mut().parent_mut() = Some(a);
     }
 }
 
@@ -489,9 +500,19 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
 /// # Returns
 /// Returns `true` if the two nodes can be unified, `false` otherwise.
 #[must_use]
-#[allow(clippy::too_many_lines)]
 fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
+    if a.try_borrow_mut().is_err() {
+        // we might have already borrowed the node if we're in the middle
+        // of creating a cycle. For example, unifying `Return(e)` with `e`.
+        return false;
+    }
     let a = representative(a);
+    if is_already_unified(&a, b) {
+        return true;
+    }
+    if b.try_borrow_mut().is_err() {
+        return false;
+    }
     let b = representative(b);
     if a == b {
         return true;
@@ -505,113 +526,132 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
     if can_union(&a, &b) {
         union(&a, &b);
     }
-    {
-        let borrow_a = a.borrow();
-        let borrow_b = b.borrow();
-        match (&*borrow_a, &*borrow_b) {
-            (Node::Atom(a), Node::Atom(b)) => return a == b,
-            (
-                Node::Term {
-                    op: op_a,
-                    args: a_args,
-                    ..
-                },
-                Node::Term {
-                    op: op_b,
-                    args: b_args,
-                    ..
-                },
-            ) => {
-                if op_a != op_b || a_args.len() != b_args.len() {
-                    return false;
-                }
-                for (a, b) in a_args.iter().zip(b_args.iter()) {
-                    if !unify(a, b) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            (
-                Node::Term {
-                    op: op_a,
-                    args: short_args,
-                    ..
-                },
-                Node::DropTerm {
-                    op: op_b,
-                    args: long_args,
-                    ..
-                },
-            )
-            | (
-                Node::DropTerm {
-                    op: op_a,
-                    args: long_args,
-                    ..
-                },
-                Node::Term {
-                    op: op_b,
-                    args: short_args,
-                    ..
-                },
-            ) => {
-                if op_a != op_b || short_args.len() > long_args.len() {
-                    return false;
-                }
-                let mut diff = long_args.len() - short_args.len();
-                for (a, b) in short_args.iter().zip(long_args.iter().filter(|node| {
-                    if diff > 0 && node.borrow().is_var() {
-                        diff -= 1;
-                        false
-                    } else {
-                        true
-                    }
-                })) {
-                    if !unify(a, b) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            (
-                Node::DynamicTerm {
-                    op: op_a,
-                    args: args_a,
-                    constraint_kind: const_kind_a,
-                    ..
-                },
-                Node::DynamicTerm {
-                    op: op_b,
-                    args: args_b,
-                    constraint_kind: const_kind_b,
-                    ..
-                },
-            ) => {
-                if op_a != op_b
-                    || (*const_kind_a == SubtypeConstraint::Contravariant
-                        && (args_b.len() > args_a.len()
-                            || args_b.iter().any(|(k, _)| !args_a.contains_key(k))))
-                    || (*const_kind_b == SubtypeConstraint::Contravariant
-                        && (args_a.len() > args_b.len()
-                            || args_a.iter().any(|(k, _)| !args_b.contains_key(k))))
-                {
-                    return false;
-                }
-                for (k, a) in args_a {
-                    if let Some(b) = args_b.get(k) {
-                        if !unify(a, b) {
-                            return false;
-                        }
-                    }
-                }
-            }
-            (Node::Var { .. }, _) | (_, Node::Var { .. }) => return true,
-            _ => return false,
-        }
+    if let Some(ret) = unify_children(&a, &b) {
+        return ret;
     }
     union_dynamic_terms(&a, &b);
     true
+}
+
+/// Determines if `a` is a parent of `b`
+fn is_already_unified<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
+    if a.as_ptr() == b.as_ptr() {
+        return true;
+    }
+    b.borrow()
+        .parent()
+        .map_or(false, |parent| is_already_unified(a, parent))
+}
+
+/// Unifies the children of each node. Returns `true` if unification succeeded,
+/// `false` if it failed, and `None` if unification should continue with unioning
+/// dynamic terms.
+#[allow(clippy::too_many_lines)]
+fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Option<bool> {
+    let borrow_a = a.borrow();
+    let borrow_b = b.borrow();
+    match (&*borrow_a, &*borrow_b) {
+        (Node::Atom(a), Node::Atom(b)) => return Some(a == b),
+        (
+            Node::Term {
+                op: op_a,
+                args: a_args,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: b_args,
+                ..
+            },
+        ) => {
+            if op_a != op_b || a_args.len() != b_args.len() {
+                return Some(false);
+            }
+            for (a, b) in a_args.iter().zip(b_args.iter()) {
+                if !unify(a, b) {
+                    return Some(false);
+                }
+            }
+            return Some(true);
+        }
+        (
+            Node::Term {
+                op: op_a,
+                args: short_args,
+                ..
+            },
+            Node::DropTerm {
+                op: op_b,
+                args: long_args,
+                ..
+            },
+        )
+        | (
+            Node::DropTerm {
+                op: op_a,
+                args: long_args,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: short_args,
+                ..
+            },
+        ) => {
+            if op_a != op_b || short_args.len() > long_args.len() {
+                return Some(false);
+            }
+            let mut diff = long_args.len() - short_args.len();
+            for (a, b) in short_args.iter().zip(long_args.iter().filter(|node| {
+                if diff > 0 && node.borrow().is_var() {
+                    diff -= 1;
+                    false
+                } else {
+                    true
+                }
+            })) {
+                if !unify(a, b) {
+                    return Some(false);
+                }
+            }
+            return Some(true);
+        }
+        (
+            Node::DynamicTerm {
+                op: op_a,
+                args: args_a,
+                constraint_kind: const_kind_a,
+                ..
+            },
+            Node::DynamicTerm {
+                op: op_b,
+                args: args_b,
+                constraint_kind: const_kind_b,
+                ..
+            },
+        ) => {
+            if op_a != op_b
+                || (*const_kind_a == SubtypeConstraint::Contravariant
+                    && (args_b.len() > args_a.len()
+                        || args_b.iter().any(|(k, _)| !args_a.contains_key(k))))
+                || (*const_kind_b == SubtypeConstraint::Contravariant
+                    && (args_a.len() > args_b.len()
+                        || args_a.iter().any(|(k, _)| !args_b.contains_key(k))))
+            {
+                return Some(false);
+            }
+            for (k, a) in args_a {
+                if let Some(b) = args_b.get(k) {
+                    if !unify(a, b) {
+                        return Some(false);
+                    }
+                }
+            }
+        }
+        (Node::Var { .. }, _) | (_, Node::Var { .. }) => return Some(true),
+        _ => return Some(false),
+    }
+    None
 }
 
 /// Meets two dynamic terms by reparenting them. If one term is a subtype of the other,
