@@ -1,0 +1,2 @@
+Error: At "unconstrained.cm" 17:5 - 17:11, 
+  Type Error: Unable to infer a data type of 'c'. Perhaps provide a data type annotation.

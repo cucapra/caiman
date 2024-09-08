@@ -2,12 +2,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::{type_error, Info, LocalError},
+    error::{hlc_to_source_name, Info, LocalError},
     parse::ast::{
         expect_var, hole_or_var, Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType,
         FullType, IntSize, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr,
         SpecTerm, TemplateArgs, TimelineOperation, Uop, WGPUFlags,
     },
+    type_error,
 };
 use caiman::explication::Hole;
 use std::iter::once;
@@ -27,7 +28,7 @@ use super::{
 /// * `defs` - Set of names that are explicitly user defined
 pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
     stmts: T,
-    names: &mut HashMap<String, Mutability>,
+    names: &mut HashMap<String, (Mutability, Info)>,
     defs: &mut HashSet<String>,
 ) -> Result<(), LocalError> {
     let is_const_to_mut = |is_const| {
@@ -43,10 +44,11 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 dests,
                 block,
                 is_const,
+                info,
                 ..
             } => {
                 for (d, _) in dests {
-                    names.insert(d.clone(), is_const_to_mut(*is_const));
+                    names.insert(d.clone(), (is_const_to_mut(*is_const), *info));
                     defs.insert(d.clone());
                 }
                 collect_sched_names(once(&**block), names, defs)?;
@@ -55,10 +57,11 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 lhs,
                 is_const,
                 expr,
+                info,
                 ..
             } => {
                 for (d, _) in lhs {
-                    names.insert(d.clone(), is_const_to_mut(*is_const));
+                    names.insert(d.clone(), (is_const_to_mut(*is_const), *info));
                     defs.insert(d.clone());
                 }
                 if let Some(expr) = expr {
@@ -77,28 +80,39 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
             }
             SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names, defs)?,
             SchedStmt::Assign {
-                lhs, lhs_is_ref, ..
+                lhs,
+                lhs_is_ref,
+                info,
+                ..
             } => {
                 let lhs = expect_var(lhs);
                 if !defs.contains(lhs) {
                     // only adjust mutability if the variable is not explicitly user defined
                     names.insert(
                         lhs.clone(),
-                        if *lhs_is_ref {
-                            Mutability::Const
-                        } else {
-                            Mutability::Mut
-                        },
+                        (
+                            if *lhs_is_ref {
+                                Mutability::Const
+                            } else {
+                                Mutability::Mut
+                            },
+                            *info,
+                        ),
                     );
                 }
             }
-            SchedStmt::Encode { stmt, encoder, .. } => {
-                for (s, _) in &stmt.lhs {
-                    names.insert(s.clone(), Mutability::Const);
-                    defs.insert(s.clone());
+            SchedStmt::Encode {
+                stmt,
+                encoder,
+                info,
+                cmd,
+                ..
+            } => {
+                // don't collect encoder member names, this is handled by the record type
+                if *cmd == EncodedCommand::Copy {
+                    collect_sched_expr_names(&stmt.rhs, names, defs);
                 }
-                collect_sched_expr_names(&stmt.rhs, names, defs);
-                names.insert(encoder.clone(), Mutability::Const);
+                names.insert(encoder.clone(), (Mutability::Const, *info));
             }
             SchedStmt::Call(_, call) => {
                 for arg in &call.args {
@@ -120,28 +134,31 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
 /// adds them with mutability `const`
 fn collect_sched_expr_names(
     expr: &SchedExpr,
-    names: &mut HashMap<String, Mutability>,
+    names: &mut HashMap<String, (Mutability, Info)>,
     defs: &HashSet<String>,
 ) {
     match expr {
-        SchedExpr::Binop { lhs, rhs, .. } => {
+        SchedExpr::Binop { lhs, rhs, op, .. } => {
             collect_sched_expr_names(lhs, names, defs);
-            collect_sched_expr_names(rhs, names, defs);
+            if *op != Binop::Dot {
+                // don't collect record member names, this is handed by record types
+                collect_sched_expr_names(rhs, names, defs);
+            }
         }
-        SchedExpr::Uop { expr, op, .. } => {
+        SchedExpr::Uop { expr, op, info, .. } => {
             if *op == Uop::Ref {
                 if let SchedExpr::Term(SchedTerm::Var { name, .. }) = &**expr {
                     if !defs.contains(name) {
-                        names.insert(name.clone(), Mutability::Mut);
+                        names.insert(name.clone(), (Mutability::Mut, *info));
                         return;
                     }
                 }
             }
             collect_sched_expr_names(expr, names, defs);
         }
-        SchedExpr::Term(SchedTerm::Var { name, .. }) => {
+        SchedExpr::Term(SchedTerm::Var { name, info, .. }) => {
             if !names.contains_key(name) {
-                names.insert(name.clone(), Mutability::Const);
+                names.insert(name.clone(), (Mutability::Const, *info));
             }
         }
         SchedExpr::Term(SchedTerm::Call(_, call)) => {
@@ -172,12 +189,10 @@ fn collect_bop(
     let rhs_name = hole_or_var(rhs).unwrap();
     let (left_c, right_c, ret_c) = binop_to_contraints(op, &mut env.env);
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Operator {op:?} has 1 destination, found {}",
-                dest.len()
-            ),
+            "Operator {op:?} has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -213,12 +228,10 @@ fn collect_assign_uop(
     }
     let (expr_c, ret_c) = uop_to_contraints(op, &mut env.env);
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Operator {op:?} has 1 destination, found {}",
-                dest.len()
-            ),
+            "Operator {op:?} has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -243,9 +256,10 @@ fn collect_assign_lit(
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!("{info}: Literal has 1 destination, found {}", dest.len()),
+            "Literal has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -271,9 +285,10 @@ fn collect_assign_var(
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!("{info}: Variable has 1 destination, found {}", dest.len()),
+            "Variable has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -339,14 +354,12 @@ fn collect_seq(
 ) -> Result<(), LocalError> {
     let (rets_a, rets_b) = collect_seq_body(ctx, env, block, mutables)?;
     if dests.len() != rets_a.len() || dests.len() != rets_b.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} return values from both branches of if, found {} and {}",
-                dests.len(),
-                rets_a.len(),
-                rets_b.len()
-            ),
+            "Expected {} return values from both branches of if, found {} and {}",
+            dests.len(),
+            rets_a.len(),
+            rets_b.len()
         ));
     }
     for ((d, r_a), r_b) in dests.iter().zip(rets_a.iter()).zip(rets_b.iter()) {
@@ -422,37 +435,31 @@ fn collect_assign_call(
     let func = ctx
         .scheds
         .get(fn_name)
-        .ok_or_else(|| type_error(info, &format!("{info}: Function {fn_name} not found")))?;
+        .ok_or_else(|| type_error!(info, "Function {fn_name} not found"))?;
     let sig = func.sig();
     if arg_names.len() != sig.input.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} arguments, found {}",
-                sig.input.len(),
-                arg_names.len()
-            ),
+            "Expected {} arguments, found {}",
+            sig.input.len(),
+            arg_names.len()
         ));
     }
     if dest.len() != sig.output.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} return values, found {}",
-                sig.output.len(),
-                dest.len()
-            ),
+            "Expected {} return values, found {}",
+            sig.output.len(),
+            dest.len()
         ));
     }
     if let Some(TemplateArgs::Vals(ts)) = &call_info.templates {
         if ts.len() != sig.num_dims {
-            return Err(type_error(
+            return Err(type_error!(
                 info,
-                &format!(
-                    "{info}: Expected {} template arguments, found {}",
-                    sig.num_dims,
-                    ts.len()
-                ),
+                "Expected {} template arguments, found {}",
+                sig.num_dims,
+                ts.len()
             ));
         }
         for t_arg in ts {
@@ -465,12 +472,10 @@ fn collect_assign_call(
             env.add_dtype_constraint(t_name, DataType::Int(IntSize::I32), info)?;
         }
     } else if sig.num_dims != 0 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} template arguments, found 0",
-                sig.num_dims
-            ),
+            "Expected {} template arguments, found 0",
+            sig.num_dims
         ));
     }
     for (arg, arg_type) in arg_names.iter().zip(sig.input.iter()) {
@@ -485,11 +490,10 @@ fn collect_assign_call(
         }) = &dest_annot
         {
             if anot.base != typ.base {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "{info}: Annotation for {dest_name} is incompatible with return type of {fn_name}",
-                    ),
+                    "Annotation for '{}' is incompatible with return type of '{fn_name}'",
+                    hlc_to_source_name(dest_name)
                 ));
             }
         }
@@ -528,12 +532,10 @@ fn collect_dot(
     let rhs_name = hole_or_var(rhs).unwrap();
     let lhs_name = hole_or_var(lhs).unwrap();
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Dot operator has 1 destination, found {}",
-                dest.len()
-            ),
+            "Dot operator has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -567,12 +569,10 @@ fn collect_timeline_op(
 ) -> Result<(), LocalError> {
     let arg_name = hole_or_var(arg).unwrap();
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Timeline operation has 1 destination, found {}",
-                dest.len()
-            ),
+            "Timeline operation has 1 destination, found {}",
+            dest.len()
         ));
     }
     let dest_name = &dest[0].0;
@@ -595,15 +595,14 @@ fn collect_timeline_op(
             Ok(())
         }
         TimelineOperation::Await => {
-            env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
-            env.add_var_side_cond(&format!("{dest_name}-defined_fields"), dest_name);
+            // env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
             if let Hole::Filled(arg_name) = arg_name {
+                env.add_var_side_cond(&format!("{dest_name}-defined_fields"), dest_name);
                 env.add_constraint(
                     arg_name,
                     DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
                         all: RecordConstraint::Var(format!("{dest_name}-defined_fields")),
                         read: RecordConstraint::Var(dest_name.clone()),
-                        write: RecordConstraint::Any,
                     })),
                     info,
                 )?;
@@ -621,12 +620,10 @@ fn collect_begin_encode(
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: EncodeBegin has 1 destination, found {}",
-                dest.len()
-            ),
+            "EncodeBegin has 1 destination, found {}",
+            dest.len()
         ));
     }
     let dest_name = &dest[0].0;
@@ -814,13 +811,13 @@ fn get_singleton_remote_obj_constraint(
         fields: BTreeMap::new(),
         constraint_kind: SubtypeConstraint::Any,
     };
-    let (read, write) = if flag == WGPUFlags::MapRead {
-        (populated_record, empty_record)
+    let read = if flag == WGPUFlags::MapRead {
+        populated_record
     } else if flag == WGPUFlags::CopyDst {
-        (empty_record, populated_record)
+        empty_record
     } else {
         assert_eq!(flag, WGPUFlags::Storage, "TODO: Unimplemented flag");
-        (empty_record.clone(), empty_record)
+        empty_record
     };
     DTypeConstraint::RemoteObj {
         all: RecordConstraint::Record {
@@ -832,7 +829,6 @@ fn get_singleton_remote_obj_constraint(
             constraint_kind: SubtypeConstraint::Any,
         },
         read,
-        write,
     }
 }
 
@@ -970,13 +966,11 @@ pub fn collect_schedule(
     let mut mutables = HashMap::new();
     let rets = collect_sched_helper(ctx, env, stmts.iter(), stmts.len(), &mut mutables)?;
     if rets.len() != fn_out.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} return values, found {}",
-                fn_out.len(),
-                rets.len()
-            ),
+            "Expected {} return values, found {}",
+            fn_out.len(),
+            rets.len()
         ));
     }
     for (ret_name, fn_t) in rets.iter().zip(fn_out.iter()) {

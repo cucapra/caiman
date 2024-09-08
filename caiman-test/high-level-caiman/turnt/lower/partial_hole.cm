@@ -1,0 +1,113 @@
+#version 0.1.0
+extern(gpu) simple(x: i32) -> out: i32 {
+    path : "gpu_external.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val foo(x: i32) -> i32 {
+    c :- 1
+    r :- simple'<c, c, c>(x)
+    returns r
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    enc1, enc2 :- encode_event(e)
+    sub :- submit_event(enc2)
+    snc :- sync_event(enc1, sub)
+    returns snc
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+fn foo_main(x: &i32) -> i32 
+    impls foo, foo_time, foo_space
+{
+    @in { input: node(tmln.e) };
+    let e = encode-begin @ node(tmln.(enc1, enc2)) gpu;
+    encode e.copy[x_gpu <- x];
+    /* #CHECK:
+    NamedNode {
+        name: Some(
+            NodeId(
+                "[[enc:[a-zA-Z0-9_%]+]]::y_gpu",
+            ),
+        ),
+        node: AllocTemporary {
+            place: Filled(
+                Gpu,
+            ),
+            storage_type: Filled(
+                I32,
+            ),
+            buffer_flags: Filled(
+                BufferFlags {
+                    map_read: true,
+                    map_write: false,
+                    copy_src: false,
+                    copy_dst: true,
+                    storage: true,
+                    uniform: false,
+                },
+            ),
+        },
+    },
+    #END */
+    ???;
+    let f = submit @ node(tmln.sub) e;
+
+
+    let y = await @ node(tmln.snc) f;
+    /* #CHECK:
+    NamedNode {
+        name: None,
+        node: LocalCopy {
+            input: Filled(
+                NodeId(
+                    "[[enc]]::y_gpu",
+                ),
+            ),
+            output: Filled(
+                NodeId(
+                    "[[temp:[a-zA-Z0-9_%]+]]",
+                ),
+            ),
+        },
+    },
+    #END */
+    /* #CHECK:
+    NamedNode {
+        name: Some(
+            NodeId(
+                "[[res:[a-zA-Z0-9_%]+]]::y_gpu",
+            ),
+        ),
+        node: ReadRef {
+            storage_type: Filled(
+                I32,
+            ),
+            source: Filled(
+                NodeId(
+                    "[[temp]]",
+                ),
+            ),
+        },
+    },
+    #END */
+    y.y_gpu
+
+}
+
+pipeline main {
+    foo_main
+}

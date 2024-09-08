@@ -1,5 +1,5 @@
 Error: At "bool_int.cm" 10:15 - 10:16, 
-  Type Error: Failed to unify type constraints of variable a
+  Type Error: Failed to unify type constraints of variable 'a'
 Num(
     Int(
         Var(

@@ -6,7 +6,7 @@ use std::{
 use caiman::explication::expir::BufferFlags;
 
 use crate::{
-    error::{type_error, LocalError},
+    error::{hlc_to_source_name, Info, LocalError},
     lower::{
         sched_hir::{
             cfg::{Cfg, START_BLOCK_ID},
@@ -15,6 +15,7 @@ use crate::{
         tuple_id,
     },
     parse::ast::{DataType, FullType},
+    type_error,
     typing::{MetaVar, NodeEnv},
 };
 
@@ -33,14 +34,14 @@ pub fn set_hole_defs(
 ) -> Result<(), LocalError> {
     let uses = get_uses(cfg);
     let inputs: BTreeSet<_> = input_args.iter().map(|(x, _)| x.to_string()).collect();
-    let lives = analyze(cfg, LiveVars::top());
+    let lives = analyze(cfg, LiveVars::top())?;
     let undef_vars = lives
         .get_in_fact(START_BLOCK_ID)
         .live_set
         .difference(&inputs)
         .map(|x| (x.clone(), uses.get(x).unwrap().clone()));
 
-    let r = analyze(cfg, FillHoleDefs::top(undef_vars.collect(), dom));
+    let r = analyze(cfg, FillHoleDefs::top(undef_vars.collect(), dom))?;
     let start = r.get_in_fact(START_BLOCK_ID);
     if let Some(cannot_init) = start.undefined.keys().next() {
         let (block, local) = uses.get(cannot_init).unwrap().iter().next().unwrap();
@@ -48,9 +49,10 @@ pub fn set_hole_defs(
             .stmts
             .get(*local)
             .map_or(cfg.blocks[block].get_final_info(), Hir::get_info);
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!("There is no way for '{cannot_init}' to be defined before it's used"),
+            "There is no way for '{}' to be defined before it's used",
+            hlc_to_source_name(cannot_init)
         ));
     }
     Ok(())
@@ -109,7 +111,7 @@ impl<'a> FillHoleDefs<'a> {
     }
 }
 impl<'a> Fact for FillHoleDefs<'a> {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         let mut to_remove = vec![];
         for u in self.undefined.keys() {
             if !other.undefined.contains_key(u) {
@@ -119,10 +121,14 @@ impl<'a> Fact for FillHoleDefs<'a> {
         for rem in to_remove {
             self.undefined.remove(&rem);
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: super::TransferData) {
+    fn transfer_instr(
+        &mut self,
+        stmt: HirInstr<'_>,
+        data: super::TransferData,
+    ) -> Result<(), LocalError> {
         if let HirInstr::Stmt(HirBody::Hole { dests, .. }) = stmt {
             self.process_vars(&data, |s| {
                 if !dests.iter().any(|(d, _)| d == &s) {
@@ -130,6 +136,7 @@ impl<'a> Fact for FillHoleDefs<'a> {
                 }
             });
         }
+        Ok(())
     }
 
     type Dir = Backwards;
@@ -201,12 +208,12 @@ impl<'a> UsabilityAnalysis<'a> {
 }
 
 impl<'a> Fact for UsabilityAnalysis<'a> {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.to_init = self.to_init.intersection(&other.to_init).cloned().collect();
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
         if let Some(defs) = match stmt {
             HirInstr::Stmt(HirBody::Hole { .. } | HirBody::VarDecl { rhs: None, .. }) => None,
             HirInstr::Stmt(HirBody::BeginEncoding { encoder, .. }) => Some(vec![encoder.0.clone()]),
@@ -288,7 +295,8 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
                 | Terminator::Next(..)
                 | Terminator::Call(..),
             ) => {}
-        }
+        };
+        Ok(())
     }
 
     type Dir = Backwards;
@@ -299,7 +307,6 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
 #[derive(Clone)]
 pub struct UninitCheck {
     maybe_uninit: HashSet<String>,
-    pub error: Option<LocalError>,
 }
 
 impl UninitCheck {
@@ -313,10 +320,7 @@ impl UninitCheck {
         for input in inputs {
             maybe_uninit.remove(input);
         }
-        Self {
-            maybe_uninit,
-            error: None,
-        }
+        Self { maybe_uninit }
     }
 }
 
@@ -327,15 +331,12 @@ impl PartialEq for UninitCheck {
 }
 
 impl Fact for UninitCheck {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.maybe_uninit.extend(other.maybe_uninit.iter().cloned());
-        if self.error.is_none() && other.error.is_some() {
-            self.error.clone_from(&other.error);
-        }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) -> Result<(), LocalError> {
         match stmt {
             HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
                 for i in initialized.iter() {
@@ -343,7 +344,7 @@ impl Fact for UninitCheck {
                 }
             }
             HirInstr::Stmt(HirBody::InAnnotation(..) | HirBody::OutAnnotation(..)) => {}
-            x if self.error.is_none() => {
+            x => {
                 let mut uses = BTreeSet::new();
                 x.get_uses(&mut uses);
                 if let Some(writes) = x.get_write_uses() {
@@ -353,18 +354,16 @@ impl Fact for UninitCheck {
                 }
                 for u in &self.maybe_uninit {
                     if uses.contains(u) {
-                        self.error = Some(type_error(
+                        return Err(type_error!(
                             x.get_info(),
-                            &format!(
-                                "'{}' is used before it can be initialized",
-                                ssa_original_name(u)
-                            ),
+                            "'{}' is used before it can be initialized",
+                            hlc_to_source_name(u)
                         ));
                     }
                 }
             }
-            _ => {}
-        }
+        };
+        Ok(())
     }
 
     type Dir = Forwards;

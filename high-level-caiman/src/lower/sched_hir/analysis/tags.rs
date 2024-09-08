@@ -13,12 +13,14 @@ use std::rc::Rc;
 use caiman::explication::Hole;
 use caiman::ir;
 
+use crate::error::{hlc_to_source_name, Info, LocalError};
 use crate::lower::sched_hir::cfg::FINAL_BLOCK_ID;
 use crate::lower::sched_hir::HirTerm;
 use crate::lower::sched_hir::{
     cfg::START_BLOCK_ID, HirBody, HirFuncCall, HirInstr, Terminator, TripleTag,
 };
 use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SpecType, Tag};
+use crate::type_error;
 
 use super::{Fact, Forwards, TransferData, RET_VAR};
 
@@ -501,20 +503,16 @@ impl FlowAnalysis {
     }
 
     /// Performs tag analysis on the block terminator
-    fn transfer_tail(&mut self, tail: &mut Terminator, block_id: usize) {
+    fn transfer_tail(&mut self, tail: &mut Terminator, block_id: usize) -> Result<(), LocalError> {
         match tail {
-            Terminator::Select {
-                dests, tag, info, ..
-            } => {
+            Terminator::Select { dests, tag, .. } => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
                         override_none_usable(
                             dest_tags.clone(),
-                            self.data_types.get(dest).unwrap_or_else(|| {
-                                panic!("{info}: {dest} needs a data type annotation")
-                            }),
+                            &self.data_types[dest],
                             self.flags.get(dest),
                         ),
                     );
@@ -523,7 +521,7 @@ impl FlowAnalysis {
             Terminator::CaptureCall {
                 dests,
                 captures,
-                call: HirFuncCall { tag, .. },
+                call: HirFuncCall { tag, info, .. },
                 ..
             } => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
@@ -538,10 +536,13 @@ impl FlowAnalysis {
                     );
                 }
                 for cap in captures.iter() {
-                    assert!(
-                        self.tags.contains_key(cap),
-                        "Capture {cap} is missing a tag",
-                    );
+                    if !self.tags.contains_key(cap) {
+                        return Err(type_error!(
+                            *info,
+                            "Captured variable '{}' requires a tag annotation",
+                            hlc_to_source_name(cap)
+                        ));
+                    }
                 }
             }
             Terminator::Return { dests, rets, .. } => {
@@ -583,6 +584,7 @@ impl FlowAnalysis {
                 *t = input_to_node(t.clone());
             }
         }
+        Ok(())
     }
 }
 
@@ -616,18 +618,21 @@ fn input_to_node(mut t: TripleTag) -> TripleTag {
 }
 
 impl Fact for FlowAnalysis {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, info: Info) -> Result<Self, LocalError> {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
             match self.tags.entry(k.to_string()) {
                 Entry::Occupied(mut old_v) => {
                     if old_v.get() != v {
                         old_v.get_mut().override_unknown_info(v.clone());
-                        assert!(
-                            !tag_conflict(old_v.get(), v),
-                            "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
-                            old_v.get(),
-                        );
+                        if tag_conflict(old_v.get(), v) {
+                            return Err(type_error!(
+                                info,
+                                "Flow mismatch when merging control flow paths for '{}'\n{:#?} != {v:#?}",
+                                hlc_to_source_name(k),
+                                old_v.get()
+                            ));
+                        }
                     }
                 }
                 Entry::Vacant(entry) => {
@@ -635,15 +640,16 @@ impl Fact for FlowAnalysis {
                 }
             }
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
         self.special_process_block(data.block_id);
         match stmt {
-            HirInstr::Tail(t) => self.transfer_tail(t, data.block_id),
+            HirInstr::Tail(t) => self.transfer_tail(t, data.block_id)?,
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
+        Ok(())
     }
 
     type Dir = Forwards;

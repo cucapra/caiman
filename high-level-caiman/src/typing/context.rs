@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::error::{type_error, Info, LocalError};
+use crate::error::{hlc_to_source_name, Info, LocalError};
 use crate::lower::{binop_name, op_to_str};
 use crate::parse::ast::{
     ExternDef, FlaggedType, FullType, IntSize, SpecExpr, SpecFunclet, SpecStmt, SpecTerm,
 };
+use crate::type_error;
 use crate::typing::{
     ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS, LOCAL_TEMP_FLAGS,
 };
@@ -262,60 +263,45 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
 fn resolve_types(
     env: &DTypeEnv,
     types: &mut HashMap<String, DataType>,
-    names: &HashMap<String, Mutability>,
+    names: &HashMap<String, (Mutability, Info)>,
     flags: &mut HashMap<String, ir::BufferFlags>,
 ) -> Result<(), LocalError> {
     for name in names.keys() {
         if let Some(dt) = env.env.get_type(name) {
-            //if let Ok(dt) = DTypeConstraint::try_from(dt) {
             let dt = DTypeConstraint::try_from(dt).unwrap();
             {
-                if let Ok(dt) = DataType::try_from(dt) {
+                if let Ok(dt) = DataType::try_from(dt.clone()) {
                     if matches!(&dt, DataType::Ref(inner) if matches!(**inner, DataType::Ref(_)))
-                        || (matches!(dt, DataType::Ref(_)) && names[name] == Mutability::Mut)
+                        || (matches!(dt, DataType::Ref(_)) && names[name].0 == Mutability::Mut)
                     {
-                        return Err(type_error(
+                        return Err(type_error!(
                             Info::default(),
-                            &format!(
-                                "Reference to reference types are not allowed. Found: {name}: {dt}",
-                            ),
+                            "Reference or variable of reference types are not allowed. Found {}'{}': {dt}",
+                            if matches!(names.get(name), Some((Mutability::Mut, _))) { "var " } else { "" },
+                            hlc_to_source_name(name)
                         ));
                     }
                     match &dt {
                         DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) => {
-                            if let DataType::RemoteObj { all, read, write } = &**t {
+                            if let DataType::RemoteObj { all, read } = &**t {
                                 use std::collections::hash_map::Entry;
-                                for readable in read {
-                                    if !all.iter().any(|(f, _)| f == readable) {
-                                        return Err(type_error(
-                                            Info::default(),
-                                            &format!(
-                                                "Field {readable} is read from {name}, but {name}.{readable} is not defined",
-                                            ),
-                                        ));
-                                    }
-                                }
                                 for (field, typ) in all {
                                     let final_name = format!("{name}::{field}");
                                     types.insert(final_name.clone(), typ.clone());
                                     match flags.entry(final_name) {
                                         Entry::Occupied(mut e) => {
                                             e.get_mut().storage = true;
+                                            e.get_mut().copy_dst = true;
                                             if read.contains(field) {
                                                 e.get_mut().map_read = true;
-                                            }
-                                            if write.contains(field) {
-                                                e.get_mut().copy_dst = true;
                                             }
                                         }
                                         Entry::Vacant(e) => {
                                             let mut f = ir::BufferFlags::new();
                                             f.storage = true;
+                                            f.copy_dst = true;
                                             if read.contains(field) {
                                                 f.map_read = true;
-                                            }
-                                            if write.contains(field) {
-                                                f.copy_dst = true;
                                             }
                                             e.insert(f);
                                         }
@@ -332,8 +318,20 @@ fn resolve_types(
                         _ => (),
                     }
                     types.insert(name.clone(), dt);
+                } else {
+                    return Err(type_error!(
+                        names[name].1,
+                        "The inferred data type of '{}' is incomplete. Perhaps provide a data type annotation. Inferred:\n{dt:#?}",
+                        hlc_to_source_name(name)
+                    ));
                 }
             }
+        } else {
+            return Err(type_error!(
+                names[name].1,
+                "Unable to infer a data type of '{}'. Perhaps provide a data type annotation.",
+                hlc_to_source_name(name)
+            ));
         }
     }
     Ok(())
@@ -368,13 +366,13 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             for (in_name, _) in input {
                 sched_info
                     .defined_names
-                    .insert(in_name.clone(), Mutability::Const);
+                    .insert(in_name.clone(), (Mutability::Const, *info));
             }
             for i in 0..num_dims {
                 env.add_dtype_constraint(&format!("_dim{i}"), DataType::Int(IntSize::I32), *info)?;
                 sched_info
                     .defined_names
-                    .insert(format!("_dim{i}"), Mutability::Const);
+                    .insert(format!("_dim{i}"), (Mutability::Const, *info));
             }
             let mut cannot_change_mut = input.iter().map(|(x, _)| x.clone()).collect();
             collect_sched_names(
@@ -390,11 +388,15 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             )?;
             for (var, info) in must_be_mut {
                 if !matches!(sched_info.types.get(&var), Some(DataType::Ref(_)))
-                    && !matches!(sched_info.defined_names.get(&var), Some(Mutability::Mut))
+                    && !matches!(
+                        sched_info.defined_names.get(&var),
+                        Some((Mutability::Mut, _))
+                    )
                 {
-                    return Err(type_error(
+                    return Err(type_error!(
                         info,
-                        &format!("Immutable variable {var} cannot be assigned to or have its reference taken",),
+                        "Immutable variable '{}' cannot be assigned to or have its reference taken",
+                        hlc_to_source_name(&var)
                     ));
                 }
             }
@@ -491,12 +493,10 @@ fn collect_spec_sig(
     let sig = NamedSignature::new(&spec.input, spec.output.iter(), num_dims);
     if let Some(member_sig) = &member_sig {
         if !sig_match(member_sig, &sig) {
-            return Err(type_error(
+            return Err(type_error!(
                 spec.info,
-                &format!(
-                    "Function class {class_name} has inconsistent signatures for member {}",
-                    spec.name,
-                ),
+                "Function class '{class_name}' has inconsistent signatures for member '{}'",
+                spec.name
             ));
         }
     } else {
@@ -525,11 +525,9 @@ fn collect_class_dimension(
             if member_dimensions == 0 {
                 member_dimensions = *dimensions;
             } else if member_dimensions != *dimensions {
-                return Err(type_error(
+                return Err(type_error!(
                     *info,
-                    &format!(
-                        "Function class {class_name} has inconsistent dimensions for member {name}",
-                    ),
+                    "Function class '{class_name}' has inconsistent dimensions for member '{name}'"
                 ));
             }
         }
@@ -600,11 +598,9 @@ fn collect_class_signatures(
                 let unnamed_sig = Signature::from(&sig);
                 if let Some(member_sig) = &member_sig {
                     if member_sig != &unnamed_sig {
-                        return Err(type_error(
+                        return Err(type_error!(
                             *info,
-                            &format!(
-                                "Function class {class_name} has inconsistent signatures for member {name}",
-                            ),
+                            "Function class '{class_name}' has inconsistent signatures for member '{name}'"
                         ));
                     }
                 } else {
@@ -627,6 +623,7 @@ fn collect_class_signatures(
     ctx.signatures.insert(
         class_name.to_string(),
         member_sig
+            // panic since this should be enforced in parsing
             .unwrap_or_else(|| panic!("Function class {class_name} must have at least one member")),
     );
     Ok(ctx)
@@ -661,10 +658,10 @@ fn make_signature(
             .map(|x| {
                 Ok(x.1
                     .as_ref()
-                    .ok_or_else(|| type_error(info, "Schedule inputs require a type"))?
+                    .ok_or_else(|| type_error!(info, "Schedule inputs require a type"))?
                     .base
                     .as_ref()
-                    .ok_or_else(|| type_error(info, "Schedule inputs require a type"))?
+                    .ok_or_else(|| type_error!(info, "Schedule inputs require a type"))?
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -673,7 +670,7 @@ fn make_signature(
             .map(|x| {
                 Ok(x.base
                     .as_ref()
-                    .ok_or_else(|| type_error(info, "Function outputs require a data type"))?
+                    .ok_or_else(|| type_error!(info, "Function outputs require a data type"))?
                     .clone())
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -713,11 +710,9 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
                 name.to_string(),
                 SchedOrExtern::Sched(SchedInfo::new(
                     specs.clone().try_into().map_err(|_| {
-                        type_error(
+                        type_error!(
                             *info,
-                            &format!(
-                                "{info}: Scheduling function {name} must have exactly 3 specs"
-                            ),
+                            "Scheduling function '{name}' must have exactly 3 specs"
                         )
                     })?,
                     &ctx,

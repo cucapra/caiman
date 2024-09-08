@@ -80,19 +80,20 @@ use std::collections::HashMap;
 use caiman::explication::{expir::BufferFlags, Hole};
 
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     lower::{
         sched_hir::{
             analysis::{
                 analyze,
                 hole_expansion::{UninitCheck, UsabilityAnalysis},
             },
-            cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
+            cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
             FillIn, HirBody, HirFuncCall, HirOp, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
     },
     parse::ast::{Binop, DataType, Quotient, QuotientReference, SchedLiteral, SpecType, Tag},
+    type_error,
     typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
@@ -135,22 +136,19 @@ pub fn deduce_val_quots(
     )?;
     let (mut env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
     env.converge_types()
-        .map_err(|e| type_error(Info::default(), &format!("Convergence failure: {e}")))?;
+        .map_err(|e| type_error!(Info::default(), "Convergence failure: {e}"))?;
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, output_dtypes, &env);
 
-    let res = analyze(cfg, UsabilityAnalysis::top(&env, dtypes, flags, &selects));
-    let res = analyze(
+    let res = analyze(cfg, UsabilityAnalysis::top(&env, dtypes, flags, &selects))?;
+    analyze(
         cfg,
         UninitCheck::top(
             res.get_in_fact(START_BLOCK_ID).to_init.clone(),
             inputs.iter().map(|(x, _)| x),
         ),
-    );
-    res.get_out_fact(FINAL_BLOCK_ID)
-        .error
-        .clone()
-        .map_or(Ok(()), Err)
+    )
+    .map(|_| ())
 }
 
 /// Adds constraints to the environment based on input and output annotations.
@@ -539,9 +537,7 @@ fn unify_call(
                 .iter()
                 .filter_map(|arg| {
                     if let Hole::Filled(arg) = arg {
-                        let t = dtypes.get(&ssa::ssa_original_name(arg)).unwrap_or_else(|| {
-                            panic!("Missing type info for {}", ssa::ssa_original_name(arg))
-                        });
+                        let t = &dtypes[&ssa::ssa_original_name(arg)];
                         if is_value_dtype(t) {
                             Some(MetaVar::new_var_name(arg))
                         } else {
@@ -556,16 +552,19 @@ fn unify_call(
         info,
         env,
     )?;
-    for (idx, (dest, tag)) in
-        dests
-            .iter()
-            .filter(|(x, _)| {
-                is_value_dtype(dtypes.get(&ssa::ssa_original_name(x)).unwrap_or_else(|| {
-                    panic!("Missing type info for {}", ssa::ssa_original_name(x))
-                }))
-            })
-            .enumerate()
+    for (idx, dest_tag) in dests
+        .iter()
+        .filter_map(|(x, t)| {
+            let dt = &dtypes[&ssa::ssa_original_name(x)];
+            if is_value_dtype(dt) {
+                Some(Ok((x, t)))
+            } else {
+                None
+            }
+        })
+        .enumerate()
     {
+        let (dest, tag) = dest_tag?;
         env = add_type_annot(dest, tag, info, env)?;
         env = add_overrideable_constraint(
             dest,
@@ -710,19 +709,18 @@ fn unify_terminator(
             let output_classes: Vec<_> = env.get_function_output_classes().to_vec();
             for (idx, (ret_name, class)) in ret_names
                 .iter()
-                .filter(|rname| {
-                    is_value_dtype(dtypes.get(&ssa::ssa_original_name(rname)).unwrap_or_else(
-                        || {
-                            panic!(
-                                "{info}: Missing dtype for {}",
-                                ssa::ssa_original_name(rname)
-                            )
-                        },
-                    ))
+                .filter_map(|rname| {
+                    let dt = &dtypes[&ssa::ssa_original_name(rname)];
+                    if is_value_dtype(dt) {
+                        Some(Ok(rname))
+                    } else {
+                        None
+                    }
                 })
                 .zip(output_classes.into_iter())
                 .enumerate()
             {
+                let ret_name = ret_name?;
                 if let Some(func_class) = class {
                     if idx < env.get_spec_output_classes().len()
                         && env.get_spec_output_classes()[idx] == func_class

@@ -7,9 +7,10 @@ pub use tmln_typing::deduce_tmln_quots;
 pub use val_typing::deduce_val_quots;
 
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{hlc_to_source_name, Info, LocalError},
     lower::sched_hir::{cfg::START_BLOCK_ID, TripleTag},
     parse::ast::{Quotient, QuotientReference, SpecType, Tag},
+    type_error,
     typing::{NodeEnv, ValQuot},
 };
 /// Adds a type constraint to the environment
@@ -28,9 +29,10 @@ fn add_constraint(
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     env.add_constraint(lhs, rhs).map_err(|e| {
-        type_error(
+        type_error!(
             info,
-            &format!("Failed to unify node constraints of {lhs}:\n {e}"),
+            "Failed to unify node constraints of '{}':\n {e}",
+            hlc_to_source_name(lhs)
         )
     })?;
     Ok(env)
@@ -82,8 +84,14 @@ fn add_var_constraint(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_var_eq(lhs, var)
-        .map_err(|e| type_error(info, &format!("Failed to unify {lhs} with {var}:\n {e}")))?;
+    env.add_var_eq(lhs, var).map_err(|e| {
+        type_error!(
+            info,
+            "Failed to unify '{}' with '{}':\n {e}",
+            hlc_to_source_name(lhs),
+            hlc_to_source_name(var)
+        )
+    })?;
     Ok(env)
 }
 
@@ -103,9 +111,10 @@ fn add_node_eq(
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     env.add_node_eq(name, class_name).map_err(|e| {
-        type_error(
+        type_error!(
             info,
-            &format!("Failed to unify {name} with node {class_name}:\n {e}"),
+            "Failed to unify '{}' with node '{class_name}':\n {e}",
+            hlc_to_source_name(name)
         )
     })?;
     Ok(env)

@@ -10,7 +10,10 @@ mod refs;
 mod ssa;
 mod tags;
 
-use crate::parse::ast::DataType;
+use crate::{
+    error::{Info, LocalError},
+    parse::ast::DataType,
+};
 
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
@@ -43,12 +46,11 @@ pub struct TransferData {
 /// A dataflow analysis fact
 pub trait Fact: PartialEq + Clone {
     /// Performs a meet operation on two facts
-    #[must_use]
-    fn meet(self, other: &Self) -> Self;
+    fn meet(self, other: &Self, block_info: Info) -> Result<Self, LocalError>;
 
     /// Updates the basic block's fact after propagating the fact through the given
     /// statement or terminator.
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError>;
 
     type Dir: Direction;
 }
@@ -67,8 +69,8 @@ pub trait Direction {
     ///    of the analysis
     fn local_iter<'a>(
         it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
-        func: &mut dyn FnMut(HirInstr<'a>, usize),
-    );
+        func: &mut dyn FnMut(HirInstr<'a>, usize) -> Result<(), LocalError>,
+    ) -> Result<(), LocalError>;
 
     /// Gets the starting point for the analysis in this direction
     fn root_id() -> usize;
@@ -104,7 +106,11 @@ pub trait Direction {
 /// * `in_fact` - The input fact for the block
 /// # Returns
 /// * Tuple of input facts for each instruction and the output fact for the block
-fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> T {
+fn analyze_basic_block<T: Fact>(
+    cfg: &mut Cfg,
+    block_id: usize,
+    in_fact: &T,
+) -> Result<T, LocalError> {
     let mut fact = in_fact.clone();
     let block = cfg.blocks.get_mut(&block_id).unwrap();
     let cont_id = block.ret_block;
@@ -124,10 +130,10 @@ fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> 
                     cont_id,
                     local_instr_id,
                 },
-            );
+            )
         },
-    );
-    fact
+    )?;
+    Ok(fact)
 }
 
 /// The result of an analysis pass
@@ -197,7 +203,7 @@ where
 /// and does not contain loops.
 ///
 /// Furthermore, we assume that any `x` met with Top results in `x`.
-pub fn analyze<T: Fact>(cfg: &mut Cfg, top: T) -> InOutFacts<T> {
+pub fn analyze<T: Fact>(cfg: &mut Cfg, top: T) -> Result<InOutFacts<T>, LocalError> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
     let mut out_facts: HashMap<usize, T> = HashMap::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
@@ -206,18 +212,19 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: T) -> InOutFacts<T> {
 
     while let Some(block) = worklist.pop() {
         let in_fact = in_facts.get(&block).unwrap();
-        let out_fact = analyze_basic_block(cfg, block, in_fact);
+        let out_fact = analyze_basic_block(cfg, block, in_fact)?;
         let add_neighbors = out_facts.get(&block) != Some(&out_fact);
         if add_neighbors {
-            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
+            let blk_info = cfg.blocks[&block].get_starting_info();
+            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block, blk_info)?;
             // use topo order, so don't add to worklist
         }
         out_facts.insert(block, out_fact);
     }
-    InOutFacts {
+    Ok(InOutFacts {
         in_facts,
         out_facts,
-    }
+    })
 }
 
 /// Broadcasts the output facts to the neighbors
@@ -235,7 +242,8 @@ fn broadcast_out_facts<T: Fact>(
     mut in_facts: HashMap<usize, T>,
     adj_lst: &HashMap<usize, Vec<usize>>,
     block: usize,
-) -> HashMap<usize, T> {
+    block_info: Info,
+) -> Result<HashMap<usize, T>, LocalError> {
     if out_fact.is_empty() {
         // do nothing (meet w/ top)
     } else {
@@ -245,14 +253,14 @@ fn broadcast_out_facts<T: Fact>(
         for neighbor in adj_lst.get(&block).unwrap() {
             in_facts.insert(
                 *neighbor,
-                in_facts
-                    .get(neighbor)
-                    .cloned()
-                    .map_or_else(|| out_fact[0].clone(), |x| x.meet(out_fact[0])),
+                in_facts.get(neighbor).cloned().map_or_else(
+                    || Ok(out_fact[0].clone()),
+                    |x| x.meet(out_fact[0], block_info),
+                )?,
             );
         }
     }
-    in_facts
+    Ok(in_facts)
 }
 
 /// A backwards analysis
@@ -282,11 +290,12 @@ impl Direction for Backwards {
 
     fn local_iter<'a>(
         it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
-        func: &mut dyn FnMut(HirInstr<'a>, usize),
-    ) {
+        func: &mut dyn FnMut(HirInstr<'a>, usize) -> Result<(), LocalError>,
+    ) -> Result<(), LocalError> {
         for (id, instr) in it.rev() {
-            func(instr, id);
+            func(instr, id)?;
         }
+        Ok(())
     }
 
     fn root_id() -> usize {
@@ -339,11 +348,12 @@ impl Direction for Forwards {
 
     fn local_iter<'a>(
         it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
-        func: &mut dyn FnMut(HirInstr<'a>, usize),
-    ) {
+        func: &mut dyn FnMut(HirInstr<'a>, usize) -> Result<(), LocalError>,
+    ) -> Result<(), LocalError> {
         for (id, instr) in it {
-            func(instr, id);
+            func(instr, id)?;
         }
+        Ok(())
     }
 
     fn root_id() -> usize {
@@ -438,7 +448,7 @@ impl<'a> ReachingDefs<'a> {
 }
 
 impl<'a> Fact for ReachingDefs<'a> {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.kill_set.extend(other.kill_set.iter().cloned());
         for item in &self.available_set {
             if !other.available_set.contains(item) {
@@ -452,10 +462,14 @@ impl<'a> Fact for ReachingDefs<'a> {
         }
         self.available_set
             .extend(other.available_set.iter().cloned());
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, data: TransferData) {
+    fn transfer_instr(
+        &mut self,
+        mut stmt: HirInstr<'_>,
+        data: TransferData,
+    ) -> Result<(), LocalError> {
         self.set_hole_uses(&mut stmt);
         if let Some(newly_available) = self.becomes_available.get(&data.block_id) {
             self.available_set.extend(newly_available.iter().cloned());
@@ -551,6 +565,7 @@ impl<'a> Fact for ReachingDefs<'a> {
             }
             HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Passes out of order"),
         }
+        Ok(())
     }
 
     type Dir = Forwards;
@@ -584,20 +599,21 @@ impl PartialEq for LiveVars {
 pub const RET_VAR: &str = "_out";
 
 impl Fact for LiveVars {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         for var in &other.live_set {
             self.live_set.insert(var.clone());
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) -> Result<(), LocalError> {
         if let Some(defs) = stmt.get_defs() {
             for var in defs {
                 self.live_set.remove(&var);
             }
         }
         stmt.get_uses(&mut self.live_set);
+        Ok(())
     }
 
     type Dir = Backwards;
@@ -624,16 +640,16 @@ impl<'a> ActiveFences<'a> {
 }
 
 impl<'a> Fact for ActiveFences<'a> {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.active_fences = self
             .active_fences
             .intersection(&other.active_fences)
             .cloned()
             .collect();
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) -> Result<(), LocalError> {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();
@@ -659,6 +675,7 @@ impl<'a> Fact for ActiveFences<'a> {
                 }
             }
         }
+        Ok(())
     }
 
     type Dir = Forwards;

@@ -182,7 +182,7 @@ impl<T: Kind, A: Kind> Node<T, A> {
     }
 
     /// Gets the parent of a node or None
-    fn parent(&self) -> Option<&NodePtr<T, A>> {
+    const fn parent(&self) -> Option<&NodePtr<T, A>> {
         match self {
             Self::Var { ref parent, .. }
             | Self::Term { ref parent, .. }
@@ -497,10 +497,16 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
 }
 
 /// Unifies two nodes of a type expression.
+/// # Arguments
+/// * `ignore_contravaint` - allow contravariant constraints to meet to a lower type in the lattice
 /// # Returns
 /// Returns `true` if the two nodes can be unified, `false` otherwise.
 #[must_use]
-fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
+fn unify<T: Kind, A: Kind>(
+    a: &NodePtr<T, A>,
+    b: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) -> bool {
     if a.try_borrow_mut().is_err() {
         // we might have already borrowed the node if we're in the middle
         // of creating a cycle. For example, unifying `Return(e)` with `e`.
@@ -526,10 +532,10 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
     if can_union(&a, &b) {
         union(&a, &b);
     }
-    if let Some(ret) = unify_children(&a, &b) {
+    if let Some(ret) = unify_children(&a, &b, ignore_contravariant) {
         return ret;
     }
-    union_dynamic_terms(&a, &b);
+    union_dynamic_terms(&a, &b, ignore_contravariant);
     true
 }
 
@@ -547,7 +553,11 @@ fn is_already_unified<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) ->
 /// `false` if it failed, and `None` if unification should continue with unioning
 /// dynamic terms.
 #[allow(clippy::too_many_lines)]
-fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Option<bool> {
+fn unify_children<T: Kind, A: Kind>(
+    a: &NodePtr<T, A>,
+    b: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) -> Option<bool> {
     let borrow_a = a.borrow();
     let borrow_b = b.borrow();
     match (&*borrow_a, &*borrow_b) {
@@ -568,7 +578,7 @@ fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Opt
                 return Some(false);
             }
             for (a, b) in a_args.iter().zip(b_args.iter()) {
-                if !unify(a, b) {
+                if !unify(a, b, ignore_contravariant) {
                     return Some(false);
                 }
             }
@@ -610,7 +620,7 @@ fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Opt
                     true
                 }
             })) {
-                if !unify(a, b) {
+                if !unify(a, b, ignore_contravariant) {
                     return Some(false);
                 }
             }
@@ -631,10 +641,12 @@ fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Opt
             },
         ) => {
             if op_a != op_b
-                || (*const_kind_a == SubtypeConstraint::Contravariant
+                || (!ignore_contravariant
+                    && *const_kind_a == SubtypeConstraint::Contravariant
                     && (args_b.len() > args_a.len()
                         || args_b.iter().any(|(k, _)| !args_a.contains_key(k))))
-                || (*const_kind_b == SubtypeConstraint::Contravariant
+                || (!ignore_contravariant
+                    && *const_kind_b == SubtypeConstraint::Contravariant
                     && (args_a.len() > args_b.len()
                         || args_a.iter().any(|(k, _)| !args_b.contains_key(k))))
             {
@@ -642,7 +654,7 @@ fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Opt
             }
             for (k, a) in args_a {
                 if let Some(b) = args_b.get(k) {
-                    if !unify(a, b) {
+                    if !unify(a, b, ignore_contravariant) {
                         return Some(false);
                     }
                 }
@@ -657,7 +669,11 @@ fn unify_children<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> Opt
 /// Meets two dynamic terms by reparenting them. If one term is a subtype of the other,
 /// the subtype will become the parent. If neither is a subtype of the other, a new
 /// parent will be created which is the greatest lower bound of the two terms.
-fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
+fn union_dynamic_terms<T: Kind, A: Kind>(
+    a: &NodePtr<T, A>,
+    b: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) {
     match (&mut *a.borrow_mut(), &mut *b.borrow_mut()) {
         (
             Node::DynamicTerm {
@@ -665,7 +681,7 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
                 ..
             },
             Node::DynamicTerm { parent, .. },
-        ) => {
+        ) if !ignore_contravariant => {
             parent.replace(a.clone());
         }
         (
@@ -674,7 +690,7 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
                 constraint_kind: SubtypeConstraint::Contravariant,
                 ..
             },
-        ) => {
+        ) if !ignore_contravariant => {
             parent.replace(b.clone());
         }
         (
@@ -923,7 +939,23 @@ impl<T: Kind, A: Kind> Env<T, A> {
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let var = self.get_or_make_node(var);
-        self.add_constraint_helper(&var, constraint)
+        self.add_constraint_helper(&var, constraint, false)
+    }
+
+    /// Adds a constraint to the environment. Ignores contravariance of the constraints
+    /// so that a constravariant constraint can meet to a lower type.
+    /// # Arguments
+    /// - `var`: The name of the type variable to add the constraint to.
+    /// - `constraint`: The constraint to add.
+    /// # Errors
+    /// Returns `Err` if the constraint cannot be added (unification fails)
+    pub fn add_constraint_ignore_contravariance(
+        &mut self,
+        var: &str,
+        constraint: &Constraint<T, A>,
+    ) -> Result<(), String> {
+        let var = self.get_or_make_node(var);
+        self.add_constraint_helper(&var, constraint, true)
     }
 
     /// Unifies the node `var` with the constraint.
@@ -931,10 +963,11 @@ impl<T: Kind, A: Kind> Env<T, A> {
         &mut self,
         var: &NodePtr<T, A>,
         constraint: &Constraint<T, A>,
+        ignore_contravariant: bool,
     ) -> Result<(), String> {
         #![allow(clippy::similar_names)]
         let c = self.contraint_to_node(constraint);
-        if unify(var, &c) {
+        if unify(var, &c, ignore_contravariant) {
             Ok(())
         } else {
             Err(format!(
@@ -955,7 +988,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let class = self.new_class_type(class_name);
-        self.add_constraint_helper(&class, constraint)
+        self.add_constraint_helper(&class, constraint, false)
     }
 
     /// Gets the node for a variable, creating it if it does not exist.

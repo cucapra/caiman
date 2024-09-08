@@ -6,14 +6,15 @@ use std::{
 mod specs;
 
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{hlc_to_source_name, Info, LocalError},
     parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Tag, Uop, WGPUFlags},
+    type_error,
 };
 use caiman::{assembly::ast as asm, ir};
 use types::constraint_to_wildcard_vq;
 
 use self::{
-    types::{ADataType, CDataType, DTypeConstraint, RecordConstraint},
+    types::{ADataType, CDataType, DTypeConstraint},
     unification::{Constraint, Env},
 };
 mod sched;
@@ -368,12 +369,13 @@ impl DTypeEnv {
     ) -> Result<(), LocalError> {
         let c = constraint.instantiate(&mut self.env);
         self.env.add_constraint(name, &c).map_err(|c| {
-            type_error(
+            type_error!(
                 info,
-                &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
+                "Failed to unify type constraints of variable '{}'\n\n{c}",
+                hlc_to_source_name(name)
             )
         })?;
-        self.check_side_conds(info)
+        self.enforce_side_conds(info)
     }
 
     /// Adds a side condition that `(subtype, supertype)` must be an element of the subtype relation.
@@ -385,46 +387,82 @@ impl DTypeEnv {
     /// Returns ok if all side conditions are satisfied.
     /// # Errors
     /// Returns an error if a side condition is not satisfied.
-    fn check_side_conds(&self, info: Info) -> Result<(), LocalError> {
-        for (subtype, supertype) in &self.side_conditions {
-            let sub_c = self.env.get_type(subtype).map(DTypeConstraint::try_from);
-            let super_c = self.env.get_type(supertype).map(DTypeConstraint::try_from);
-            if !match (&sub_c, &super_c) {
-                (
-                    Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
-                        fields: sub_fields,
-                        ..
-                    }))),
-                    Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
-                        fields: super_fields,
-                        ..
-                    }))),
-                ) => !super_fields
-                    .iter()
-                    .any(|(n, _)| !sub_fields.contains_key(n)),
-                (
-                    Some(Ok(
-                        DTypeConstraint::Record { .. }
-                        | DTypeConstraint::Any
-                        | DTypeConstraint::Var(_),
-                    )),
-                    Some(Ok(
-                        DTypeConstraint::Record { .. }
-                        | DTypeConstraint::Any
-                        | DTypeConstraint::Var(_),
-                    )),
-                )
-                | (Some(_), None)
-                | (None, Some(_))
-                | (Some(Err(_)), Some(Err(_))) => true,
-                _ => false,
-            } {
-                return Err(type_error(
-                    info,
-                    &format!("Constraint caused violation of condition that {subtype} is a subtype of {supertype}\n{sub_c:#?} \n !<: \n{super_c:#?}"),
-                ));
+    fn enforce_side_conds(&mut self, info: Info) -> Result<(), LocalError> {
+        let side_conds: Vec<_> = self
+            .side_conditions
+            .iter()
+            .map(|(a, b)| (a.to_owned(), b.to_owned()))
+            .collect();
+        for (subtype, supertype) in side_conds {
+            let sub_dt = self.env.get_type(&subtype).map(DTypeConstraint::try_from);
+            let super_c = self.env.get_type(&supertype);
+            let super_dt = super_c.clone().map(DTypeConstraint::try_from);
+            if let Some(super_c) = super_c {
+                self.env.add_constraint_ignore_contravariance(&subtype, &super_c).map_err(|e| {
+                    type_error!(
+                        info,
+                        "Constraint caused violation of condition that '{}' is a subtype of '{}'\nHowever {sub_dt:#?}\n !<:\n{super_dt:#?}\n\n{e}",
+                        hlc_to_source_name(&subtype),
+                        hlc_to_source_name(&supertype)
+                    )
+                })?;
             }
         }
+        //     if !match (&sub_c, &super_c) {
+        //         (
+        //             Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
+        //                 fields: sub_fields,
+        //                 ..
+        //             }))),
+        //             Some(Ok(DTypeConstraint::Record(RecordConstraint::Record {
+        //                 fields: super_fields,
+        //                 ..
+        //             }))),
+        //         ) => {
+        //             for sup in super_fields.keys() {
+        //                 if !sub_fields.contains_key(sup) {
+        //                     add_to.push((sup.clone(), supertype.clone(), subtype.clone()));
+        //                 }
+        //             }
+        //             true
+        //         }
+        //         (
+        //             Some(Ok(
+        //                 DTypeConstraint::Record { .. }
+        //                 | DTypeConstraint::Any
+        //                 | DTypeConstraint::Var(_),
+        //             )),
+        //             Some(Ok(
+        //                 DTypeConstraint::Record { .. }
+        //                 | DTypeConstraint::Any
+        //                 | DTypeConstraint::Var(_),
+        //             )),
+        //         )
+        //         | (Some(_), None)
+        //         | (None, Some(_))
+        //         | (Some(Err(_)), Some(Err(_))) => true,
+        //         _ => false,
+        //     } {
+        //         return Err(type_error!(
+        //             info,
+        //             "Constraint caused violation of condition that {}'{}' is a subtype of '{}'\n{sub_c:#?} \n !<: \n{super_c:#?}",
+        //             subtype.find('-').map_or_else(String::new, |start_info| format!("{} of ", &subtype[start_info + 1..])),
+        //             hlc_to_source_name(subtype),
+        //             hlc_to_source_name(supertype)
+        //         ));
+        //     }
+        // }
+        // for (field, supertype, subtype) in add_to {
+        //     if let Constraint::DynamicTerm(x, fields, k) = self.env.get_type(&supertype).unwrap() {
+        //         let mut rec = BTreeMap::new();
+        //         let v = fields[&field].clone();
+        //         rec.insert(field, v);
+        //         let constraint = Constraint::DynamicTerm(x, rec, k);
+        //         self.add_raw_constraint(&subtype, &constraint, info)?;
+        //     } else {
+        //         panic!("Should be a dynamic term");
+        //     }
+        // }
         Ok(())
     }
 
@@ -445,7 +483,7 @@ impl DTypeEnv {
     ) -> Result<(), LocalError> {
         let constraint = DTypeConstraint::from(constraint);
         self.add_constraint(name, constraint, info)?;
-        self.check_side_conds(info)
+        self.enforce_side_conds(info)
     }
 
     /// Adds a constraint that two variables are equivalent.
@@ -455,12 +493,13 @@ impl DTypeEnv {
         self.env
             .add_constraint(name, &Constraint::Var(equiv.to_string()))
             .map_err(|c| {
-                type_error(
+                type_error!(
                     info,
-                    &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
+                    "Failed to unify type constraints of variable '{}'\n\n{c}",
+                    hlc_to_source_name(name)
                 )
             })?;
-        self.check_side_conds(info)
+        self.enforce_side_conds(info)
     }
 
     /// Adds a constraint that a variable must adhere to.
@@ -473,12 +512,13 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         self.env.add_constraint(name, constraint).map_err(|c| {
-            type_error(
+            type_error!(
                 info,
-                &format!("Failed to unify type constraints of variable {name}\n\n{c}"),
+                "Failed to unify type constraints of variable '{}'\n\n{c}",
+                hlc_to_source_name(name)
             )
         })?;
-        self.check_side_conds(info)
+        self.enforce_side_conds(info)
     }
 }
 
@@ -534,8 +574,9 @@ pub struct SchedInfo {
     /// Map from variable name to type.
     pub types: HashMap<String, DataType>,
     /// Set of defined names and mapping from defined name to
-    /// whether it is a constant. Non-constants are references.
-    pub defined_names: HashMap<String, Mutability>,
+    /// whether it is a constant and its location of definition or a use.
+    /// Non-constants are references.
+    pub defined_names: HashMap<String, (Mutability, Info)>,
     /// Map from device variable name to flags.
     pub flags: HashMap<String, ir::BufferFlags>,
 }
@@ -597,39 +638,36 @@ impl SchedInfo {
         let mut spatial = None;
         for name in specs {
             if !ctx.specs.contains_key(&name) {
-                return Err(type_error(*info, &format!("{info}: Spec {name} not found")));
+                return Err(type_error!(*info, "Spec '{name}' not found"));
             }
             let typ = ctx.specs.get(&name).unwrap().typ;
             match typ {
                 SpecType::Value => {
                     if val.is_some() {
-                        return Err(type_error(
+                        return Err(type_error!(
                             *info,
-                            &format!("{info}: Duplicate value specs {name} and {}", val.unwrap()),
+                            "Duplicate value specs '{name}' and '{}'",
+                            val.unwrap()
                         ));
                     }
                     val = Some(name);
                 }
                 SpecType::Timeline => {
                     if timeline.is_some() {
-                        return Err(type_error(
+                        return Err(type_error!(
                             *info,
-                            &format!(
-                                "{info}: Duplicate timeline specs {name} and {}",
-                                timeline.unwrap()
-                            ),
+                            "Duplicate timeline specs '{name}' and '{}'",
+                            timeline.unwrap()
                         ));
                     }
                     timeline = Some(name);
                 }
                 SpecType::Spatial => {
                     if spatial.is_some() {
-                        return Err(type_error(
+                        return Err(type_error!(
                             *info,
-                            &format!(
-                                "{info}: Duplicate spatial specs {name} and {}",
-                                spatial.unwrap()
-                            ),
+                            "Duplicate spatial specs '{name}' and '{}'",
+                            spatial.unwrap()
                         ));
                     }
                     spatial = Some(name);
@@ -637,13 +675,13 @@ impl SchedInfo {
             }
         }
         if val.is_none() {
-            return Err(type_error(*info, &format!("{info}: Missing value spec")));
+            return Err(type_error!(*info, "Missing value spec"));
         }
         if timeline.is_none() {
-            return Err(type_error(*info, &format!("{info}: Missing timeline spec")));
+            return Err(type_error!(*info, "Missing timeline spec"));
         }
         if spatial.is_none() {
-            return Err(type_error(*info, &format!("{info}: Missing spatial spec")));
+            return Err(type_error!(*info, "Missing spatial spec"));
         }
         Ok(Self {
             dtype_sig: sig,

@@ -1,5 +1,5 @@
 Error: At "mismatch_annot.cm" 14:5 - 14:37, 
-  Type Error: Failed to unify type constraints of variable a%0
+  Type Error: Failed to unify type constraints of variable 'a'
 Num(
     Int(
         I64,

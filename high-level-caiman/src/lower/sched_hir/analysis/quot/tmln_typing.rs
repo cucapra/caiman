@@ -19,7 +19,7 @@ use std::{
 use caiman::explication::Hole;
 
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     lower::{
         sched_hir::{
             analysis::{topo_order_rev, InOutFacts, LiveVars},
@@ -29,6 +29,7 @@ use crate::{
         tuple_id,
     },
     parse::ast::{DataType, Quotient, SpecType},
+    type_error,
     typing::{is_timeline_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
@@ -252,12 +253,8 @@ fn unify_nodes(
             }
         }
     }
-    env.converge_types().map_err(|e| {
-        type_error(
-            Info::default(),
-            &format!("Failed to converge node types:\n {e}"),
-        )
-    })?;
+    env.converge_types()
+        .map_err(|e| type_error!(Info::default(), "Failed to converge node types:\n {e}"))?;
     for ev in hole_local_events {
         // for holes, unify the events we created for each hole if we don't need them
         if env.get_node_name(&format!("{LOCAL_STEM}{ev}")).is_none() {
@@ -265,7 +262,7 @@ fn unify_nodes(
                 &format!("{LOCAL_STEM}{ev}"),
                 &format!("{LOCAL_STEM}{}", ev + 1),
             )
-            .map_err(|s| type_error(Info::default(), &s))?;
+            .map_err(|s| type_error!(Info::default(), "{s}"))?;
         }
     }
     let io_evs = into_input_output_annotations(cfg, &env, &block_loc_events)?;
@@ -297,9 +294,9 @@ fn into_input_output_annotations(
         in_ev.timeline.quot_var.spec_var = Some(
             env.get_node_name(&format!("{LOCAL_STEM}{}", events.first().unwrap()))
                 .ok_or_else(|| {
-                    type_error(
+                    type_error!(
                         cfg.blocks[block].get_starting_info(),
-                        "Need annotation for implicit in",
+                        "Need annotation for implicit in"
                     )
                 })?,
         );
@@ -311,9 +308,9 @@ fn into_input_output_annotations(
                 first_last_events[&out_block].last().unwrap()
             ))
             .ok_or_else(|| {
-                type_error(
+                type_error!(
                     cfg.blocks[&out_block].get_final_info(),
-                    "Need annotation for implicit out",
+                    "Need annotation for implicit out"
                 )
             })?,
         );
@@ -865,10 +862,7 @@ fn unify_call(
         std::iter::once(MetaVar::new_var_name(&format!("{LOCAL_STEM}{last_loc}")))
             .chain(call.args.iter().filter_map(|arg| {
                 if let Hole::Filled(arg) = arg {
-                    let t = dtypes
-                        .get(arg)
-                        .unwrap_or_else(|| panic!("Missing type info for {arg}"));
-                    if is_timeline_dtype(t) {
+                    if is_timeline_dtype(&dtypes[arg]) {
                         Some(MetaVar::new_var_name(arg))
                     } else {
                         None
@@ -917,13 +911,7 @@ fn unify_call(
     )?;
     for (idx, (dest, tag)) in dests
         .iter()
-        .filter(|(x, _)| {
-            is_timeline_dtype(
-                dtypes
-                    .get(x)
-                    .unwrap_or_else(|| panic!("Missing type info for {x}")),
-            )
-        })
+        .filter(|(x, _)| is_timeline_dtype(&dtypes[x]))
         .enumerate()
     {
         env = add_type_annot(dest, tag, call.info, env)?;

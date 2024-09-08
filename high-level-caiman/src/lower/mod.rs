@@ -1,11 +1,10 @@
-
-
 use crate::{
-    error::{self, type_error, Info, LocalError},
+    error::{self, Info, LocalError},
     parse::ast::{
         Binop, ClassMembers, DataType, ExternDef, FloatSize, InputOrOutputVal, IntSize,
         SchedulingFunc, TopLevel, Uop,
     },
+    type_error,
     typing::Context,
 };
 use caiman::assembly::ast as asm;
@@ -67,19 +66,18 @@ impl DataType {
 
     /// For types that can be stored in memory, converts a high-level caiman data type
     /// to the caiman assembly type that an allocation would have to store a value
-    /// of this type. References are unwrapped to get the underlying type. 
+    /// of this type. References are unwrapped to get the underlying type.
     /// Returns `None` otherwise.
     #[must_use]
     pub fn storage_type(&self) -> Option<asm::FFIType> {
         match self {
             Self::Ref(d) => d.storage_type(),
-            _ => self.ffi()
+            _ => self.ffi(),
         }
     }
 
-
     /// Converts a high-level caiman data type to a caiman assembly type id.
-    #[must_use] 
+    #[must_use]
     pub fn asm_type(&self) -> asm::TypeId {
         use asm::TypeId;
         match self {
@@ -92,14 +90,10 @@ impl DataType {
             Self::UserDefined(name) => TypeId(name.clone()),
             Self::Encoder(_) => TypeId(String::from("Encoder")),
             Self::Fence(_) => TypeId(String::from("Fence")),
-            Self::Ref(t) => TypeId(format!(
-                "&{}",
-                t.asm_type()
-            )),
+            Self::Ref(t) => TypeId(format!("&{}", t.asm_type())),
             x => unimplemented!("TODO: {x:?}"),
         }
     }
-    
 }
 
 /// Convert a high-level caiman data type to a caiman assembly type.
@@ -113,7 +107,11 @@ fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
 /// Returns an error if the program is not well-typed or flattened.
 /// # Panics
 /// If lowering something with currently unsupported language features.
-pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Result<asm::Program, error::LocalError> {
+pub fn lower(
+    hlc: Vec<TopLevel>,
+    typing_ctx: &Context,
+    no_inference: bool,
+) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
     // 2. Constant fold constants
@@ -163,9 +161,9 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Re
                 };
                 for f in members {
                     match f {
-                        ClassMembers::SpatialFunclet(..) |
-                        ClassMembers::TimelineFunclet(..) |
-                        ClassMembers::ValueFunclet(..) => {
+                        ClassMembers::SpatialFunclet(..)
+                        | ClassMembers::TimelineFunclet(..)
+                        | ClassMembers::ValueFunclet(..) => {
                             let funclet = lower_spec(f, &name, typing_ctx);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
@@ -177,7 +175,17 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Re
                             output,
                             def,
                             info,
-                        } => asm.declarations.push(extern_to_asm(&name, device, pure, input, output, def, info, &class.name, typing_ctx.class_dimensions[&class.name.0])?),
+                        } => asm.declarations.push(extern_to_asm(
+                            &name,
+                            device,
+                            pure,
+                            input,
+                            output,
+                            def,
+                            info,
+                            &class.name,
+                            typing_ctx.class_dimensions[&class.name.0],
+                        )?),
                     }
                 }
                 asm.declarations
@@ -207,7 +215,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context, no_inference: bool) -> Re
                     .extend(res.into_iter().map(asm::Declaration::Funclet));
             }
             // TODO: do something with this instead of handling in the parser to allow out of order uses
-            TopLevel::Typedef { .. } => (), 
+            TopLevel::Typedef { .. } => (),
             _ => todo!(),
         }
     }
@@ -258,7 +266,6 @@ pub fn op_to_str<'a>(basename: &str, arg_types: impl Iterator<Item = &'a String>
     let args: Vec<_> = arg_types.cloned().collect();
     format!("_{basename}_{}", args.join("_"))
 }
-
 
 /// Gets the id of the direct result of an operation or call that results in `names`.
 /// # Panics
@@ -340,44 +347,51 @@ fn extern_to_asm(
     let template_args = if device == "gpu" {
         vec![]
     } else {
-        (0..num_dims).map(|_| asm::ExternalArgument{
-            name: None,
-            ffi_type: DataType::Int(IntSize::I32).ffi().unwrap(),
-        }).collect()
+        (0..num_dims)
+            .map(|_| asm::ExternalArgument {
+                name: None,
+                ffi_type: DataType::Int(IntSize::I32).ffi().unwrap(),
+            })
+            .collect()
     };
     Ok(asm::Declaration::ExternalFunction(asm::ExternalFunction {
         name: name.to_string(),
         kind: match (device, pure) {
             (d, true) if d == "cpu" => asm::ExternalFunctionKind::CPUPure,
             (d, false) if d == "cpu" => asm::ExternalFunctionKind::CPUEffect,
-            (d, _) if d == "gpu" => asm::ExternalFunctionKind::GPU(
-                get_gpu_info(def).map_or_else(|| Err(type_error(info, 
-                    &format!("{name} is declared to be a gpu external function but contains no GPU info"))), Ok)?,
-            ),
+            (d, _) if d == "gpu" => asm::ExternalFunctionKind::GPU(get_gpu_info(def).map_or_else(
+                || {
+                    Err(type_error!(
+                        info,
+                        "'{name}' is declared to be a gpu external function but contains no GPU info"
+                    ))
+                },
+                Ok,
+            )?),
             (d, _) => {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "Unknown external function device {d} for function {name}"
-                    ),
+                    "Unknown external function device {d} for function '{name}'"
                 ))
             }
         },
-        input_args: template_args.into_iter().chain(input
+        input_args: template_args
             .into_iter()
-            .map(|(n, t)| asm::ExternalArgument{
+            .chain(input.into_iter().map(|(n, t)| asm::ExternalArgument {
                 name: n.map(asm::NodeId),
                 ffi_type: t.ffi().unwrap(),
             }))
             .collect(),
-        output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
-            name: n.map(asm::NodeId),
-            ffi_type: t.ffi().unwrap(),
-        }).collect(),
+        output_types: output
+            .into_iter()
+            .map(|(n, t)| asm::ExternalArgument {
+                name: n.map(asm::NodeId),
+                ffi_type: t.ffi().unwrap(),
+            })
+            .collect(),
         value_function_binding: asm::FunctionClassBinding {
             default: false,
             function_class: class_name.clone(),
         },
-        
     }))
 }

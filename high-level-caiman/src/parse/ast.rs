@@ -52,10 +52,8 @@ pub enum DataType {
     RemoteObj {
         /// set of all remote variables in the remote object
         all: Vec<(String, DataType)>,
-        /// set of all remote variables readable by the public interface
+        /// set of all remote variables readable by the CPU
         read: BTreeSet<String>,
-        /// set of all remote variables writable by encoded copies
-        write: BTreeSet<String>,
     },
 }
 
@@ -133,11 +131,8 @@ impl Display for DataType {
             }
             Self::Encoder(Some(typ)) => write!(f, "Encoder'{typ}"),
             Self::Fence(Some(typ)) => write!(f, "Fence'{typ}"),
-            Self::RemoteObj { all, write, read } => {
-                write!(
-                    f,
-                    "Class{{all: {all:#?}, write: {write:#?}, read: {read:#?}}}",
-                )
+            Self::RemoteObj { all, read } => {
+                write!(f, "Class{{all: {all:#?}, read: {read:#?}}}",)
             }
         }
     }

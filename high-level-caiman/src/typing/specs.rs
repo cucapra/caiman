@@ -2,12 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     lower::tuple_id,
     parse::ast::{
         Binop, DataType, FlaggedType, IntSize, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
         TemplateArgs,
     },
+    type_error,
 };
 
 use super::{
@@ -24,7 +25,7 @@ fn collect_spec_names(
     let mut res = HashSet::new();
     for (name, _) in &ctx.sig.input {
         if res.contains(name) {
-            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
+            return Err(type_error!(ctx.info, "Duplicate node: {name}"));
         }
         res.insert(name.clone());
     }
@@ -33,7 +34,7 @@ fn collect_spec_names(
             SpecStmt::Assign { lhs, info, .. } => {
                 for (name, _) in lhs {
                     if res.contains(name) {
-                        return Err(type_error(*info, &format!("Duplicate node: {name}")));
+                        return Err(type_error!(*info, "Duplicate node: {name}"));
                     }
                     res.insert(name.clone());
                 }
@@ -94,30 +95,26 @@ fn get_target_signature(
         _ => (
             signatures
                 .get(callee)
-                .ok_or_else(|| type_error(info, &format!("Unknown spec `{callee}` invoked")))?
+                .ok_or_else(|| type_error!(info, "Unknown spec '{callee}' invoked"))?
                 .input
                 .clone(),
             signatures.get(callee).unwrap().output.clone(),
         ),
     };
     if args.len() != input_types.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "Wrong number of arguments to function {callee}: expected {}, got {}",
-                input_types.len(),
-                args.len(),
-            ),
+            "Wrong number of arguments to function '{callee}': expected {}, got {}",
+            input_types.len(),
+            args.len()
         ));
     }
     if num_dests != output_types.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "Wrong number of return values from function {callee}: expected {}, got {}",
-                output_types.len(),
-                num_dests,
-            ),
+            "Wrong number of return values from function '{callee}': expected {}, got {}",
+            output_types.len(),
+            num_dests
         ));
     }
     Ok((input_types, output_types))
@@ -210,9 +207,9 @@ fn collect_spec_assign_call(
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
                 if a != &typ.base {
-                    return Err(type_error(
+                    return Err(type_error!(
                         info,
-                        &format!("Annotation of {name} conflicts with return type of {func_name}",),
+                        "Annotation of '{name}' conflicts with return type of '{func_name}'"
                     ));
                 }
             }
@@ -405,27 +402,19 @@ fn resolve_types(
         match env.env.get_type(name) {
             Some(c) => {
                 let dt = DTypeConstraint::try_from(c.clone()).map_err(|e| {
-                    type_error(
-                        ctx.info,
-                        &format!("Failed to resolve type of variable {name}: {e}"),
-                    )
+                    type_error!(ctx.info, "Failed to resolve type of variable '{name}': {e}")
                 })?;
                 ctx.types.insert(
                     name.clone(),
                     dt.try_into().map_err(|()| {
-                        type_error(
+                        type_error!(
                             ctx.info,
-                            &format!("Failed to resolve type of variable {name}. Not enough constraints."),
+                            "Failed to resolve type of variable '{name}'. Not enough constraints."
                         )
                     })?,
                 );
             }
-            None => {
-                return Err(type_error(
-                    ctx.info,
-                    &format!("Undefined variable {name} in spec",),
-                ))
-            }
+            None => return Err(type_error!(ctx.info, "Undefined variable '{name}' in spec")),
         }
     }
     Ok(())
@@ -456,13 +445,11 @@ fn collect_spec_returns(
     match e {
         SpecExpr::Term(SpecTerm::Var { name, .. }) => {
             if ctx.sig.output.len() != 1 {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "Wrong number of return values: expected {}, got {}",
-                        ctx.sig.output.len(),
-                        1,
-                    ),
+                    "Wrong number of return values: expected {}, got {}",
+                    ctx.sig.output.len(),
+                    1
                 ));
             }
             env.types
@@ -481,13 +468,11 @@ fn collect_spec_returns(
             ..,
         ) => {
             if rets.len() != ctx.sig.output.len() {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "Wrong number of return values: expected {}, got {}",
-                        ctx.sig.output.len(),
-                        rets.len(),
-                    ),
+                    "Wrong number of return values: expected {}, got {}",
+                    ctx.sig.output.len(),
+                    rets.len()
                 ));
             }
             let mut constraints = vec![];

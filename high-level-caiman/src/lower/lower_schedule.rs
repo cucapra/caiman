@@ -8,8 +8,9 @@ use caiman::assembly::ast::{self as asm, MetaMapping};
 use caiman::explication::Hole;
 
 use crate::error::Info;
+use crate::type_error;
 use crate::{
-    error::{type_error, LocalError},
+    error::LocalError,
     lower::IN_STEM,
     parse::ast::{self, DataType, Flow, SchedulingFunc, SpecType, Tag},
     typing::{Context, LOCAL_TEMP_FLAGS},
@@ -97,11 +98,8 @@ fn build_copy_cmd(
                 })
             }
         }
-        HirTerm::Hole { info, .. } => {
-            if matches!(
-                dest_type.unwrap_or_else(|| panic!("{info}: {dest} needs a type annotation")),
-                DataType::Ref(_)
-            ) {
+        HirTerm::Hole { .. } => {
+            if matches!(dest_type.unwrap(), DataType::Ref(_)) {
                 asm::Command::Node(asm::NamedNode {
                     name: None,
                     node: asm::Node::LocalCopy {
@@ -519,11 +517,7 @@ fn lower_sync(
             name: Some(asm::NodeId(t.clone())),
             node: asm::Node::AllocTemporary {
                 place: Hole::Filled(ir::Place::Local),
-                storage_type: Hole::Filled(
-                    f.get_storage_type(dest)
-                        .unwrap_or_else(|| panic!("{dest} needs a type annotation"))
-                        .clone(),
-                ),
+                storage_type: Hole::Filled(f.get_storage_type(dest).unwrap().clone()),
                 buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
             },
         })));
@@ -1038,26 +1032,26 @@ pub fn lower_schedule(
     let mut timeline = None;
     let mut spatial = None;
     if func.specs.len() > 3 {
-        return Err(type_error(func.info, "Too many specs"));
+        return Err(type_error!(func.info, "Too many specs"));
     }
     for spec in &func.specs {
         match ctx.specs.get(spec).map(|s| s.typ) {
             Some(SpecType::Value) => val = Some(spec.to_string()),
             Some(SpecType::Timeline) => timeline = Some(spec.to_string()),
             Some(SpecType::Spatial) => spatial = Some(spec.to_string()),
-            None => return Err(type_error(func.info, &format!("Spec '{spec}' not found"))),
+            None => return Err(type_error!(func.info, "Spec '{spec}' not found")),
         }
     }
     let specs = Specs {
         value: val
             .map(asm::FuncletId)
-            .ok_or_else(|| type_error(func.info, "Missing value spec"))?,
+            .ok_or_else(|| type_error!(func.info, "Missing value spec"))?,
         timeline: timeline
             .map(asm::FuncletId)
-            .ok_or_else(|| type_error(func.info, "Missing timeline spec"))?,
+            .ok_or_else(|| type_error!(func.info, "Missing timeline spec"))?,
         spatial: spatial
             .map(asm::FuncletId)
-            .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
+            .ok_or_else(|| type_error!(func.info, "Missing spatial spec"))?,
     };
     let blocks = Funclets::new(func, &specs, ctx, no_inference)?;
     Ok(blocks.funclets().iter().map(lower_block).collect())

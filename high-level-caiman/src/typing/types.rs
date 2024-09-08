@@ -89,10 +89,8 @@ pub enum DTypeConstraint {
     RemoteObj {
         /// record of all remote variables (have the storage flag)
         all: RecordConstraint,
-        /// record of all readable variables (`map_read`)
+        /// record of all readable variables that must be copied back to the CPU (`map_read`)
         read: RecordConstraint,
-        /// record of all writable variables (`copy_dst`)
-        write: RecordConstraint,
     },
     SpecEncoder,
     SpecFence,
@@ -132,10 +130,9 @@ impl DTypeConstraint {
             Self::Encoder(x) => Self::Encoder(Box::new(x.into_subtypeable())),
             Self::Fence(x) => Self::Fence(Box::new(x.into_subtypeable())),
             Self::Record(r) => Self::Record(Self::record_into_subtypeable(r)),
-            Self::RemoteObj { all, read, write } => Self::RemoteObj {
+            Self::RemoteObj { all, read } => Self::RemoteObj {
                 all: Self::record_into_subtypeable(all),
                 read: Self::record_into_subtypeable(read),
-                write: Self::record_into_subtypeable(write),
             },
         }
     }
@@ -255,12 +252,11 @@ impl DTypeConstraint {
                 Constraint::Term(CDataType::Fence, vec![public.instantiate(env)])
             }
             Self::Record(r) => Self::instantiate_record(r, env),
-            Self::RemoteObj { all, read, write } => Constraint::Term(
+            Self::RemoteObj { all, read } => Constraint::Term(
                 CDataType::RemoteObj,
                 vec![
                     Self::instantiate_record(all, env),
                     Self::instantiate_record(read, env),
-                    Self::instantiate_record(write, env),
                 ],
             ),
             // Self::EncoderN(typ) => Constraint::Term(CDataType::Encoder, vec![typ.instantiate(env)]),
@@ -307,48 +303,21 @@ impl TryFrom<DTypeConstraint> for DataType {
             DTypeConstraint::RemoteObj {
                 all: RecordConstraint::Record { fields, .. },
                 read: RecordConstraint::Record { fields: read, .. },
-                write: RecordConstraint::Record { fields: write, .. },
             } => {
                 let mut mp = Vec::new();
                 for (k, v) in fields {
                     mp.push((k, Self::try_from(v)?));
                 }
                 let read = read.into_keys().collect();
-                let write = write.into_keys().collect();
-                Ok(Self::RemoteObj {
-                    all: mp,
-                    read,
-                    write,
-                })
+                Ok(Self::RemoteObj { all: mp, read })
             }
             DTypeConstraint::RemoteObj {
                 all: RecordConstraint::Any,
-                read: RecordConstraint::Record { fields: read, .. },
-                write: RecordConstraint::Record { fields: write, .. },
-            } => {
-                let mut all = Vec::new();
-                for (r, dt) in &read {
-                    if write.get(r) != Some(dt) {
-                        return Err(());
-                    }
-                    all.push((r.clone(), Self::try_from(dt.clone())?));
-                }
-                for (w, dt) in &write {
-                    all.push((w.clone(), Self::try_from(dt.clone())?));
-                }
-                let read = read.into_keys().collect();
-                let write = write.into_keys().collect();
-                Ok(Self::RemoteObj { all, read, write })
-            }
-            DTypeConstraint::RemoteObj {
-                all: RecordConstraint::Any,
-                read: RecordConstraint::Any,
-                write: RecordConstraint::Record { fields, .. },
+                read: RecordConstraint::Record { fields, .. },
             }
             | DTypeConstraint::RemoteObj {
-                all: RecordConstraint::Any,
-                write: RecordConstraint::Any,
-                read: RecordConstraint::Record { fields, .. },
+                all: RecordConstraint::Record { fields, .. },
+                read: RecordConstraint::Any,
             } => {
                 let all = fields
                     .iter()
@@ -357,11 +326,7 @@ impl TryFrom<DTypeConstraint> for DataType {
                     })
                     .collect();
                 let rw: BTreeSet<_> = fields.into_keys().collect();
-                Ok(Self::RemoteObj {
-                    all,
-                    read: rw.clone(),
-                    write: rw,
-                })
+                Ok(Self::RemoteObj { all, read: rw })
             }
             DTypeConstraint::Encoder(typ) => {
                 Ok(Self::Encoder(Some(Box::new(Self::try_from(*typ)?))))
@@ -444,16 +409,14 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
             Constraint::Term(CDataType::RemoteObj, mut v) => {
                 assert_eq!(
                     v.len(),
-                    3,
+                    2,
                     "Remote obj constraint should have exactly two children"
                 );
-                let write = Self::try_from(v.pop().unwrap())?;
                 let read = Self::try_from(v.pop().unwrap())?;
                 let all = Self::try_from(v.pop().unwrap())?;
                 Ok(Self::RemoteObj {
                     all: RecordConstraint::try_from(all)?,
                     read: RecordConstraint::try_from(read)?,
-                    write: RecordConstraint::try_from(write)?,
                 })
             }
             Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
@@ -502,7 +465,7 @@ impl From<DataType> for DTypeConstraint {
                 // when annotated, we cannot deduce a subtype of the annotation
                 constraint_kind: SubtypeConstraint::Contravariant,
             }),
-            DataType::RemoteObj { all, read, write } => Self::RemoteObj {
+            DataType::RemoteObj { all, read } => Self::RemoteObj {
                 // annotations cannot be deduced to be lower types in the lattice then the annotation
                 all: RecordConstraint::Record {
                     fields: record_dtypes_to_constraints(all),
@@ -510,10 +473,6 @@ impl From<DataType> for DTypeConstraint {
                 },
                 read: RecordConstraint::Record {
                     fields: set_dtypes_to_constraints(read),
-                    constraint_kind: SubtypeConstraint::Contravariant,
-                },
-                write: RecordConstraint::Record {
-                    fields: set_dtypes_to_constraints(write),
                     constraint_kind: SubtypeConstraint::Contravariant,
                 },
             },

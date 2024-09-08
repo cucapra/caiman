@@ -217,7 +217,7 @@ impl ASTFactory {
                 caiman_val: match (input, output) {
                     (Some(s), None) => InputOrOutputVal::Input(s),
                     (None, Some(s)) => InputOrOutputVal::Output(s),
-                    _ => panic!("Resource at {src_info} must have exactly one input or output"),
+                    _ => return Err(custom_parse_error!(src_info, "Resource must have exactly one input or output")),
                 },
             })
     }
@@ -776,7 +776,6 @@ impl ASTFactory {
     pub fn class_type(&self, l:usize, v: Vec<Arg<FlaggedType>>, r:usize) -> Result<DataType, ParserError> {
         let mut all = Vec::new();
         let mut read = BTreeSet::new();
-        let mut write = BTreeSet::new();
         let info = self.info(l, r);
         for (name, typ) in v {
             all.push((name.clone(), typ.base));
@@ -786,12 +785,11 @@ impl ASTFactory {
             for f in typ.flags {
                 match f {
                     WGPUFlags::MapRead => { read.insert(name.clone()); },
-                    WGPUFlags::CopyDst => { write.insert(name.clone()); },
-                    WGPUFlags::Storage => {},
+                    WGPUFlags::Storage | WGPUFlags::CopyDst => {},
                     _ => return Err(custom_parse_error!(info, "Unimplemented flag {f:?}")),
                 };
             }
         }
-        Ok(DataType::RemoteObj { all, read, write })
+        Ok(DataType::RemoteObj { all, read })
     }
 }

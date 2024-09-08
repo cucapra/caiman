@@ -31,6 +31,7 @@ use caiman::explication::Hole;
 
 use crate::{
     enum_cast,
+    error::{Info, LocalError},
     lower::sched_hir::{cfg::Cfg, DataMovement, HirBody, HirInstr, Terminator, TripleTag},
     parse::ast::{DataType, FlaggedType},
     typing::{Context, SchedOrExtern},
@@ -290,27 +291,27 @@ impl<'a> EncodeTransform<'a> {
 }
 
 impl<'a> Fact for EncodeTransform<'a> {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         for (k, v) in &other.fence_map {
             assert!(!self.fence_map.contains_key(k) || self.fence_map.get(k).unwrap() == v);
         }
         self.fence_map
             .extend(other.fence_map.iter().map(|(x, y)| (x.clone(), y.clone())));
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: crate::lower::sched_hir::HirInstr<'_>, _: TransferData) {
+    fn transfer_instr(
+        &mut self,
+        stmt: crate::lower::sched_hir::HirInstr<'_>,
+        _: TransferData,
+    ) -> Result<(), LocalError> {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding {
                 encoder,
                 device_vars,
                 ..
             }) => {
-                if let DataType::Encoder(Some(dt)) = &self
-                    .data_types
-                    .get(&encoder.0)
-                    .unwrap_or_else(|| panic!("Missing type for {}", encoder.0))
-                {
+                if let DataType::Encoder(Some(dt)) = &self.data_types[&encoder.0] {
                     if let DataType::RemoteObj { all, .. } = &**dt {
                         device_vars.clear();
                         for (var, _) in all {
@@ -388,6 +389,7 @@ impl<'a> Fact for EncodeTransform<'a> {
             }
             HirInstr::Stmt(_) => (),
         }
+        Ok(())
     }
 
     type Dir = Forwards;
@@ -408,5 +410,5 @@ pub fn transform_encode_pass(
     sig_out: &Vec<FlaggedType>,
 ) {
     let top = EncodeTransform::top(data_types, ctx, sig_out);
-    analyze(cfg, top);
+    analyze(cfg, top).unwrap();
 }

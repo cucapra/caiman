@@ -37,7 +37,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::Info,
+    error::{Info, LocalError},
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
         FillIn, Hir, HirBody, HirInstr, HirOp, HirTerm, Terminator, TripleTag, UseType,
@@ -104,7 +104,7 @@ fn insert_capture_copies(
     data_types: &mut HashMap<String, DataType>,
     variables: &HashSet<String>,
 ) {
-    let live_vars = analyze(cfg, LiveVars::top());
+    let live_vars = analyze(cfg, LiveVars::top()).unwrap();
     let mut preceded_by_call = HashSet::new();
     let mut terminated_by_call = HashSet::new();
     for bb in cfg.blocks.values() {
@@ -205,15 +205,19 @@ struct RefPropagation {
 }
 
 impl Fact for RefPropagation {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         for (k, v) in &other.aliases {
             assert!(!self.aliases.contains_key(k) || self.aliases[k] == *v);
             self.aliases.insert(k.clone(), v.clone());
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: TransferData) {
+    fn transfer_instr(
+        &mut self,
+        mut stmt: HirInstr<'_>,
+        _: TransferData,
+    ) -> Result<(), LocalError> {
         // assume single assignment
         stmt.rename_uses(&mut |name, _| {
             self.aliases
@@ -233,6 +237,7 @@ impl Fact for RefPropagation {
             let src = enum_cast!(HirTerm::Var { name, .. }, name, &args[0]);
             self.aliases.insert(dests[0].0.clone(), src.clone());
         }
+        Ok(())
     }
 
     type Dir = Forwards;
