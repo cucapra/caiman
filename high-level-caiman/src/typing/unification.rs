@@ -227,7 +227,7 @@ impl<T: Kind, A: Kind> Node<T, A> {
         }
     }
 
-    /// Gets the name of all classes which this node depends on
+    /// Gets the name of all classes which this node depends on, including the node itself
     pub fn dependencies(&self, deps: &mut HashSet<String>) {
         match self {
             Self::Var {
@@ -796,6 +796,8 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
     }
 
     /// Returns true if the constraints are equal, modulo unconstrained variables
+    /// # Panics
+    /// Panics if dynamic terms are passed
     pub fn matches(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Var(_), _) | (_, Self::Var(_)) => true,
@@ -917,6 +919,8 @@ impl<T: Kind, A: Kind> Env<T, A> {
         }
     }
 
+    /// Gets the name of all classes which a node depends upon. Ie. the children of
+    /// `node_name`'s type tree.
     pub fn dependencies(&self, node_name: &str) -> HashSet<String> {
         let mut set = HashSet::new();
         if let Some(node) = self.nodes.get(node_name) {

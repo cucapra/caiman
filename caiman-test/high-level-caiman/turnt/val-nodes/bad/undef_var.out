@@ -1,0 +1,2 @@
+Error: At "undef_var.cm" 20:9 - 20:12, 
+  Type Error: There is no way for 'two' to be defined before it's used

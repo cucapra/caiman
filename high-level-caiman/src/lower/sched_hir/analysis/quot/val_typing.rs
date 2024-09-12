@@ -87,7 +87,7 @@ use crate::{
                 analyze,
                 hole_expansion::{UninitCheck, UsabilityAnalysis},
             },
-            cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
+            cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
             FillIn, HirBody, HirFuncCall, HirOp, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
@@ -144,8 +144,10 @@ pub fn deduce_val_quots(
     analyze(
         cfg,
         UninitCheck::top(
-            res.get_in_fact(START_BLOCK_ID).to_init.clone(),
-            inputs.iter().map(|(x, _)| x),
+            // set of all references and GPU variables
+            res.get_out_fact(FINAL_BLOCK_ID).to_init.clone(),
+            inputs,
+            &env,
         ),
     )
     .map(|_| ())

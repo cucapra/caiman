@@ -1,0 +1,2 @@
+Error: At "missing_field.cm" 43:13 - 43:37, 
+  Type Error: 'e::z_gpu' is used before it can be initialized

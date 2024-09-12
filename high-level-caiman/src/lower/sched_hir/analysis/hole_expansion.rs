@@ -10,11 +10,11 @@ use crate::{
     lower::{
         sched_hir::{
             cfg::{Cfg, START_BLOCK_ID},
-            Hir, HirBody, HirInstr, HirOp, Terminator, TripleTag,
+            Hir, HirBody, HirInstr, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{DataType, FullType},
+    parse::ast::{DataType, Flow, FullType},
     type_error,
     typing::{MetaVar, NodeEnv},
 };
@@ -214,6 +214,27 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
     }
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
+        // TODO: we can always recalculate something so that even when something is used,
+        // that doesn't mean that things that it depends on has to be initialized
+
+        // for now, we only say that something can't be initialized if a control flow operation
+        // depends on it and we have reached said control flow. This is bc a I'm assuming holes
+        // only work within a basic block right now.
+        // In other words:
+        /* ```
+        val foo()
+            x :- a if c else b
+            z :- x * 20
+
+        fn foo_impl()
+            ???;    // `x` cannot be initialized here since it depends on control flow
+            if ??? {
+                ???
+            } else {
+                ???
+            }
+            ???     // `x` can be initialized here
+        ``` */
         if let Some(defs) = match stmt {
             HirInstr::Stmt(HirBody::Hole { .. } | HirBody::VarDecl { rhs: None, .. }) => None,
             HirInstr::Stmt(HirBody::BeginEncoding { encoder, .. }) => Some(vec![encoder.0.clone()]),
@@ -229,41 +250,12 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
             }
         }
         match stmt {
-            HirInstr::Stmt(HirBody::EncodeDo { dests, .. })
-            | HirInstr::Tail(Terminator::CaptureCall { dests, .. }) => {
+            HirInstr::Tail(Terminator::CaptureCall { dests, .. }) => {
                 let id = tuple_id(&dests.iter().map(|(x, _)| x.clone()).collect::<Vec<_>>());
                 self.remove_dependents_of(&id);
                 for (d, _) in dests {
                     self.remove_dependents_of(d);
                 }
-            }
-            HirInstr::Stmt(
-                HirBody::Phi { dest, .. }
-                | HirBody::ConstDecl { lhs: dest, .. }
-                | HirBody::VarDecl {
-                    lhs: dest,
-                    rhs: Some(_),
-                    ..
-                }
-                | HirBody::DeviceCopy { dest, .. }
-                | HirBody::RefStore { lhs: dest, .. }
-                | HirBody::RefLoad { dest, .. },
-            ) => {
-                self.remove_dependents_of(dest);
-            }
-            HirInstr::Stmt(HirBody::Sync { dests, .. }) => {
-                for (dest, _) in dests.processed() {
-                    self.remove_dependents_of(dest);
-                }
-            }
-            HirInstr::Stmt(HirBody::Op { dests, op, .. }) => {
-                let id = match op {
-                    HirOp::External(_) => {
-                        tuple_id(&dests.iter().map(|(x, _)| x.clone()).collect::<Vec<_>>())
-                    }
-                    HirOp::Binary(_) | HirOp::Unary(_) => dests[0].0.clone(),
-                };
-                self.remove_dependents_of(&id);
             }
             HirInstr::Tail(Terminator::Return { dests, .. }) => {
                 for (d, _) in dests {
@@ -281,20 +273,7 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
             HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
                 initialized.clone_from(&self.to_init);
             }
-            HirInstr::Stmt(
-                HirBody::InAnnotation(..)
-                | HirBody::OutAnnotation(..)
-                | HirBody::Submit { .. }
-                | HirBody::BeginEncoding { .. }
-                | HirBody::VarDecl { rhs: None, .. },
-            )
-            | HirInstr::Tail(
-                Terminator::None(..)
-                | Terminator::FinalReturn(..)
-                | Terminator::Yield(..)
-                | Terminator::Next(..)
-                | Terminator::Call(..),
-            ) => {}
+            _ => {}
         };
         Ok(())
     }
@@ -302,35 +281,47 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
     type Dir = Backwards;
 }
 
-/// Follow up pass to usability analysis that errors if something that should be
-/// initialized by a hole can be used before it is initialized
+/// Pass that errors if a reference or GPU variable's value is used before it is
+/// made usable. This pass is conservative in the sense that it will only error
+/// if there is definitely a problem.
 #[derive(Clone)]
-pub struct UninitCheck {
+pub struct UninitCheck<'a> {
     maybe_uninit: HashSet<String>,
+    env: &'a NodeEnv,
 }
 
-impl UninitCheck {
-    pub fn top<'a>(
+impl<'a> UninitCheck<'a> {
+    /// # Arguments
+    /// * `maybe_uninit` - set of references and GPU variables to check to see if
+    /// they're value is used before they're `usable`
+    pub fn top(
         mut maybe_uninit: HashSet<String>,
-        inputs: impl Iterator<Item = &'a String>,
+        inputs: &[(String, TripleTag)],
+        env: &'a NodeEnv,
     ) -> Self {
+        maybe_uninit = maybe_uninit
+            .into_iter()
+            .map(|x| ssa_original_name(&x))
+            .collect();
         for i in 0..4 {
             maybe_uninit.remove(&format!("_dim{i}"));
         }
-        for input in inputs {
-            maybe_uninit.remove(input);
+        for (input, tag) in inputs {
+            if tag.value.flow != Some(Flow::Dead) {
+                maybe_uninit.remove(input);
+            }
         }
-        Self { maybe_uninit }
+        Self { maybe_uninit, env }
     }
 }
 
-impl PartialEq for UninitCheck {
+impl<'a> PartialEq for UninitCheck<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.maybe_uninit == other.maybe_uninit
     }
 }
 
-impl Fact for UninitCheck {
+impl<'a> Fact for UninitCheck<'a> {
     fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.maybe_uninit.extend(other.maybe_uninit.iter().cloned());
         Ok(self)
@@ -340,18 +331,63 @@ impl Fact for UninitCheck {
         match stmt {
             HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
                 for i in initialized.iter() {
-                    self.maybe_uninit.remove(i);
+                    self.maybe_uninit.remove(&ssa_original_name(i));
                 }
             }
-            HirInstr::Stmt(HirBody::InAnnotation(..) | HirBody::OutAnnotation(..)) => {}
+            HirInstr::Stmt(HirBody::InAnnotation(..) | HirBody::OutAnnotation(..))
+            | HirInstr::Tail(Terminator::Next(..)) => {}
+            HirInstr::Tail(Terminator::Return { dests, .. }) => {
+                for (d, _) in dests {
+                    self.maybe_uninit.remove(&ssa_original_name(d));
+                }
+            }
             x => {
                 let mut uses = BTreeSet::new();
                 x.get_uses(&mut uses);
                 if let Some(writes) = x.get_write_uses() {
                     for w in writes {
                         uses.remove(&w);
+                        self.maybe_uninit.remove(&ssa_original_name(&w));
                     }
                 }
+                if matches!(
+                    x,
+                    HirInstr::Stmt(
+                        HirBody::VarDecl { rhs: Some(_), .. }
+                            | HirBody::ConstDecl {
+                                rhs: HirTerm::Hole { .. },
+                                ..
+                            }
+                    )
+                ) {
+                    for d in x.get_defs().unwrap() {
+                        uses.remove(&d);
+                        self.maybe_uninit.remove(&ssa_original_name(&d));
+                    }
+                }
+                if let HirInstr::Tail(Terminator::CaptureCall { dests, .. }) = x {
+                    // special handling for calls, which are currently the only way for a reference to be
+                    // used (in the traditional compilers sense) without consuming it
+                    let t = tuple_id(&dests.iter().map(|(nm, _)| nm.clone()).collect::<Vec<_>>());
+                    if let Some(class_name) = self.env.get_node_name(&t) {
+                        let deps = self.env.dependencies(&MetaVar::new_class_name(&class_name));
+                        uses.retain(|u| {
+                            self.env
+                                .get_node_name(u)
+                                .map_or(false, |node| deps.contains(&node))
+                        });
+                    } else {
+                        // if the call is unknown, assume it uses nothing
+                        uses.clear();
+                    }
+                    for (d, _) in dests {
+                        if self.env.get_node_name(d).is_some() {
+                            uses.remove(d);
+                            self.maybe_uninit.remove(&ssa_original_name(d));
+                        }
+                    }
+                }
+                let uses: HashSet<_> = uses.into_iter().map(|x| ssa_original_name(&x)).collect();
                 for u in &self.maybe_uninit {
                     if uses.contains(u) {
                         return Err(type_error!(

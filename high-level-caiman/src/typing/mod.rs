@@ -15,7 +15,7 @@ use types::constraint_to_wildcard_vq;
 
 use self::{
     types::{ADataType, CDataType, DTypeConstraint},
-    unification::{Constraint, Env},
+    unification::Env,
 };
 mod sched;
 #[cfg(test)]
@@ -24,6 +24,7 @@ mod types;
 mod unification;
 
 pub use types::{MetaVar, VQType, ValQuot};
+pub use unification::Constraint;
 
 /// WGPU flags for all frontent temporaries.
 pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {

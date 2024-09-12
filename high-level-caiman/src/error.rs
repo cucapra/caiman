@@ -139,15 +139,19 @@ macro_rules! type_error {
 /// as specified in the source file.
 #[must_use]
 pub fn hlc_to_source_name(mut n: &str) -> String {
-    let suffix = n.find("::").map(|end_loc| n[end_loc..].to_string());
+    fn trim(mut n: &str) -> &str {
+        if let Some(dot_idx) = n.find('.') {
+            n = &n[0..dot_idx];
+        }
+        n
+    }
+    let suffix = n.find("::").map(|end_loc| trim(&n[end_loc..]).to_string());
     if let Some(percent_loc) = n.find('%') {
         n = &n[0..percent_loc];
-    }
-    if let Some(dot_idx) = n.find('.') {
-        n = &n[0..dot_idx];
     }
     if let Some(starting_char) = n.find(|s| char::is_ascii_alphabetic(&s)) {
         n = &n[starting_char..];
     }
+    n = trim(n);
     suffix.map_or_else(|| n.to_string(), |suffix| format!("{n}{suffix}"))
 }

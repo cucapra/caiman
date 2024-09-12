@@ -1,0 +1,2 @@
+Error: At "var_uninit_use.cm" 19:5 - 19:14, 
+  Type Error: 'x' is used before it can be initialized

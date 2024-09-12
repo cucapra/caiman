@@ -34,6 +34,7 @@ mod analysis;
 mod test;
 
 pub use analysis::RET_VAR;
+pub use hir::TripleTag;
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]

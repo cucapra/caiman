@@ -1,0 +1,24 @@
+#version 0.1.0
+extern(cpu) pure simple(x: i32) -> i32
+
+val foo(x: i32) -> i32 {
+    r :- simple(x)
+    returns r
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    returns e
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+fn foo_main(x: &i32) -> i32 
+    impls foo, foo_time, foo_space
+{
+    var x @ input(val.x);
+    simple(x)
+}
+
+pipeline main {
+    foo_main
+}

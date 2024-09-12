@@ -1,0 +1,2 @@
+Error: At "uninit_gpu_var.cm" 37:28 - 37:51, 
+  Type Error: 'e::x_gpu' is used before it can be initialized

@@ -27,6 +27,7 @@ pub struct TripleTag {
 }
 
 impl TripleTag {
+    #[must_use]
     pub const fn new_unspecified() -> Self {
         Self {
             value: Tag::new_unspecified(SpecType::Value),
@@ -34,6 +35,7 @@ impl TripleTag {
             timeline: Tag::new_unspecified(SpecType::Timeline),
         }
     }
+    #[must_use]
     pub const fn new_none_usable() -> Self {
         Self {
             value: Tag::new_none_usable(SpecType::Value),
@@ -41,6 +43,7 @@ impl TripleTag {
             timeline: Tag::new_none_usable(SpecType::Timeline),
         }
     }
+    #[must_use]
     pub fn from_opt(tags: &Option<Tags>) -> Self {
         tags.as_ref()
             .map_or_else(|| Self::from_owned_opt(None), |tags| Self::from_tags(tags))
@@ -57,6 +60,7 @@ impl TripleTag {
         )
     }
 
+    #[must_use]
     pub fn from_tag_vec(tags: Vec<Tag>) -> Self {
         let mut value = None;
         let mut spatial = None;
@@ -75,6 +79,7 @@ impl TripleTag {
         }
     }
 
+    #[must_use]
     pub fn from_tags(tags: &[Tag]) -> Self {
         let mut value = None;
         let mut spatial = None;
@@ -93,6 +98,7 @@ impl TripleTag {
         }
     }
 
+    #[must_use]
     pub fn from_fulltype(ft: &FullType) -> Self {
         Self::from_tags(&ft.tags)
     }
@@ -130,6 +136,7 @@ impl TripleTag {
     }
 
     /// Converts a triple tag into an assembly tag vector.
+    #[must_use]
     pub fn tags_vec(&self) -> Vec<asm::Tag> {
         self.assert_no_holes();
         vec![
@@ -140,6 +147,7 @@ impl TripleTag {
     }
 
     /// Resets all specs to be unspecified except for the specs in `e`
+    #[must_use]
     pub fn retain(mut self, e: &[SpecType]) -> Self {
         const SPECS: [SpecType; 3] = [SpecType::Value, SpecType::Timeline, SpecType::Spatial];
         for s in SPECS {
