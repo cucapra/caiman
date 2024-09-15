@@ -11,8 +11,9 @@ mod ssa;
 mod tags;
 
 use crate::{
-    error::{Info, LocalError},
+    error::{hlc_to_source_name, Info, LocalError},
     parse::ast::DataType,
+    type_error,
 };
 
 use super::{
@@ -25,6 +26,8 @@ use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
 pub use dominators::compute_dominators;
 pub use hole_expansion::set_hole_defs;
+#[allow(clippy::module_name_repetitions)]
+pub use hole_expansion::{UninitCheck, UsabilityAnalysis};
 pub use op_transform::op_transform_pass;
 pub use quot::deduce_tmln_quots;
 pub use quot::deduce_val_quots;
@@ -390,11 +393,16 @@ pub struct ReachingDefs<'a> {
 impl<'a> ReachingDefs<'a> {
     pub fn top<'b>(
         inputs: impl Iterator<Item = &'b String>,
+        dims: usize,
         dt: &'a HashMap<String, DataType>,
         variables: &'a HashSet<String>,
     ) -> Self {
+        let mut available_set: HashSet<_> = inputs.cloned().collect();
+        for i in 0..dims {
+            available_set.insert(format!("_dim{i}"));
+        }
         Self {
-            available_set: inputs.cloned().collect(),
+            available_set,
             kill_set: HashSet::new(),
             data_types: dt,
             variables,
@@ -445,6 +453,22 @@ impl<'a> ReachingDefs<'a> {
             ) => {}
         }
     }
+
+    fn check_uses_are_valid(&self, stmt: &HirInstr<'_>) -> Result<(), LocalError> {
+        let mut uses = BTreeSet::new();
+        stmt.get_uses(&mut uses);
+        let reaching_defs: HashSet<_> = self.reaching_defs().collect();
+        for u in uses {
+            if !reaching_defs.contains(&u) {
+                return Err(type_error!(
+                    stmt.get_info(),
+                    "No definition of '{}' reaches this use.\nNote that references cannot be captured across function calls and function arguments are consumed.",
+                    hlc_to_source_name(&u)
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<'a> Fact for ReachingDefs<'a> {
@@ -474,6 +498,7 @@ impl<'a> Fact for ReachingDefs<'a> {
         if let Some(newly_available) = self.becomes_available.get(&data.block_id) {
             self.available_set.extend(newly_available.iter().cloned());
         }
+        let r = self.check_uses_are_valid(&stmt);
         match stmt {
             HirInstr::Stmt(
                 HirBody::ConstDecl { lhs: dest, .. }
@@ -483,6 +508,7 @@ impl<'a> Fact for ReachingDefs<'a> {
                 | HirBody::DeviceCopy { dest, .. },
             ) => {
                 self.available_set.insert(dest.clone());
+                self.kill_set.remove(dest);
             }
             HirInstr::Stmt(HirBody::Submit { dest, src, .. }) => {
                 self.available_set.insert(dest.clone());
@@ -523,7 +549,9 @@ impl<'a> Fact for ReachingDefs<'a> {
             HirInstr::Tail(x @ (Terminator::Call(..) | Terminator::Yield(..))) => {
                 for avail in &self.available_set {
                     // we can't capture references, so they are no longer reachable over a call
-                    if matches!(self.data_types.get(avail), Some(DataType::Ref(_))) {
+                    if matches!(self.data_types.get(avail), Some(DataType::Ref(_)))
+                        && !self.variables.contains(avail)
+                    {
                         self.kill_set.insert(avail.clone());
                     }
                 }
@@ -565,7 +593,7 @@ impl<'a> Fact for ReachingDefs<'a> {
             }
             HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Passes out of order"),
         }
-        Ok(())
+        r
     }
 
     type Dir = Forwards;

@@ -7,7 +7,10 @@ use std::{
     rc::Rc,
 };
 
-use analysis::{analyze, compute_dominators, deduce_tmln_quots, set_hole_defs, ReachingDefs};
+use analysis::{
+    analyze, compute_dominators, deduce_tmln_quots, set_hole_defs, ReachingDefs, UninitCheck,
+    UsabilityAnalysis,
+};
 pub use hir::*;
 
 use crate::{
@@ -67,10 +70,11 @@ pub struct Funclets {
     captured_out: HashMap<usize, BTreeSet<String>>,
     /// Set of value quotients which are literals in the value specification
     literal_value_classes: HashSet<String>,
-    /// Set of mutables used in the schedule. This set includes the frontend names
-    /// of mutables and the `_ref` suffixed versions which actually stor
-    /// the mutables' dat in the HIR
+    /// Set of mutables used in the schedule. This does not include the `_ref`
+    /// backing refs
     variables: HashSet<String>,
+    /// Set of references that back a mutable
+    backing_refs: HashSet<String>,
     /// Mapping from device variable to its buffer flags
     flags: HashMap<String, ir::BufferFlags>,
     /// Number of dimensional template arguments
@@ -487,6 +491,11 @@ impl<'a> Funclet<'a> {
         })
     }
 
+    /// Returns `true` if the specified variable is a reference that backs a mutable variable.
+    pub fn is_backing_ref(&self, v: &str) -> bool {
+        self.parent.backing_refs.contains(v)
+    }
+
     /// Returns true if the specified variable is a mutable reference or a mutable variable
     pub fn is_var_or_ref(&self, v: &str) -> bool {
         self.parent.variables.contains(v) || matches!(self.get_dtype(v), Some(DataType::Ref(_)))
@@ -507,7 +516,10 @@ impl<'a> Funclet<'a> {
 
 struct FuncletTypeInfo {
     data_types: HashMap<String, DataType>,
+    /// the mutable variables in the funclet. This does not include the references backing each reference
     variables: HashSet<String>,
+    /// the references that hold the data for a mutable
+    backing_refs: HashSet<String>,
     flags: HashMap<String, ir::BufferFlags>,
     output_dtypes: Vec<DataType>,
 }
@@ -645,6 +657,7 @@ impl Funclets {
             variables: type_info.variables,
             flags: type_info.flags,
             num_dims,
+            backing_refs: type_info.backing_refs,
         })
     }
 
@@ -693,6 +706,7 @@ impl Funclets {
             &mut cfg,
             ReachingDefs::top(
                 f.input.iter().map(|(x, _)| x),
+                ctx.class_dimensions[&ctx.specs[&ctx.scheds[&f.name].unwrap_sched().value].feq],
                 &type_info.data_types,
                 &type_info.variables,
             ),
@@ -702,7 +716,7 @@ impl Funclets {
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         if !no_inference {
-            deduce_tmln_quots(
+            let tmln_env = deduce_tmln_quots(
                 hir_inputs,
                 hir_outputs,
                 &type_info.output_dtypes,
@@ -717,7 +731,7 @@ impl Funclets {
             )?;
             cfg = transform_to_ssa(cfg, &live_vars, &doms);
 
-            deduce_val_quots(
+            let (val_env, selects) = deduce_val_quots(
                 hir_inputs,
                 hir_outputs,
                 &type_info.output_dtypes,
@@ -725,8 +739,28 @@ impl Funclets {
                 &ctx.specs[&specs.value.0],
                 ctx,
                 &type_info.data_types,
-                &type_info.flags,
                 f.info,
+            )?;
+
+            let res = analyze(
+                &mut cfg,
+                UsabilityAnalysis::top(
+                    &val_env,
+                    &tmln_env,
+                    &type_info.data_types,
+                    &type_info.flags,
+                    &selects,
+                ),
+            )?;
+            analyze(
+                &mut cfg,
+                UninitCheck::top(
+                    // set of all references and GPU variables
+                    res.get_out_fact(FINAL_BLOCK_ID).to_init.clone(),
+                    hir_inputs,
+                    &val_env,
+                    &type_info.data_types,
+                ),
             )?;
 
             cfg = transform_out_ssa(cfg);
@@ -748,13 +782,14 @@ impl Funclets {
     fn collect_types(f: &SchedInfo, cur_outputs: &[FullType]) -> FuncletTypeInfo {
         let mut data_types = f.types.clone();
         let mut variables = HashSet::new();
+        let mut backing_refs = HashSet::new();
         let mut flags = f.flags.clone();
         for (var, typ) in &f.types {
             if matches!(f.defined_names.get(var), Some((Mutability::Mut, _))) {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
                 data_types.insert(format!("_{var}_ref"), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
-                variables.insert(format!("_{var}_ref"));
+                backing_refs.insert(format!("_{var}_ref"));
             }
         }
         for (id, out_ty) in cur_outputs.iter().enumerate() {
@@ -773,6 +808,7 @@ impl Funclets {
             data_types,
             variables,
             flags,
+            backing_refs,
             output_dtypes: cur_outputs
                 .iter()
                 .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())

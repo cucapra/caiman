@@ -77,17 +77,13 @@
 
 use std::collections::HashMap;
 
-use caiman::explication::{expir::BufferFlags, Hole};
+use caiman::explication::Hole;
 
 use crate::{
     error::{Info, LocalError},
     lower::{
         sched_hir::{
-            analysis::{
-                analyze,
-                hole_expansion::{UninitCheck, UsabilityAnalysis},
-            },
-            cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
+            cfg::{BasicBlock, Cfg, Edge, START_BLOCK_ID},
             FillIn, HirBody, HirFuncCall, HirOp, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
@@ -114,9 +110,8 @@ pub fn deduce_val_quots(
     spec_info: &SpecInfo,
     ctx: &Context,
     dtypes: &HashMap<String, DataType>,
-    flags: &HashMap<String, BufferFlags>,
     info: Info,
-) -> Result<(), LocalError> {
+) -> Result<(NodeEnv, HashMap<usize, String>), LocalError> {
     let env = spec_info.nodes.clone();
     let mut overrides = Vec::new();
     for i in &cfg.blocks[&START_BLOCK_ID].stmts {
@@ -140,17 +135,7 @@ pub fn deduce_val_quots(
     fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, output_dtypes, &env);
 
-    let res = analyze(cfg, UsabilityAnalysis::top(&env, dtypes, flags, &selects))?;
-    analyze(
-        cfg,
-        UninitCheck::top(
-            // set of all references and GPU variables
-            res.get_out_fact(FINAL_BLOCK_ID).to_init.clone(),
-            inputs,
-            &env,
-        ),
-    )
-    .map(|_| ())
+    Ok((env, selects))
 }
 
 /// Adds constraints to the environment based on input and output annotations.

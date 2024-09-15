@@ -99,7 +99,7 @@ fn build_copy_cmd(
             }
         }
         HirTerm::Hole { .. } => {
-            if matches!(dest_type.unwrap(), DataType::Ref(_)) {
+            if matches!(dest_type.unwrap(), DataType::Ref(_)) && !f.is_backing_ref(dest) {
                 asm::Command::Node(asm::NamedNode {
                     name: None,
                     node: asm::Node::LocalCopy {

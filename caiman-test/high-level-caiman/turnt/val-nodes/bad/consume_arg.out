@@ -1,0 +1,3 @@
+Error: At "consume_arg.cm" 19:5 - 19:10, 
+  Type Error: No definition of 'c' reaches this use.
+Note that references cannot be captured across function calls and function arguments are consumed.

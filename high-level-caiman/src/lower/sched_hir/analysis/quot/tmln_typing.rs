@@ -84,7 +84,7 @@ pub fn deduce_tmln_quots(
     num_dims: usize,
     spec_name: &str,
     live_vars: &InOutFacts<LiveVars>,
-) -> Result<(), LocalError> {
+) -> Result<NodeEnv, LocalError> {
     let env = spec_info.nodes.clone();
     let mut overrides = Vec::new();
     for i in &cfg.blocks[&START_BLOCK_ID].stmts {
@@ -114,7 +114,7 @@ pub fn deduce_tmln_quots(
         fill_tmln_tags(cfg, &env, &implicit_events, live_vars, dtypes);
         add_implicit_annotations(cfg, &implicit_events);
     }
-    Ok(())
+    Ok(env)
 }
 
 /// A struct containing the implicit input and output events for each funclet in the CFG.

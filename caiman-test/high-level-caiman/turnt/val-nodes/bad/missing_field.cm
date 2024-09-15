@@ -38,7 +38,7 @@ fn foo_main(x: &i32) -> i32
     encode e.copy[x_gpu <- x];
     encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu) @ node(val.r)];
     let f = submit @ node(tmln.sub) e;
-
+    ???;
 
     let y = await @ node(tmln.snc) f;
     let result = y.z_gpu;
