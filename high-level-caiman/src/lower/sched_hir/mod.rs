@@ -14,7 +14,7 @@ use analysis::{
 pub use hir::*;
 
 use crate::{
-    error::{hlc_to_source_name, LocalError},
+    error::{hir_to_source_name, LocalError},
     parse::ast::{DataType, FlaggedType, FullType, IntSize, SchedulingFunc},
     typing::{
         Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
@@ -469,7 +469,7 @@ impl<'a> Funclet<'a> {
                 return Err(format!(
                     "{}: Invalid flags for '{}'",
                     self.block.src_loc,
-                    hlc_to_source_name(var)
+                    hir_to_source_name(var)
                 ));
             };
             Ok(asm::TypeId(format!(
@@ -716,7 +716,7 @@ impl Funclets {
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         if !no_inference {
-            let tmln_env = deduce_tmln_quots(
+            deduce_tmln_quots(
                 hir_inputs,
                 hir_outputs,
                 &type_info.output_dtypes,
@@ -744,13 +744,7 @@ impl Funclets {
 
             let res = analyze(
                 &mut cfg,
-                UsabilityAnalysis::top(
-                    &val_env,
-                    &tmln_env,
-                    &type_info.data_types,
-                    &type_info.flags,
-                    &selects,
-                ),
+                UsabilityAnalysis::top(&val_env, &type_info.data_types, &type_info.flags, &selects),
             )?;
             analyze(
                 &mut cfg,

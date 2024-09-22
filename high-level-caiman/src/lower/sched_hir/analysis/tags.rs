@@ -13,7 +13,7 @@ use std::rc::Rc;
 use caiman::explication::Hole;
 use caiman::ir;
 
-use crate::error::{hlc_to_source_name, Info, LocalError};
+use crate::error::{hir_to_source_name, Info, LocalError};
 use crate::lower::sched_hir::cfg::FINAL_BLOCK_ID;
 use crate::lower::sched_hir::HirTerm;
 use crate::lower::sched_hir::{
@@ -540,7 +540,7 @@ impl FlowAnalysis {
                         return Err(type_error!(
                             *info,
                             "Captured variable '{}' requires a tag annotation",
-                            hlc_to_source_name(cap)
+                            hir_to_source_name(cap)
                         ));
                     }
                 }
@@ -629,7 +629,7 @@ impl Fact for FlowAnalysis {
                             return Err(type_error!(
                                 info,
                                 "Flow mismatch when merging control flow paths for '{}'\n{:#?} != {v:#?}",
-                                hlc_to_source_name(k),
+                                hir_to_source_name(k),
                                 old_v.get()
                             ));
                         }

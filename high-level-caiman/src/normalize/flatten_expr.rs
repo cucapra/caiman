@@ -779,6 +779,25 @@ fn flatten_sched_term_children(
                 )),
             )
         }
+        NestedExpr::Term(SchedTerm::TimelineOperation { arg, info, op, tag }) => {
+            let (instrs, new_temp, t) = flatten_rec(
+                *arg,
+                &build_sched_var_factory(info),
+                &build_sched_decl_factory(info, true),
+                temp_num,
+                &flatten_sched_term,
+            );
+            (
+                instrs,
+                new_temp,
+                NestedExpr::Term(SchedTerm::TimelineOperation {
+                    info,
+                    op,
+                    tag,
+                    arg: Box::new(t),
+                }),
+            )
+        }
         _ => (vec![], temp_num, term),
     }
 }

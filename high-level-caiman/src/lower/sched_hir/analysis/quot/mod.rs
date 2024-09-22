@@ -7,7 +7,7 @@ pub use tmln_typing::deduce_tmln_quots;
 pub use val_typing::deduce_val_quots;
 
 use crate::{
-    error::{hlc_to_source_name, Info, LocalError},
+    error::{hir_to_source_name, Info, LocalError},
     lower::sched_hir::{cfg::START_BLOCK_ID, TripleTag},
     parse::ast::{Quotient, QuotientReference, SpecType, Tag},
     type_error,
@@ -32,7 +32,7 @@ fn add_constraint(
         type_error!(
             info,
             "Failed to unify node constraints of '{}':\n {e}",
-            hlc_to_source_name(lhs)
+            hir_to_source_name(lhs)
         )
     })?;
     Ok(env)
@@ -88,8 +88,8 @@ fn add_var_constraint(
         type_error!(
             info,
             "Failed to unify '{}' with '{}':\n {e}",
-            hlc_to_source_name(lhs),
-            hlc_to_source_name(var)
+            hir_to_source_name(lhs),
+            hir_to_source_name(var)
         )
     })?;
     Ok(env)
@@ -114,7 +114,7 @@ fn add_node_eq(
         type_error!(
             info,
             "Failed to unify '{}' with node '{class_name}':\n {e}",
-            hlc_to_source_name(name)
+            hir_to_source_name(name)
         )
     })?;
     Ok(env)

@@ -6,7 +6,7 @@ use std::{
 use caiman::explication::expir::BufferFlags;
 
 use crate::{
-    error::{hlc_to_source_name, Info, LocalError},
+    error::{hir_to_source_name, Info, LocalError},
     lower::{
         sched_hir::{
             cfg::{Cfg, START_BLOCK_ID},
@@ -52,7 +52,7 @@ pub fn set_hole_defs(
         return Err(type_error!(
             info,
             "There is no way for '{}' to be defined before it's used",
-            hlc_to_source_name(cannot_init)
+            hir_to_source_name(cannot_init)
         ));
     }
     Ok(())
@@ -154,11 +154,6 @@ pub struct UsabilityAnalysis<'a> {
     val_deps: Rc<HashMap<String, Vec<String>>>,
     val_env: &'a NodeEnv,
     selects: &'a HashMap<usize, String>,
-    tmln_env: &'a NodeEnv,
-    /// Map from node name to ssa variables that can no longer be initialized
-    tmln_ends: Rc<HashMap<String, Vec<String>>>,
-    /// Map from node name to ssa variables that can now be initialized
-    tmln_starts: Rc<HashMap<String, Vec<String>>>,
 }
 
 impl<'a> PartialEq for UsabilityAnalysis<'a> {
@@ -170,15 +165,13 @@ impl<'a> PartialEq for UsabilityAnalysis<'a> {
 impl<'a> UsabilityAnalysis<'a> {
     pub fn top(
         env: &'a NodeEnv,
-        tmln_env: &'a NodeEnv,
         data_types: &HashMap<String, DataType>,
         flags: &HashMap<String, BufferFlags>,
         selects: &'a HashMap<usize, String>,
     ) -> Self {
         let mut to_init = HashSet::new();
         let mut deps: HashMap<_, Vec<_>> = HashMap::new();
-        let mut tmln_deps: HashMap<_, Vec<_>> = HashMap::new();
-        let mut tmln_starts: HashMap<_, Vec<_>> = HashMap::new();
+
         for ssa_var in env.get_sched_vars() {
             let var = ssa_original_name(ssa_var);
             if let (Some(node_name), Some(typ)) = (env.get_node_name(ssa_var), data_types.get(&var))
@@ -190,24 +183,12 @@ impl<'a> UsabilityAnalysis<'a> {
                     }
                 }
             }
-            if let Some(node_name) = tmln_env.get_node_name(&var) {
-                tmln_starts
-                    .entry(node_name.clone())
-                    .or_default()
-                    .push(ssa_var.clone());
-                for dep in tmln_env.dependencies(&MetaVar::new_class_name(&node_name)) {
-                    tmln_deps.entry(dep).or_default().push(ssa_var.clone());
-                }
-            }
         }
         Self {
             to_init,
             val_env: env,
             val_deps: Rc::new(deps),
             selects,
-            tmln_ends: Rc::new(tmln_deps),
-            tmln_env,
-            tmln_starts: Rc::new(tmln_starts),
         }
     }
 
@@ -347,6 +328,76 @@ impl<'a> PartialEq for UninitCheck<'a> {
     }
 }
 
+/// Get's the uses of a statement that must be value `usable`
+/// # Arguments
+/// * `on_remove` - a callback invoked when a variable is removed from the use set during
+/// computation of the `usable` use set
+fn get_usable_uses(
+    stmt: &HirInstr,
+    env: &NodeEnv,
+    dtypes: &HashMap<String, DataType>,
+    mut on_remove: impl FnMut(&str),
+) -> BTreeSet<String> {
+    let mut uses = BTreeSet::new();
+    stmt.get_uses(&mut uses);
+    if let Some(writes) = stmt.get_write_uses() {
+        for w in writes {
+            uses.remove(&w);
+            on_remove(&w);
+        }
+    }
+    if matches!(
+        stmt,
+        HirInstr::Stmt(
+            HirBody::VarDecl { rhs: Some(_), .. }
+                | HirBody::ConstDecl {
+                    rhs: HirTerm::Hole { .. },
+                    ..
+                }
+        )
+    ) {
+        for d in stmt.get_defs().unwrap() {
+            uses.remove(&d);
+            on_remove(&d);
+        }
+    }
+    match stmt {
+        HirInstr::Tail(Terminator::CaptureCall { dests, .. }) => {
+            // special handling for calls, which are currently the only way for a reference to be
+            // used (in the traditional compilers sense) without consuming it
+            let t = tuple_id(&dests.iter().map(|(nm, _)| nm.clone()).collect::<Vec<_>>());
+            if let Some(class_name) = env.get_node_name(&t) {
+                let deps = env.dependencies(&MetaVar::new_class_name(&class_name));
+                uses.retain(|u| {
+                    env.get_node_name(u)
+                        .map_or(false, |node| deps.contains(&node))
+                });
+            } else {
+                // if the call is unknown, assume it uses nothing
+                uses.clear();
+            }
+            for (d, _) in dests {
+                if env.get_node_name(d).is_some() {
+                    uses.remove(d);
+                    on_remove(d);
+                }
+            }
+        }
+        HirInstr::Stmt(HirBody::Submit { src, .. }) => {
+            if let Some(DataType::Encoder(Some(rec))) = dtypes.get(&ssa_original_name(src)) {
+                // all encoder members must be usable at the submit
+                if let DataType::RemoteObj { all, .. } = &**rec {
+                    for (mem, _) in all {
+                        uses.insert(format!("{}::{mem}", ssa_original_name(src)));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    uses
+}
+
 impl<'a> Fact for UninitCheck<'a> {
     fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.maybe_uninit.extend(other.maybe_uninit.iter().cloned());
@@ -368,74 +419,16 @@ impl<'a> Fact for UninitCheck<'a> {
                 }
             }
             x => {
-                let mut uses = BTreeSet::new();
-                x.get_uses(&mut uses);
-                if let Some(writes) = x.get_write_uses() {
-                    for w in writes {
-                        uses.remove(&w);
-                        self.maybe_uninit.remove(&ssa_original_name(&w));
-                    }
-                }
-                if matches!(
-                    x,
-                    HirInstr::Stmt(
-                        HirBody::VarDecl { rhs: Some(_), .. }
-                            | HirBody::ConstDecl {
-                                rhs: HirTerm::Hole { .. },
-                                ..
-                            }
-                    )
-                ) {
-                    for d in x.get_defs().unwrap() {
-                        uses.remove(&d);
-                        self.maybe_uninit.remove(&ssa_original_name(&d));
-                    }
-                }
-                match x {
-                    HirInstr::Tail(Terminator::CaptureCall { dests, .. }) => {
-                        // special handling for calls, which are currently the only way for a reference to be
-                        // used (in the traditional compilers sense) without consuming it
-                        let t =
-                            tuple_id(&dests.iter().map(|(nm, _)| nm.clone()).collect::<Vec<_>>());
-                        if let Some(class_name) = self.env.get_node_name(&t) {
-                            let deps = self.env.dependencies(&MetaVar::new_class_name(&class_name));
-                            uses.retain(|u| {
-                                self.env
-                                    .get_node_name(u)
-                                    .map_or(false, |node| deps.contains(&node))
-                            });
-                        } else {
-                            // if the call is unknown, assume it uses nothing
-                            uses.clear();
-                        }
-                        for (d, _) in dests {
-                            if self.env.get_node_name(d).is_some() {
-                                uses.remove(d);
-                                self.maybe_uninit.remove(&ssa_original_name(d));
-                            }
-                        }
-                    }
-                    HirInstr::Stmt(HirBody::Submit { src, .. }) => {
-                        if let Some(DataType::Encoder(Some(rec))) =
-                            self.dtypes.get(&ssa_original_name(src))
-                        {
-                            // all encoder members must be usable at the submit
-                            if let DataType::RemoteObj { all, .. } = &**rec {
-                                for (mem, _) in all {
-                                    uses.insert(format!("{}::{mem}", ssa_original_name(src)));
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
+                let uses = get_usable_uses(&x, self.env, self.dtypes, |x| {
+                    self.maybe_uninit.remove(&ssa_original_name(x));
+                });
                 let uses: HashSet<_> = uses.into_iter().map(|x| ssa_original_name(&x)).collect();
                 for u in &self.maybe_uninit {
                     if uses.contains(u) {
                         return Err(type_error!(
                             x.get_info(),
                             "'{}' is used before it can be initialized",
-                            hlc_to_source_name(u)
+                            hir_to_source_name(u)
                         ));
                     }
                 }

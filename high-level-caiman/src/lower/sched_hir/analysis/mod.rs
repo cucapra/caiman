@@ -11,7 +11,7 @@ mod ssa;
 mod tags;
 
 use crate::{
-    error::{hlc_to_source_name, Info, LocalError},
+    error::{hir_to_source_name, Info, LocalError},
     parse::ast::DataType,
     type_error,
 };
@@ -463,7 +463,7 @@ impl<'a> ReachingDefs<'a> {
                 return Err(type_error!(
                     stmt.get_info(),
                     "No definition of '{}' reaches this use.\nNote that references cannot be captured across function calls and function arguments are consumed.",
-                    hlc_to_source_name(&u)
+                    hir_to_source_name(&u)
                 ));
             }
         }

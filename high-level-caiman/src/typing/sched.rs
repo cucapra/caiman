@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::{hlc_to_source_name, Info, LocalError},
+    error::{hir_to_source_name, Info, LocalError},
     parse::ast::{
         expect_var, hole_or_var, Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType,
         FullType, IntSize, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr,
@@ -493,7 +493,7 @@ fn collect_assign_call(
                 return Err(type_error!(
                     info,
                     "Annotation for '{}' is incompatible with return type of '{fn_name}'",
-                    hlc_to_source_name(dest_name)
+                    hir_to_source_name(dest_name)
                 ));
             }
         }

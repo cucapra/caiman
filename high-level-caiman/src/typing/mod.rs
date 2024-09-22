@@ -6,7 +6,7 @@ use std::{
 mod specs;
 
 use crate::{
-    error::{hlc_to_source_name, Info, LocalError},
+    error::{hir_to_source_name, Info, LocalError},
     parse::ast::{Binop, DataType, FlaggedType, FullType, SpecType, Tag, Uop, WGPUFlags},
     type_error,
 };
@@ -373,7 +373,7 @@ impl DTypeEnv {
             type_error!(
                 info,
                 "Failed to unify type constraints of variable '{}'\n\n{c}",
-                hlc_to_source_name(name)
+                hir_to_source_name(name)
             )
         })?;
         self.enforce_side_conds(info)
@@ -403,8 +403,8 @@ impl DTypeEnv {
                     type_error!(
                         info,
                         "Constraint caused violation of condition that '{}' is a subtype of '{}'\nHowever {sub_dt:#?}\n !<:\n{super_dt:#?}\n\n{e}",
-                        hlc_to_source_name(&subtype),
-                        hlc_to_source_name(&supertype)
+                        hir_to_source_name(&subtype),
+                        hir_to_source_name(&supertype)
                     )
                 })?;
             }
@@ -497,7 +497,7 @@ impl DTypeEnv {
                 type_error!(
                     info,
                     "Failed to unify type constraints of variable '{}'\n\n{c}",
-                    hlc_to_source_name(name)
+                    hir_to_source_name(name)
                 )
             })?;
         self.enforce_side_conds(info)
@@ -516,7 +516,7 @@ impl DTypeEnv {
             type_error!(
                 info,
                 "Failed to unify type constraints of variable '{}'\n\n{c}",
-                hlc_to_source_name(name)
+                hir_to_source_name(name)
             )
         })?;
         self.enforce_side_conds(info)

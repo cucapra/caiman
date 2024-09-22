@@ -138,7 +138,7 @@ macro_rules! type_error {
 /// Strips a name of all the adornments added in high-level caiman to return the original name
 /// as specified in the source file.
 #[must_use]
-pub fn hlc_to_source_name(mut n: &str) -> String {
+pub fn hir_to_source_name(mut n: &str) -> String {
     fn trim(mut n: &str) -> &str {
         if let Some(dot_idx) = n.find('.') {
             n = &n[0..dot_idx];

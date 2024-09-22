@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::error::{hlc_to_source_name, Info, LocalError};
+use crate::error::{hir_to_source_name, Info, LocalError};
 use crate::lower::{binop_name, op_to_str};
 use crate::parse::ast::{
     ExternDef, FlaggedType, FullType, IntSize, SpecExpr, SpecFunclet, SpecStmt, SpecTerm,
@@ -278,7 +278,7 @@ fn resolve_types(
                             Info::default(),
                             "Reference or variable of reference types are not allowed. Found {}'{}': {dt}",
                             if matches!(names.get(name), Some((Mutability::Mut, _))) { "var " } else { "" },
-                            hlc_to_source_name(name)
+                            hir_to_source_name(name)
                         ));
                     }
                     match &dt {
@@ -322,7 +322,7 @@ fn resolve_types(
                     return Err(type_error!(
                         names[name].1,
                         "The inferred data type of '{}' is incomplete. Perhaps provide a data type annotation. Inferred:\n{dt:#?}",
-                        hlc_to_source_name(name)
+                        hir_to_source_name(name)
                     ));
                 }
             }
@@ -330,7 +330,7 @@ fn resolve_types(
             return Err(type_error!(
                 names[name].1,
                 "Unable to infer a data type of '{}'. Perhaps provide a data type annotation.",
-                hlc_to_source_name(name)
+                hir_to_source_name(name)
             ));
         }
     }
@@ -396,7 +396,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     return Err(type_error!(
                         info,
                         "Immutable variable '{}' cannot be assigned to or have its reference taken",
-                        hlc_to_source_name(&var)
+                        hir_to_source_name(&var)
                     ));
                 }
             }
