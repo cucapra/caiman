@@ -4,13 +4,14 @@ use std::{
 };
 
 use caiman::explication::expir::BufferFlags;
+use init_synth::{build_init_set, fill_initializers};
 
 use crate::{
     error::{hir_to_source_name, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, START_BLOCK_ID},
-            Hir, HirBody, HirInstr, HirTerm, Terminator, TripleTag,
+            cfg::{Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
+            FuncletTypeInfo, Hir, HirBody, HirInstr, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
     },
@@ -20,9 +21,11 @@ use crate::{
 };
 
 use super::{
-    analyze, dominators::DomTree, get_uses, ssa::ssa_original_name, Backwards, Fact, Forwards,
-    LiveVars, TransferData, UseMap,
+    analyze, dominators::DomTree, get_uses, ssa::ssa_original_name, Backwards, DomInfo, Fact,
+    Forwards, LiveVars, TransferData, UseMap,
 };
+
+mod init_synth;
 
 /// Sets variables a hole should define. For a given variable that
 /// is undefined, the hole that dominates all uses of the variable
@@ -144,7 +147,7 @@ impl<'a> Fact for FillHoleDefs<'a> {
 
 /// An analysis that identifies variables that need to be initialized (made usable).
 #[derive(Clone)]
-pub struct UsabilityAnalysis<'a> {
+struct UsabilityAnalysis<'a> {
     /// variables that need to be made usable at this point
     /// The only way to consume a variable would be to pass it through a function,
     /// which creates a new definition of the variable. So once a variable becomes
@@ -257,9 +260,9 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
                     self.remove_dependents_of_class(select_node);
                 }
             }
-            HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
-                initialized.clone_from(&self.to_init);
-            }
+            // HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
+            //     initialized.clone_from(&self.to_init);
+            // }
             _ => {}
         };
         if let Some(defs) = match stmt {
@@ -281,12 +284,11 @@ impl<'a> Fact for UsabilityAnalysis<'a> {
 
     type Dir = Backwards;
 }
-
 /// Pass that errors if a reference or GPU variable's value is used before it is
 /// made usable. This pass is conservative in the sense that it will only error
 /// if there is definitely a problem.
 #[derive(Clone)]
-pub struct UninitCheck<'a> {
+struct UninitCheck<'a> {
     maybe_uninit: HashSet<String>,
     env: &'a NodeEnv,
     dtypes: &'a HashMap<String, DataType>,
@@ -438,4 +440,37 @@ impl<'a> Fact for UninitCheck<'a> {
     }
 
     type Dir = Forwards;
+}
+
+/// Sets the variables each hole will initialize. Errors if this cannot be done.
+pub fn set_hole_initializations(
+    cfg: &mut Cfg,
+    val_env: &NodeEnv,
+    type_info: &FuncletTypeInfo,
+    selects: &HashMap<usize, String>,
+    hir_inputs: &[(String, TripleTag)],
+    outputs: &[FullType],
+) -> Result<(), LocalError> {
+    let res = analyze(
+        cfg,
+        UsabilityAnalysis::top(val_env, &type_info.data_types, &type_info.flags, selects),
+    )?;
+    // set of all references and GPU variables
+    let maybe_uninit = res.get_out_fact(FINAL_BLOCK_ID).to_init.clone();
+    let dinfo = DomInfo::new(cfg);
+    let initializers = build_init_set(
+        cfg,
+        &maybe_uninit,
+        val_env,
+        outputs,
+        hir_inputs,
+        &type_info.data_types,
+        &dinfo,
+    );
+    fill_initializers(cfg, initializers);
+    analyze(
+        cfg,
+        UninitCheck::top(maybe_uninit, hir_inputs, val_env, &type_info.data_types),
+    )?;
+    Ok(())
 }

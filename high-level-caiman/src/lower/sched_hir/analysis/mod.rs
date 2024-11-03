@@ -25,9 +25,8 @@ use super::{
 use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
 pub use dominators::compute_dominators;
-pub use holes::set_hole_defs;
-#[allow(clippy::module_name_repetitions)]
-pub use holes::{UninitCheck, UsabilityAnalysis};
+pub use dominators::DomInfo;
+pub use holes::{set_hole_defs, set_hole_initializations};
 pub use op_transform::op_transform_pass;
 pub use quot::deduce_tmln_quots;
 pub use quot::deduce_val_quots;

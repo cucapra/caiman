@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    analysis::{compute_continuations, Succs},
+    analysis::{compute_continuations, DomInfo, Succs},
     stmts_to_hir, Hir, HirBody, HirFuncCall, Terminator, TripleTag,
 };
 
@@ -796,6 +796,91 @@ where
         }
     }
     reversed_order
+}
+
+/// A location in the CFG `(block num, local instr idx)`
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub struct Loc(pub usize, pub usize);
+
+impl Loc {
+    /// Returns `self <= b`, that is there is a (possibly empty) path from `self` to `b`.
+    pub fn lte(&self, cfg: &Cfg, b: &Self) -> bool {
+        if self.0 == b.0 {
+            self.1 <= b.1
+        } else {
+            cfg.succs.succs[&self.0].contains(&b.0)
+        }
+    }
+
+    pub fn dom(&self, doms: &DomInfo, b: &Self) -> bool {
+        if self.0 == b.0 {
+            self.1 <= b.1
+        } else {
+            doms.dom(self.0, b.0)
+        }
+    }
+
+    pub fn pdom(&self, doms: &DomInfo, b: &Self) -> bool {
+        if self.0 == b.0 {
+            self.1 >= b.1
+        } else {
+            doms.postdom(self.0, b.0)
+        }
+    }
+}
+
+/// `A` collectively dominates `B` if all paths to any element in `B` contains
+/// some element in `A`. Implemented as a trait to get more natural "infix"
+/// notation using a receiver object.
+pub trait CollectiveDom {
+    /// `A` collectively dominates `B` if all paths to any element in `B` contains
+    /// some element in `A`.
+    fn cdom(&self, cfg: &Cfg, b: &Self) -> bool;
+}
+
+/// Returns true if, starting from `start`, we can reach some element in `goal_set`
+/// without crossing an element in `blocking_set`.
+///
+/// We check membership of the goal set before the blocking set. So if we reach
+/// an element that is both in the blocking and goal set, we consider that we
+/// can reach the goal.
+pub fn can_reach_goal(
+    cfg: &Cfg,
+    start: &Loc,
+    blocking_set: &HashSet<Loc>,
+    goal_set: &HashSet<Loc>,
+) -> bool {
+    let mut q = Vec::new();
+    q.push(start.clone());
+    let mut visited = HashSet::new();
+    'worklist: while let Some(s) = q.pop() {
+        if goal_set.contains(&s) {
+            return true;
+        }
+        let blk = &cfg.blocks[&s.0];
+        if visited.contains(&s.0) {
+            continue;
+        }
+        visited.insert(s.0);
+        for local_id in s.1..=blk.stmts.len() {
+            if goal_set.contains(&Loc(s.0, local_id)) {
+                return true;
+            }
+            if blocking_set.contains(&Loc(s.0, local_id)) {
+                continue 'worklist;
+            }
+        }
+        for succ in cfg.graph[&s.0] {
+            q.push(Loc(succ, 0));
+        }
+    }
+    false
+}
+
+impl CollectiveDom for HashSet<Loc> {
+    fn cdom(&self, cfg: &Cfg, b: &Self) -> bool {
+        can_reach_goal(cfg, &Loc(START_BLOCK_ID, 0), self, b)
+    }
 }
 
 impl Cfg {

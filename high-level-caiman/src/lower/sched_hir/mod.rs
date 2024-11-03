@@ -8,8 +8,8 @@ use std::{
 };
 
 use analysis::{
-    analyze, compute_dominators, deduce_tmln_quots, set_hole_defs, ReachingDefs, UninitCheck,
-    UsabilityAnalysis,
+    analyze, compute_dominators, deduce_tmln_quots, set_hole_defs, set_hole_initializations,
+    ReachingDefs,
 };
 pub use hir::*;
 
@@ -742,19 +742,8 @@ impl Funclets {
                 f.info,
             )?;
 
-            let res = analyze(
-                &mut cfg,
-                UsabilityAnalysis::top(&val_env, &type_info.data_types, &type_info.flags, &selects),
-            )?;
-            analyze(
-                &mut cfg,
-                UninitCheck::top(
-                    // set of all references and GPU variables
-                    res.get_out_fact(FINAL_BLOCK_ID).to_init.clone(),
-                    hir_inputs,
-                    &val_env,
-                    &type_info.data_types,
-                ),
+            set_hole_initializations(
+                &mut cfg, &val_env, type_info, &selects, hir_inputs, &f.output,
             )?;
 
             cfg = transform_out_ssa(cfg);

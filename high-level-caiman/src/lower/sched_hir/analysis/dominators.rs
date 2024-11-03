@@ -1,7 +1,7 @@
 //! Computes dominators of a CFG.
 //! Mostly taken from
 //! [here](https://github.com/stephenverderame/cs6120-bril/blob/main/cfg/src/analysis/dominators.rs)
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::lower::sched_hir::cfg::{BasicBlock, Cfg};
 
@@ -181,35 +181,17 @@ where
 pub struct DomInfo {
     /// A map from each block to nodes that dominate it
     dominated_by: HashMap<usize, HashSet<usize>>,
-    /// A map from each block to nodes that it dominates
-    dominates: HashMap<usize, HashSet<usize>>,
     /// A map from each block to nodes that postdominate it
     postdominated_by: HashMap<usize, HashSet<usize>>,
-    /// A map from each block to nodes that it postdominates
-    postdominates: HashMap<usize, HashSet<usize>>,
-}
-
-fn inverse_map(map: &HashMap<usize, HashSet<usize>>) -> HashMap<usize, HashSet<usize>> {
-    let mut res: HashMap<_, HashSet<_>> = HashMap::new();
-    for (key, vals) in map {
-        for v in vals.iter() {
-            res.entry(*v).or_default().insert(*key);
-        }
-    }
-    res
 }
 
 impl DomInfo {
     pub fn new(cfg: &Cfg) -> Self {
         let dominated_by = make_dom_map(&cfg.transpose_graph, &cfg.blocks);
-        let dominates = inverse_map(&dominated_by);
         let postdominated_by = make_dom_map(&cfg.graph, &cfg.blocks);
-        let postdominates = inverse_map(&postdominated_by);
         Self {
             dominated_by,
-            dominates,
             postdominated_by,
-            postdominates,
         }
     }
 
@@ -219,9 +201,5 @@ impl DomInfo {
 
     pub fn postdom(&self, a: usize, b: usize) -> bool {
         self.postdominated_by[&b].contains(&a)
-    }
-
-    pub fn strict_dom(&self, a: usize, b: usize) -> bool {
-        a != b && self.dom(a, b)
     }
 }
