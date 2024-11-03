@@ -22,7 +22,7 @@ use crate::{
     error::{Info, LocalError},
     lower::{
         sched_hir::{
-            analysis::{topo_order_rev, InOutFacts, LiveVars},
+            analysis::{InOutFacts, LiveVars},
             cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
             Hir, HirBody, HirFuncCall, HirTerm, Terminator, TripleTag,
         },
@@ -192,7 +192,7 @@ fn unify_nodes(
     let mut seen = HashMap::new();
     env = add_node_eq(&format!("{LOCAL_STEM}0"), implicit_in, Info::default(), env)?;
     seen.insert(START_BLOCK_ID, 0);
-    let mut node_q = topo_order_rev(&cfg.graph, START_BLOCK_ID);
+    let mut node_q = cfg.topo_order_rev.clone();
     let mut block_loc_events = HashMap::new();
     // the last globally used local event number
     let mut latest_loc = 0;

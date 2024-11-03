@@ -3,7 +3,7 @@
 //! [here](https://github.com/stephenverderame/cs6120-bril/blob/main/cfg/src/analysis/dominators.rs)
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::lower::sched_hir::cfg::Cfg;
+use crate::lower::sched_hir::cfg::{BasicBlock, Cfg};
 
 /// A node in the dominator tree.
 #[derive(Clone)]
@@ -135,34 +135,93 @@ impl DomTree {
 #[must_use]
 #[allow(clippy::module_name_repetitions)]
 pub fn compute_dominators(cfg: &Cfg) -> DomTree {
-    let preds = &cfg.transpose_graph;
+    DomTree::new(&make_dom_map(&cfg.transpose_graph, &cfg.blocks))
+}
+
+/// Returns a map from blocks to nodes that dominate it
+fn make_dom_map<T>(
+    preds: &HashMap<usize, T>,
+    blocks: &HashMap<usize, BasicBlock>,
+) -> HashMap<usize, HashSet<usize>>
+where
+    for<'a> &'a T: IntoIterator<Item = &'a usize>,
+{
     let mut doms: HashMap<_, HashSet<_>> = HashMap::new();
-    let all_blocks = cfg.blocks.keys().copied().collect::<HashSet<_>>();
-    for block in cfg.blocks.keys() {
+    let all_blocks = blocks.keys().copied().collect::<HashSet<_>>();
+    for block in blocks.keys() {
         doms.insert(*block, all_blocks.clone());
     }
     let mut changed = true;
-    let default_preds = BTreeSet::new();
     while changed {
         changed = false;
-        for block in cfg.blocks.keys() {
-            let mut pred_iter = preds.get(block).unwrap_or(&default_preds).iter();
-            let mut new_dom: HashSet<usize> = pred_iter
-                .next()
-                .map(|x| doms.get(x).unwrap().clone())
-                .unwrap_or_default();
-            for pred in pred_iter {
-                new_dom = new_dom
-                    .intersection(doms.get(pred).unwrap())
-                    .copied()
-                    .collect();
-            }
-            new_dom.insert(*block);
-            if new_dom != *doms.get(block).unwrap_or(&HashSet::new()) {
-                doms.insert(*block, new_dom);
-                changed = true;
+        for block in blocks.keys() {
+            if let Some(pred_iter) = preds.get(block) {
+                let mut pred_iter = pred_iter.into_iter();
+                let mut new_dom: HashSet<usize> = pred_iter
+                    .next()
+                    .map(|x| doms.get(x).unwrap().clone())
+                    .unwrap_or_default();
+                for pred in pred_iter {
+                    new_dom = new_dom
+                        .intersection(doms.get(pred).unwrap())
+                        .copied()
+                        .collect();
+                }
+                new_dom.insert(*block);
+                if new_dom != *doms.get(block).unwrap_or(&HashSet::new()) {
+                    doms.insert(*block, new_dom);
+                    changed = true;
+                }
             }
         }
     }
-    DomTree::new(&doms)
+    doms
+}
+
+pub struct DomInfo {
+    /// A map from each block to nodes that dominate it
+    dominated_by: HashMap<usize, HashSet<usize>>,
+    /// A map from each block to nodes that it dominates
+    dominates: HashMap<usize, HashSet<usize>>,
+    /// A map from each block to nodes that postdominate it
+    postdominated_by: HashMap<usize, HashSet<usize>>,
+    /// A map from each block to nodes that it postdominates
+    postdominates: HashMap<usize, HashSet<usize>>,
+}
+
+fn inverse_map(map: &HashMap<usize, HashSet<usize>>) -> HashMap<usize, HashSet<usize>> {
+    let mut res: HashMap<_, HashSet<_>> = HashMap::new();
+    for (key, vals) in map {
+        for v in vals.iter() {
+            res.entry(*v).or_default().insert(*key);
+        }
+    }
+    res
+}
+
+impl DomInfo {
+    pub fn new(cfg: &Cfg) -> Self {
+        let dominated_by = make_dom_map(&cfg.transpose_graph, &cfg.blocks);
+        let dominates = inverse_map(&dominated_by);
+        let postdominated_by = make_dom_map(&cfg.graph, &cfg.blocks);
+        let postdominates = inverse_map(&postdominated_by);
+        Self {
+            dominated_by,
+            dominates,
+            postdominated_by,
+            postdominates,
+        }
+    }
+
+    pub fn dom(&self, a: usize, b: usize) -> bool {
+        self.dominated_by[&b].contains(&a)
+    }
+
+    pub fn postdom(&self, a: usize, b: usize) -> bool {
+        self.postdominated_by[&b].contains(&a)
+    }
+
+    pub fn strict_dom(&self, a: usize, b: usize) -> bool {
+        a != b && self.dom(a, b)
+    }
 }

@@ -185,7 +185,11 @@ impl NextSet for BTreeSet<usize> {
 pub struct Cfg {
     pub blocks: HashMap<usize, BasicBlock>,
     pub(super) graph: HashMap<usize, Edge>,
+    /// Reverse (end is first) topological order of `graph`
+    pub(super) topo_order_rev: Vec<usize>,
     pub(super) transpose_graph: HashMap<usize, BTreeSet<usize>>,
+    /// Topo order of `graph`, or reverse topological order of `transpose_graph`
+    pub(super) topo_order: Vec<usize>,
     pub(super) succs: Succs,
 }
 
@@ -759,6 +763,41 @@ fn make_child_blocks(
     }
 }
 
+/// Reverse topological order
+fn topo_order_rev<T>(adj_lst: &HashMap<usize, T>, start_id: usize) -> Vec<usize>
+where
+    for<'a> &'a T: IntoIterator<Item = &'a usize>,
+{
+    enum Node {
+        Start(usize),
+        Finished(usize),
+    }
+    use Node::{Finished, Start};
+
+    let mut reversed_order = vec![];
+    let mut is_done = HashSet::new();
+    let mut stack = vec![];
+    stack.push(Start(start_id));
+    while let Some(n) = stack.pop() {
+        match n {
+            Start(n) => {
+                if is_done.contains(&n) {
+                    continue;
+                }
+                stack.push(Finished(n));
+                for next in &adj_lst[&n] {
+                    stack.push(Start(*next));
+                }
+            }
+            Finished(n) => {
+                reversed_order.push(n);
+                is_done.insert(n);
+            }
+        }
+    }
+    reversed_order
+}
+
 impl Cfg {
     /// Create a new CFG from a list of scheduling statements
     /// # Arguments
@@ -798,10 +837,14 @@ impl Cfg {
                 .collect::<Vec<_>>(),
             ctx,
         );
+        let transpose_graph = Self::transpose(&edges);
+        let topo_order_rev = topo_order_rev(&edges, START_BLOCK_ID);
         compute_continuations(
             Self {
                 blocks,
-                transpose_graph: Self::transpose(&edges),
+                topo_order: topo_order_rev.iter().copied().rev().collect(),
+                topo_order_rev,
+                transpose_graph,
                 graph: edges,
                 succs: Succs::default(),
             }

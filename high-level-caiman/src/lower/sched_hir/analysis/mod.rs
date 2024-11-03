@@ -2,7 +2,7 @@ use std::collections::{hash_map::Entry, BTreeSet, HashMap, HashSet};
 
 mod continuations;
 mod dominators;
-mod hole_expansion;
+mod holes;
 mod op_transform;
 mod quot;
 mod record_expansion;
@@ -25,9 +25,9 @@ use super::{
 use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
 pub use dominators::compute_dominators;
-pub use hole_expansion::set_hole_defs;
+pub use holes::set_hole_defs;
 #[allow(clippy::module_name_repetitions)]
-pub use hole_expansion::{UninitCheck, UsabilityAnalysis};
+pub use holes::{UninitCheck, UsabilityAnalysis};
 pub use op_transform::op_transform_pass;
 pub use quot::deduce_tmln_quots;
 pub use quot::deduce_val_quots;
@@ -99,6 +99,15 @@ pub trait Direction {
         in_facts: &'a HashMap<usize, T>,
         out_facts: &'a HashMap<usize, T>,
     ) -> &'a HashMap<usize, T>;
+
+    fn get_worklist<'a>(topo_order: &'a [usize], topo_order_rev: &'a [usize]) -> &'a [usize] {
+        if Self::root_id() == START_BLOCK_ID {
+            topo_order_rev
+        } else {
+            assert_eq!(Self::root_id(), FINAL_BLOCK_ID);
+            topo_order
+        }
+    }
 }
 
 /// Analyzes a basic block
@@ -167,41 +176,6 @@ impl<T: Fact> InOutFacts<T> {
     }
 }
 
-/// Reverse topological order
-fn topo_order_rev<T>(adj_lst: &HashMap<usize, T>, start_id: usize) -> Vec<usize>
-where
-    for<'a> &'a T: IntoIterator<Item = &'a usize>,
-{
-    enum Node {
-        Start(usize),
-        Finished(usize),
-    }
-    use Node::{Finished, Start};
-
-    let mut reversed_order = vec![];
-    let mut is_done = HashSet::new();
-    let mut stack = vec![];
-    stack.push(Start(start_id));
-    while let Some(n) = stack.pop() {
-        match n {
-            Start(n) => {
-                if is_done.contains(&n) {
-                    continue;
-                }
-                stack.push(Finished(n));
-                for next in &adj_lst[&n] {
-                    stack.push(Start(*next));
-                }
-            }
-            Finished(n) => {
-                reversed_order.push(n);
-                is_done.insert(n);
-            }
-        }
-    }
-    reversed_order
-}
-
 /// Performs a data flow analysis. Requires that `cfg` has a topological order
 /// and does not contain loops.
 ///
@@ -211,7 +185,7 @@ pub fn analyze<T: Fact>(cfg: &mut Cfg, top: T) -> Result<InOutFacts<T>, LocalErr
     let mut out_facts: HashMap<usize, T> = HashMap::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
     in_facts.insert(T::Dir::root_id(), top);
-    let mut worklist = topo_order_rev(&adj_lst, T::Dir::root_id());
+    let mut worklist = T::Dir::get_worklist(&cfg.topo_order, &cfg.topo_order_rev).to_vec();
 
     while let Some(block) = worklist.pop() {
         let in_fact = in_facts.get(&block).unwrap();
