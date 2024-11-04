@@ -597,7 +597,7 @@ fn unify_nodes(
                     if let Some(rhs) = rhs {
                         unify_decl(lhs, lhs_tag, rhs, *info, env)?
                     } else {
-                        env
+                        add_type_annot(lhs, lhs_tag, *info, env)?
                     }
                 }
                 HirBody::RefStore {

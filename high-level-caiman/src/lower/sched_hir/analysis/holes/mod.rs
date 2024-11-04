@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    rc::Rc,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use caiman::explication::expir::BufferFlags;
 use init_synth::{build_init_set, fill_initializers};
@@ -10,7 +7,7 @@ use crate::{
     error::{hir_to_source_name, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
+            cfg::{Cfg, Loc, START_BLOCK_ID},
             FuncletTypeInfo, Hir, HirBody, HirInstr, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
@@ -145,145 +142,30 @@ impl<'a> Fact for FillHoleDefs<'a> {
     type Dir = Backwards;
 }
 
-/// An analysis that identifies variables that need to be initialized (made usable).
-#[derive(Clone)]
-struct UsabilityAnalysis<'a> {
-    /// variables that need to be made usable at this point
-    /// The only way to consume a variable would be to pass it through a function,
-    /// which creates a new definition of the variable. So once a variable becomes
-    /// usable, we can treat it as usable for the rest of the function
-    pub to_init: HashSet<String>,
-    /// Map from node name to variables that depend on it
-    val_deps: Rc<HashMap<String, Vec<String>>>,
-    val_env: &'a NodeEnv,
-    selects: &'a HashMap<usize, String>,
+/// Gets a set of all references and GPU variables, which are the only
+/// variables that may be uninitialized.
+fn get_potentially_uninit_vars(
+    env: &NodeEnv,
+    data_types: &HashMap<String, DataType>,
+    flags: &HashMap<String, BufferFlags>,
+) -> HashSet<String> {
+    let mut to_init = HashSet::new();
+    let mut deps: HashMap<_, Vec<_>> = HashMap::new();
+
+    for ssa_var in env.get_sched_vars() {
+        let var = ssa_original_name(ssa_var);
+        if let (Some(node_name), Some(typ)) = (env.get_node_name(ssa_var), data_types.get(&var)) {
+            if matches!(typ, DataType::Ref(_)) || flags.contains_key(&var) {
+                to_init.insert(ssa_var.clone());
+                for dep in env.dependencies(&MetaVar::new_class_name(&node_name)) {
+                    deps.entry(dep).or_default().push(ssa_var.clone());
+                }
+            }
+        }
+    }
+    to_init
 }
 
-impl<'a> PartialEq for UsabilityAnalysis<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_init == other.to_init
-    }
-}
-
-impl<'a> UsabilityAnalysis<'a> {
-    pub fn top(
-        env: &'a NodeEnv,
-        data_types: &HashMap<String, DataType>,
-        flags: &HashMap<String, BufferFlags>,
-        selects: &'a HashMap<usize, String>,
-    ) -> Self {
-        let mut to_init = HashSet::new();
-        let mut deps: HashMap<_, Vec<_>> = HashMap::new();
-
-        for ssa_var in env.get_sched_vars() {
-            let var = ssa_original_name(ssa_var);
-            if let (Some(node_name), Some(typ)) = (env.get_node_name(ssa_var), data_types.get(&var))
-            {
-                if matches!(typ, DataType::Ref(_)) || flags.contains_key(&var) {
-                    to_init.insert(ssa_var.clone());
-                    for dep in env.dependencies(&MetaVar::new_class_name(&node_name)) {
-                        deps.entry(dep).or_default().push(ssa_var.clone());
-                    }
-                }
-            }
-        }
-        Self {
-            to_init,
-            val_env: env,
-            val_deps: Rc::new(deps),
-            selects,
-        }
-    }
-
-    fn remove_dependents_of(&mut self, var_name: &str) {
-        if let Some(class_name) = self.val_env.get_node_name(var_name) {
-            self.remove_dependents_of_class(&class_name);
-        }
-    }
-
-    fn remove_dependents_of_class(&mut self, class_name: &str) {
-        let class_name = format!("${class_name}");
-        if let Some(to_remove) = self.val_deps.get(&class_name) {
-            for r in to_remove {
-                self.to_init.remove(r);
-            }
-        }
-    }
-}
-
-impl<'a> Fact for UsabilityAnalysis<'a> {
-    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
-        self.to_init = self.to_init.intersection(&other.to_init).cloned().collect();
-        Ok(self)
-    }
-
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
-        // TODO: we can always recalculate something so that even when something is used,
-        // that doesn't mean that things that it depends on has to be initialized
-
-        // for now, we only say that something can't be initialized if a control flow operation
-        // depends on it and we have reached said control flow. This is bc a I'm assuming holes
-        // only work within a basic block right now.
-        // In other words:
-        /* ```
-        val foo()
-            x :- a if c else b
-            z :- x * 20
-
-        fn foo_impl()
-            ???;    // `x` cannot be initialized here since it depends on control flow
-            if ??? {
-                ???
-            } else {
-                ???
-            }
-            ???     // `x` can be initialized here
-        ``` */
-        match stmt {
-            HirInstr::Tail(Terminator::CaptureCall { dests, .. }) => {
-                let id = tuple_id(&dests.iter().map(|(x, _)| x.clone()).collect::<Vec<_>>());
-                self.remove_dependents_of(&id);
-                for (d, _) in dests {
-                    self.remove_dependents_of(d);
-                }
-            }
-            HirInstr::Tail(Terminator::Return { dests, .. }) => {
-                for (d, _) in dests {
-                    self.remove_dependents_of(d);
-                }
-            }
-            HirInstr::Tail(Terminator::Select { dests, .. }) => {
-                for (d, _) in dests {
-                    self.remove_dependents_of(d);
-                }
-                if let Some(select_node) = self.selects.get(&data.block_id) {
-                    self.remove_dependents_of_class(select_node);
-                }
-            }
-            // HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
-            //     initialized.clone_from(&self.to_init);
-            // }
-            _ => {}
-        };
-        if let Some(defs) = match stmt {
-            HirInstr::Stmt(HirBody::VarDecl { rhs: None, .. }) => None,
-            HirInstr::Stmt(HirBody::BeginEncoding { encoder, .. }) => Some(vec![encoder.0.clone()]),
-            _ => stmt.get_defs(),
-        } {
-            for var in defs {
-                self.to_init.remove(&var);
-            }
-        }
-        if let Some(defs) = stmt.get_write_uses() {
-            for var in defs {
-                self.to_init.remove(&var);
-            }
-        }
-        Ok(())
-    }
-
-    type Dir = Backwards;
-}
 /// Pass that errors if a reference or GPU variable's value is used before it is
 /// made usable. This pass is conservative in the sense that it will only error
 /// if there is definitely a problem.
@@ -292,6 +174,7 @@ struct UninitCheck<'a> {
     maybe_uninit: HashSet<String>,
     env: &'a NodeEnv,
     dtypes: &'a HashMap<String, DataType>,
+    initializations: &'a HashMap<String, HashSet<Loc>>,
 }
 
 impl<'a> UninitCheck<'a> {
@@ -303,6 +186,7 @@ impl<'a> UninitCheck<'a> {
         inputs: &[(String, TripleTag)],
         env: &'a NodeEnv,
         dtypes: &'a HashMap<String, DataType>,
+        init_sets: &'a HashMap<String, HashSet<Loc>>,
     ) -> Self {
         maybe_uninit = maybe_uninit
             .into_iter()
@@ -320,6 +204,7 @@ impl<'a> UninitCheck<'a> {
             maybe_uninit,
             env,
             dtypes,
+            initializations: init_sets,
         }
     }
 }
@@ -385,6 +270,16 @@ fn get_usable_uses(
                 }
             }
         }
+        // Passthroughs need not be initialized aren't inherently uses.
+        // TODO: Should we remove returned values as well?
+        HirInstr::Tail(
+            Terminator::Return { passthrough, .. } | Terminator::Next(_, passthrough),
+        ) => {
+            for ret in passthrough {
+                uses.remove(ret);
+                on_remove(ret);
+            }
+        }
         HirInstr::Stmt(HirBody::Submit { src, .. }) => {
             if let Some(DataType::Encoder(Some(rec))) = dtypes.get(&ssa_original_name(src)) {
                 // all encoder members must be usable at the submit
@@ -406,11 +301,16 @@ impl<'a> Fact for UninitCheck<'a> {
         Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) -> Result<(), LocalError> {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, info: TransferData) -> Result<(), LocalError> {
         match stmt {
             HirInstr::Stmt(HirBody::Hole { initialized, .. }) => {
-                for i in initialized.iter() {
+                for (i, _) in initialized.iter() {
                     self.maybe_uninit.remove(&ssa_original_name(i));
+                }
+                for (v, locs) in self.initializations {
+                    if locs.contains(&Loc(info.block_id, info.local_instr_id)) {
+                        self.maybe_uninit.remove(&ssa_original_name(v));
+                    }
                 }
             }
             HirInstr::Stmt(HirBody::InAnnotation(..) | HirBody::OutAnnotation(..))
@@ -447,16 +347,12 @@ pub fn set_hole_initializations(
     cfg: &mut Cfg,
     val_env: &NodeEnv,
     type_info: &FuncletTypeInfo,
-    selects: &HashMap<usize, String>,
     hir_inputs: &[(String, TripleTag)],
     outputs: &[FullType],
 ) -> Result<(), LocalError> {
-    let res = analyze(
-        cfg,
-        UsabilityAnalysis::top(val_env, &type_info.data_types, &type_info.flags, selects),
-    )?;
     // set of all references and GPU variables
-    let maybe_uninit = res.get_out_fact(FINAL_BLOCK_ID).to_init.clone();
+    let maybe_uninit =
+        get_potentially_uninit_vars(val_env, &type_info.data_types, &type_info.flags);
     let dinfo = DomInfo::new(cfg);
     let initializers = build_init_set(
         cfg,
@@ -467,10 +363,18 @@ pub fn set_hole_initializations(
         &type_info.data_types,
         &dinfo,
     );
-    fill_initializers(cfg, initializers);
+    // Before we optimize, check if initialization set is valid. It should only
+    // be invalid if there is no possible way to initialize everything.
     analyze(
         cfg,
-        UninitCheck::top(maybe_uninit, hir_inputs, val_env, &type_info.data_types),
+        UninitCheck::top(
+            maybe_uninit,
+            hir_inputs,
+            val_env,
+            &type_info.data_types,
+            &initializers,
+        ),
     )?;
+    fill_initializers(cfg, initializers, val_env);
     Ok(())
 }

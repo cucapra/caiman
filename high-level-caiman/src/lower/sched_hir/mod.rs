@@ -731,7 +731,7 @@ impl Funclets {
             )?;
             cfg = transform_to_ssa(cfg, &live_vars, &doms);
 
-            let (val_env, selects) = deduce_val_quots(
+            let (val_env, _) = deduce_val_quots(
                 hir_inputs,
                 hir_outputs,
                 &type_info.output_dtypes,
@@ -742,9 +742,7 @@ impl Funclets {
                 f.info,
             )?;
 
-            set_hole_initializations(
-                &mut cfg, &val_env, type_info, &selects, hir_inputs, &f.output,
-            )?;
+            set_hole_initializations(&mut cfg, &val_env, type_info, hir_inputs, &f.output)?;
 
             cfg = transform_out_ssa(cfg);
         }

@@ -178,9 +178,21 @@ where
     doms
 }
 
+fn invert_map(map: &HashMap<usize, HashSet<usize>>) -> HashMap<usize, HashSet<usize>> {
+    let mut res: HashMap<_, HashSet<_>> = HashMap::new();
+    for (key, vals) in map {
+        for val in vals {
+            res.entry(*val).or_default().insert(*key);
+        }
+    }
+    res
+}
+
 pub struct DomInfo {
     /// A map from each block to nodes that dominate it
     dominated_by: HashMap<usize, HashSet<usize>>,
+    /// A map from each block to nodes it dominates
+    dominates: HashMap<usize, HashSet<usize>>,
     /// A map from each block to nodes that postdominate it
     postdominated_by: HashMap<usize, HashSet<usize>>,
 }
@@ -190,6 +202,7 @@ impl DomInfo {
         let dominated_by = make_dom_map(&cfg.transpose_graph, &cfg.blocks);
         let postdominated_by = make_dom_map(&cfg.graph, &cfg.blocks);
         Self {
+            dominates: invert_map(&dominated_by),
             dominated_by,
             postdominated_by,
         }
@@ -201,5 +214,9 @@ impl DomInfo {
 
     pub fn postdom(&self, a: usize, b: usize) -> bool {
         self.postdominated_by[&b].contains(&a)
+    }
+
+    pub fn dominated_by(&self, a: usize) -> &HashSet<usize> {
+        &self.dominates[&a]
     }
 }

@@ -407,6 +407,27 @@ impl<'a> ReachingDefs<'a> {
                     x.process(|()| self.reaching_defs().cloned().collect());
                 }
             }
+            HirInstr::Tail(Terminator::Select {
+                guard, extra_uses, ..
+            }) => {
+                if guard.is_empty() {
+                    extra_uses.process(|()| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Tail(Terminator::Return {
+                rets, extra_uses, ..
+            }) => {
+                let mut process_uses = false;
+                for r in rets {
+                    if r.is_empty() {
+                        process_uses = true;
+                        break;
+                    }
+                }
+                if process_uses {
+                    extra_uses.process(|()| self.reaching_defs().cloned().collect());
+                }
+            }
             HirInstr::Stmt(HirBody::Op { args, .. }) => {
                 for arg in args {
                     arg.fill_uses(|| self.reaching_defs().cloned().collect());

@@ -394,12 +394,18 @@ impl FlowAnalysis {
                         ),
                     );
                 }
-                for init in initialized.iter() {
-                    self.tags
-                        .entry(init.clone())
-                        .or_insert_with(TripleTag::new_none_usable)
-                        .value
-                        .flow = Some(Flow::Usable);
+                for (init_name, init_val_node) in initialized.iter() {
+                    let tag = self
+                        .tags
+                        .entry(init_name.clone())
+                        .or_insert_with(TripleTag::new_none_usable);
+                    tag.value.flow = Some(Flow::Usable);
+                    if let Some(node) = init_val_node {
+                        let new_node = Some(node.clone());
+                        tag.value.quot_var.spec_var = new_node;
+                        // can't be input bc we're initializing it
+                        tag.value.quot = Some(Quotient::Node);
+                    }
                 }
             }
             HirBody::Op { dests, .. } => {

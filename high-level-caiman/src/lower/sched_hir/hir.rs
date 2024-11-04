@@ -1,5 +1,5 @@
 #![allow(clippy::module_name_repetitions)]
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 pub use crate::lower::op_to_str;
 use crate::{
@@ -311,8 +311,9 @@ pub enum HirBody {
         info: Info,
         /// all the variables that the hole might use. Filled in by reaching defs
         uses: FillIn<(), Vec<String>>,
-        /// variables that must be initialized at this hole
-        initialized: HashSet<String>,
+        /// variables that must be initialized (made usable) at this hole, and the
+        /// value node they will be initialized to.
+        initialized: HashMap<String, Option<String>>,
         /// the fences that are active at the current point
         active_fences: Vec<String>,
     },
@@ -578,6 +579,8 @@ pub enum Terminator {
         dests: Vec<(String, TripleTag)>,
         guard: Hole<String>,
         tag: TripleTag,
+        /// Extra uses if the guard is a hole.
+        extra_uses: FillIn<(), Vec<String>>,
     },
     /// A return statement which returns values to the parent scope, **NOT** out
     /// of the function. This is modeled as an assignment to the destination variables.
@@ -593,6 +596,8 @@ pub enum Terminator {
         /// The variables that aren't directly returned by the user but are
         /// captured by the select
         passthrough: Vec<String>,
+        /// Extra uses if any returned variable is a hole
+        extra_uses: FillIn<(), Vec<String>>,
     },
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
@@ -688,13 +693,21 @@ impl Hir for Terminator {
                     }
                 }
             }
-            Self::Select { guard, .. } => {
+            Self::Select {
+                guard, extra_uses, ..
+            } => {
                 if let Hole::Filled(guard) = guard {
                     uses.insert(guard.clone());
                 }
+                if !extra_uses.is_initial() {
+                    uses.extend(extra_uses.processed().iter().cloned());
+                }
             }
             Self::Return {
-                rets, passthrough, ..
+                rets,
+                passthrough,
+                extra_uses,
+                ..
             } => {
                 for node in rets
                     .iter()
@@ -702,6 +715,9 @@ impl Hir for Terminator {
                     .chain(passthrough.iter())
                 {
                     uses.insert(node.clone());
+                }
+                if !extra_uses.is_initial() {
+                    uses.extend(extra_uses.processed().iter().cloned());
                 }
             }
             Self::FinalReturn(_, names) | Self::Next(_, names) | Self::Yield(_, names) => {
@@ -727,9 +743,16 @@ impl Hir for Terminator {
                     }
                 }
             }
-            Self::Select { guard, .. } => {
+            Self::Select {
+                guard, extra_uses, ..
+            } => {
                 if let Hole::Filled(guard) = guard {
                     *guard = f(guard, UseType::Read);
+                }
+                if !extra_uses.is_initial() {
+                    for u in extra_uses.processed_mut() {
+                        *u = f(u, UseType::Read);
+                    }
                 }
             }
             Self::Next(_, rets) | Self::FinalReturn(_, rets) => {
@@ -743,7 +766,10 @@ impl Hir for Terminator {
                 }
             }
             Self::Return {
-                rets, passthrough, ..
+                rets,
+                passthrough,
+                extra_uses,
+                ..
             } => {
                 for node in rets
                     .iter_mut()
@@ -751,6 +777,11 @@ impl Hir for Terminator {
                     .chain(passthrough.iter_mut())
                 {
                     *node = f(node, UseType::Read);
+                }
+                if !extra_uses.is_initial() {
+                    for u in extra_uses.processed_mut() {
+                        *u = f(u, UseType::Read);
+                    }
                 }
             }
             Self::None(..) => (),
@@ -783,6 +814,7 @@ impl Hir for Terminator {
 /// This enum provides the ability to access instruction specific
 /// methods not present in the HIR trait or perform instruction
 /// matching.
+#[derive(Debug)]
 pub enum HirInstr<'a> {
     Stmt(&'a mut HirBody),
     Tail(&'a mut Terminator),
@@ -845,7 +877,7 @@ impl HirBody {
                         .collect(),
                     info,
                     uses: FillIn::Initial(()),
-                    initialized: HashSet::new(),
+                    initialized: HashMap::new(),
                     active_fences: vec![],
                 }
             }
@@ -918,7 +950,7 @@ impl HirBody {
                 info,
                 dests: vec![],
                 uses: FillIn::Initial(()),
-                initialized: HashSet::new(),
+                initialized: HashMap::new(),
                 active_fences: vec![],
             },
             SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(
@@ -1045,7 +1077,7 @@ impl HirBody {
                     dests: vec![(lhs[0].0.clone(), TripleTag::from_fulltype_opt(&lhs[0].1))],
                     info,
                     uses: FillIn::Initial(()),
-                    initialized: HashSet::new(),
+                    initialized: HashMap::new(),
                     active_fences: vec![],
                 }
             }

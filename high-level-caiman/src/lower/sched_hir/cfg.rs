@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     analysis::{compute_continuations, DomInfo, Succs},
-    stmts_to_hir, Hir, HirBody, HirFuncCall, Terminator, TripleTag,
+    stmts_to_hir, FillIn, Hir, HirBody, HirFuncCall, Terminator, TripleTag,
 };
 
 /// The id of the final block of the canonicalized CFG.
@@ -360,6 +360,7 @@ fn handle_return(
                 dests: ast_to_hir_named_tags(ret_names),
                 rets: expr_to_multi_node_id(sched_expr),
                 passthrough: vec![],
+                extra_uses: FillIn::Initial(()),
             },
             None,
             info,
@@ -411,6 +412,7 @@ fn handle_select(
                 dests: ast_to_hir_named_tags(dests),
                 guard: expr_to_node_id(guard),
                 tag: TripleTag::from_owned_opt(tag),
+                extra_uses: FillIn::Initial(()),
             },
             Some(*cur_id + 1),
             info,
@@ -829,6 +831,12 @@ impl Loc {
     }
 }
 
+impl std::fmt::Display for Loc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.0, self.1)
+    }
+}
+
 /// `A` collectively dominates `B` if all paths to any element in `B` contains
 /// some element in `A`. Implemented as a trait to get more natural "infix"
 /// notation using a receiver object.
@@ -879,7 +887,11 @@ pub fn can_reach_goal(
 
 impl CollectiveDom for HashSet<Loc> {
     fn cdom(&self, cfg: &Cfg, b: &Self) -> bool {
-        can_reach_goal(cfg, &Loc(START_BLOCK_ID, 0), self, b)
+        if self.is_empty() {
+            false
+        } else {
+            !can_reach_goal(cfg, &Loc(START_BLOCK_ID, 0), self, b)
+        }
     }
 }
 

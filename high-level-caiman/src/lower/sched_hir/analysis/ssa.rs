@@ -326,7 +326,12 @@ pub fn transform_out_ssa(mut cfg: Cfg) -> Cfg {
             stmt.rename_uses(&mut |name, _| ssa_original_name(name));
             stmt.rename_defs(&mut ssa_original_name);
             if let HirBody::Hole { initialized, .. } = &mut stmt {
-                initialized.clone_from(&initialized.iter().map(|x| ssa_original_name(x)).collect());
+                initialized.clone_from(
+                    &initialized
+                        .iter()
+                        .map(|(x, y)| (ssa_original_name(x), y.clone()))
+                        .collect(),
+                );
             }
         }
         bb.terminator
