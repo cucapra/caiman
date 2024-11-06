@@ -1,4 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    hash::Hash,
+};
 
 use caiman::explication::expir::BufferFlags;
 use init_synth::{build_init_set, fill_initializers};
@@ -377,4 +380,16 @@ pub fn set_hole_initializations(
     )?;
     fill_initializers(cfg, initializers, val_env);
     Ok(())
+}
+
+fn invert_map<K: Eq + Hash + Clone, V: Eq + Clone + Hash>(
+    map: &HashMap<K, HashSet<V>>,
+) -> HashMap<V, HashSet<K>> {
+    let mut res: HashMap<_, HashSet<_>> = HashMap::new();
+    for (k, vals) in map {
+        for v in vals {
+            res.entry(v.clone()).or_default().insert(k.clone());
+        }
+    }
+    res
 }

@@ -22,19 +22,23 @@
 //! dependent nodes we need to generate. Colloqially, that is to say every other
 //! initializing set is potentially worse on some path.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use crate::{
     lower::sched_hir::{
-        analysis::DomInfo,
-        cfg::{can_reach_goal, Cfg, CollectiveDom, Loc, START_BLOCK_ID},
+        analysis::{analyze, Backwards, DomInfo, Fact, Forwards},
+        cfg::{can_reach_goal, Cfg, CollectiveDom, Loc, FINAL_BLOCK_ID, START_BLOCK_ID},
         Hir, HirBody, HirInstr, TripleTag,
     },
     parse::ast::{DataType, FullType},
-    typing::NodeEnv,
+    typing::{MetaVar, NodeEnv},
 };
 
-use super::get_usable_uses;
+use super::{get_usable_uses, invert_map};
 
 /// Gets the locations of all holes in topological order.
 fn hole_topo(cfg: &Cfg) -> Vec<Loc> {
@@ -47,6 +51,71 @@ fn hole_topo(cfg: &Cfg) -> Vec<Loc> {
         }
     }
     res
+}
+
+/// A dataflow analysis that minimizes an initializing set by identifying
+/// initialization points which are collectively dominated by other initialization points.
+#[derive(Debug, Clone)]
+struct MinimizeInitSet<'a> {
+    redundant_locs: Vec<(String, Loc)>,
+    seen_inits: HashSet<String>,
+    inverted_orig_inits: &'a HashMap<Loc, HashSet<String>>,
+}
+
+impl<'a> PartialEq for MinimizeInitSet<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.seen_inits == other.seen_inits
+    }
+}
+
+impl<'a> Fact for MinimizeInitSet<'a> {
+    fn meet(
+        mut self,
+        other: &Self,
+        _: crate::error::Info,
+    ) -> Result<Self, crate::error::LocalError> {
+        self.redundant_locs
+            .extend(other.redundant_locs.iter().cloned());
+        Ok(Self {
+            seen_inits: self
+                .seen_inits
+                .intersection(&other.seen_inits)
+                .cloned()
+                .collect(),
+            inverted_orig_inits: self.inverted_orig_inits,
+            redundant_locs: self.redundant_locs,
+        })
+    }
+
+    fn transfer_instr(
+        &mut self,
+        _: HirInstr<'_>,
+        data: crate::lower::sched_hir::analysis::TransferData,
+    ) -> Result<(), crate::error::LocalError> {
+        let cur_loc = Loc(data.block_id, data.local_instr_id);
+        if let Some(inited_vars) = self.inverted_orig_inits.get(&cur_loc) {
+            for v in inited_vars {
+                if self.seen_inits.contains(v) {
+                    self.redundant_locs.push((v.clone(), cur_loc.clone()));
+                } else {
+                    self.seen_inits.insert(v.clone());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    type Dir = Forwards;
+}
+
+impl<'a> MinimizeInitSet<'a> {
+    fn new(inverted_orig_inits: &'a HashMap<Loc, HashSet<String>>) -> Self {
+        Self {
+            inverted_orig_inits,
+            seen_inits: HashSet::new(),
+            redundant_locs: vec![],
+        }
+    }
 }
 
 /// Builds an initializer set for each variable that needs to be initialized.
@@ -94,6 +163,12 @@ pub fn build_init_set(
         for var in to_remove {
             to_init.remove(&var);
         }
+    }
+    let inv_res = invert_map(&res);
+    // remove unnecessary members from the init set, which enables the hoist optimization.
+    let min_init = analyze(cfg, MinimizeInitSet::new(&inv_res)).unwrap();
+    for (var, loc) in &min_init.get_out_fact(FINAL_BLOCK_ID).redundant_locs {
+        res.get_mut(var).unwrap().remove(loc);
     }
     res
 }
@@ -212,4 +287,102 @@ fn get_val_uses(
         res.entry(v.clone()).or_default().insert(largest_postdom);
     }
     res
+}
+
+/// For each location, gets a set of class names (with the leading `$`) that
+/// would need to be generated given the initialization set of `inits`.
+fn unavailable_nodes(
+    cfg: &Cfg,
+    env: &NodeEnv,
+    inits: &HashMap<String, HashSet<Loc>>,
+) -> HashMap<Loc, HashSet<String>> {
+    let inits = invert_map(inits);
+    let mut res = HashMap::new();
+    for block in cfg.blocks.values() {
+        for (local_id, s) in block.stmts.iter().enumerate() {
+            let mut unavailable = HashSet::new();
+            if let HirBody::Hole { uses, .. } = s {
+                if let Some(to_init) = inits.get(&Loc(block.id, local_id)) {
+                    for node in to_init {
+                        unavailable.extend(env.unavailable_nodes(
+                            &MetaVar::new_class_name(node),
+                            uses.processed().iter(),
+                        ));
+                    }
+                }
+            }
+            res.insert(Loc(block.id, local_id), unavailable);
+        }
+    }
+    res
+}
+
+/// Determines which holes anticipate the initialization of a variable. As in,
+/// for which holes do all paths to the exit intersect with an initialization of
+/// a certain variable.
+///
+/// This is akin to anticipated expressions in standard partial redundancy
+/// elimination.
+#[derive(Clone)]
+struct AnticipatedInits<'a> {
+    anticipated_var_inits: HashSet<String>,
+    inits: &'a HashMap<Loc, HashSet<String>>,
+    anticipated_vars: Rc<RefCell<HashMap<Loc, HashSet<String>>>>,
+}
+
+impl<'a> AnticipatedInits<'a> {
+    /// # Args
+    /// * `inits` - map from hole location to set of variables initialized there
+    /// * `output` - result map which will store map of hole locations to variables whose
+    /// initialization is anticipated.
+    pub fn top(
+        inits: &'a HashMap<Loc, HashSet<String>>,
+        output: Rc<RefCell<HashMap<Loc, HashSet<String>>>>,
+    ) -> Self {
+        Self {
+            anticipated_var_inits: HashSet::new(),
+            inits,
+            anticipated_vars: output,
+        }
+    }
+}
+
+impl<'a> PartialEq for AnticipatedInits<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.anticipated_var_inits == other.anticipated_var_inits
+    }
+}
+
+impl<'a> Fact for AnticipatedInits<'a> {
+    fn meet(self, other: &Self, _: crate::error::Info) -> Result<Self, crate::error::LocalError> {
+        Ok(Self {
+            anticipated_var_inits: self
+                .anticipated_var_inits
+                .intersection(&other.anticipated_var_inits)
+                .cloned()
+                .collect(),
+            inits: self.inits,
+            anticipated_vars: self.anticipated_vars,
+        })
+    }
+
+    fn transfer_instr(
+        &mut self,
+        stmt: HirInstr<'_>,
+        data: crate::lower::sched_hir::analysis::TransferData,
+    ) -> Result<(), crate::error::LocalError> {
+        if matches!(stmt, HirInstr::Stmt(HirBody::Hole { .. })) {
+            let cur_loc = Loc(data.block_id, data.local_instr_id);
+            self.anticipated_vars
+                .borrow_mut()
+                .insert(cur_loc.clone(), self.anticipated_var_inits.clone());
+            if let Some(initialized) = self.inits.get(&cur_loc) {
+                self.anticipated_var_inits
+                    .extend(initialized.iter().cloned());
+            }
+        }
+        Ok(())
+    }
+
+    type Dir = Backwards;
 }

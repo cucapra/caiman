@@ -45,7 +45,14 @@ pub struct TransferData {
     pub local_instr_id: usize,
 }
 
-/// A dataflow analysis fact
+/// A dataflow analysis fact.
+///
+/// Note that many analyses rely on the fact that they were be executed in topological
+/// or reverse topological order and that there are no loops. Many of the analyses
+/// do not have a true top. For example, the meet might be set intersection, the
+/// input value to the start block might be the empty set, and no logic will be
+/// present to handle meeting with some kind of top value that is anything other
+/// than the absence of a fact.
 pub trait Fact: PartialEq + Clone {
     /// Performs a meet operation on two facts
     fn meet(self, other: &Self, block_info: Info) -> Result<Self, LocalError>;
@@ -99,6 +106,8 @@ pub trait Direction {
         out_facts: &'a HashMap<usize, T>,
     ) -> &'a HashMap<usize, T>;
 
+    /// Returns one of the two topological orders, depending on whether the analysis
+    /// is forwards or backwards. This will be the order to execute the analysis on.
     fn get_worklist<'a>(topo_order: &'a [usize], topo_order_rev: &'a [usize]) -> &'a [usize] {
         if Self::root_id() == START_BLOCK_ID {
             topo_order_rev

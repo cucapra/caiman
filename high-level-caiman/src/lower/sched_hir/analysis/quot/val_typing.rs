@@ -859,7 +859,14 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 for (dest, tag) in dests {
                     fill_val_quotient(dest, tag, env, block.id);
                 }
-                fill_val_quotient(&selects[&block.id], tag, env, block.id);
+                if let Some(name) = selects.get(&block.id) {
+                    fill_val_quotient(name, tag, env, block.id);
+                } else {
+                    // I think we can loop ( to ssa - val deduction - initializations - out ssa)
+                    // for number of times equal to depth of most nested hole?
+                    // There may be something simpler.
+                    todo!("Iterate initializations and deduction?")
+                }
             }
             Terminator::Call(..) | Terminator::None(..) => unreachable!(),
             // I think this is right bc returns to parents should be handled

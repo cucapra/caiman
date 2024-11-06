@@ -228,16 +228,23 @@ impl<T: Kind, A: Kind> Node<T, A> {
     }
 
     /// Gets the name of all classes which this node depends on, including the node itself
-    pub fn dependencies(&self, deps: &mut HashSet<String>) {
+    /// # Args
+    /// * `deps` - the set of dependencies to add nodes to
+    /// * `ignored_subtrees` - the set of class names that we ignore depending on and all
+    /// of the things they depend on.
+    pub fn dependencies(&self, deps: &mut HashSet<String>, ignored_subtrees: &HashSet<String>) {
         match self {
             Self::Var {
                 class_id, parent, ..
             } => {
                 if let Some(class) = class_id {
+                    if ignored_subtrees.contains(class) {
+                        return;
+                    }
                     deps.insert(class.clone());
                 }
                 if let Some(parent) = parent {
-                    parent.borrow().dependencies(deps);
+                    parent.borrow().dependencies(deps, ignored_subtrees);
                 }
             }
             Self::Atom(_) => {}
@@ -249,18 +256,24 @@ impl<T: Kind, A: Kind> Node<T, A> {
             }
             | Self::DropTerm { args, class_id, .. } => {
                 if let Some(class) = class_id {
+                    if ignored_subtrees.contains(class) {
+                        return;
+                    }
                     deps.insert(class.clone());
                 }
                 for arg in args {
-                    arg.borrow().dependencies(deps);
+                    arg.borrow().dependencies(deps, ignored_subtrees);
                 }
             }
             Self::DynamicTerm { args, class_id, .. } => {
                 if let Some(class) = class_id {
+                    if ignored_subtrees.contains(class) {
+                        return;
+                    }
                     deps.insert(class.clone());
                 }
                 for arg in args.values() {
-                    arg.borrow().dependencies(deps);
+                    arg.borrow().dependencies(deps, ignored_subtrees);
                 }
             }
         }
@@ -921,10 +934,18 @@ impl<T: Kind, A: Kind> Env<T, A> {
 
     /// Gets the name of all classes which a node depends upon. Ie. the children of
     /// `node_name`'s type tree.
-    pub fn dependencies(&self, node_name: &str) -> HashSet<String> {
+    /// # Args
+    /// * `node_name` - the name of the node to get dependencies for
+    /// * `ignored_subtrees` - the set of class names that we ignore depending upon and all
+    /// of the nodes they depend upon.
+    pub fn dependencies(
+        &self,
+        node_name: &str,
+        ignored_subtrees: &HashSet<String>,
+    ) -> HashSet<String> {
         let mut set = HashSet::new();
         if let Some(node) = self.nodes.get(node_name) {
-            node.borrow().dependencies(&mut set);
+            node.borrow().dependencies(&mut set, ignored_subtrees);
             // we do not depend on ourself
             node.borrow().get_class().map(|class| set.remove(class));
         }

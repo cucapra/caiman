@@ -121,7 +121,20 @@ impl NodeEnv {
 
     #[must_use]
     pub fn dependencies(&self, node_name: &MetaVar) -> HashSet<String> {
-        self.env.dependencies(node_name.get())
+        self.env.dependencies(node_name.get(), &HashSet::new())
+    }
+
+    /// Returns the list of nodes that are unavailable given the set of reaching variables.
+    /// The list of nodes are class names with the leading '$'.
+    pub fn unavailable_nodes<'a>(
+        &self,
+        node_name: &MetaVar,
+        reaching_defs: impl Iterator<Item = &'a String>,
+    ) -> HashSet<String> {
+        let ignored_subtrees = reaching_defs
+            .filter_map(|x| self.get_node_name(x))
+            .collect();
+        self.env.dependencies(node_name.get(), &ignored_subtrees)
     }
 
     /// Adds a quotient class and its constraints to the environment.
@@ -206,7 +219,7 @@ impl NodeEnv {
 
     /// Returns true if the name is a wildcard name
     fn is_wildcard_name(name: &MetaVar) -> bool {
-        !name.starts_with('$')
+        !name.is_class()
     }
 
     pub fn new_temp(&mut self) -> MetaVar {

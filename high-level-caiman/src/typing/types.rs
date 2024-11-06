@@ -486,10 +486,10 @@ impl From<DataType> for DTypeConstraint {
 pub struct MetaVar(String);
 
 impl MetaVar {
-    /// Returns true if the metavariable starts with the given character
+    /// Returns true if the metavariable is a class name
     #[must_use]
-    pub fn starts_with(&self, c: char) -> bool {
-        self.0.starts_with(c)
+    pub fn is_class(&self) -> bool {
+        self.0.starts_with('$')
     }
 
     /// Creates a type equivalence class name
@@ -501,6 +501,7 @@ impl MetaVar {
     /// Creates a type variable name
     #[must_use]
     pub fn new_var_name(s: &str) -> Self {
+        assert!(!s.starts_with('$'));
         Self(s.to_string())
     }
 
