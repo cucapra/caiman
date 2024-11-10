@@ -52,15 +52,59 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
     var a = a;
     let e = encode-begin gpu;
     encode e.copy[a_gpu <- &a];
+    /* #CHECK:
+    ScheduleSelect {
+    operations: Filled(
+    [
+        Filled(
+            RemoteNodeId {
+                funclet: MetaId(
+                    "val",
+                ),
+                node: Some(
+                    Filled(
+                        NodeId(
+                            "snd",
+                        ),
+                    ),
+                ),
+            },
+        ),
+    #END */
     if c {
-        // TODO: Without a write to b_gpu, no phi node would be generated.
-        // ???;
-        encode e.copy[b_gpu <- &a];
+        ???;
     } else {
         /* #CHECK:
         name: FuncletId(
         "_foo_impl4",
-        ),...
+        ),
+        args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "e%0::b_gpu",
+                ),
+            ),
+            typ: TypeId(
+                "i32::gds",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Dead,
+                    ),
+                },...
+            ]...
+        }...
+        ],
         ret: [...
         FuncletArgument {
             name: None,
@@ -139,6 +183,28 @@ fn foo_impl(c: bool) -> i32 impls foo, foo_time, foo_space {
         ???;
     }
     encode e.call[y_gpu <- gpu_merge'<1, 1, 1>(a_gpu, b_gpu)];
+    /* #CHECK-LABEL:
+    EncodeDoExternal {
+    encoder: Filled(
+        NodeId(
+            "e%0",
+        ),
+    ),
+    operation: Filled(
+        RemoteNodeId {
+            funclet: MetaId(
+                "val",
+            ),
+            node: Some(
+                Filled(
+                    NodeId(
+                        "_tr",
+                    ),
+                ),
+            ),
+        },
+    ),
+    #END */
     ???;
     r.y_gpu
 }

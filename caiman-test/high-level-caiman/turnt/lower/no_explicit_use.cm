@@ -15,8 +15,9 @@ val foo() -> i64 {
 
 fn baz_impl() -> i64 impls foo, time, space {
     let a2 = if true {
-        var x2: i64 @ node(val.x);
+        var x2: i64;
         ???;
+        @out { x2: node(val.x) };
         if false {
             /* #CHECK:
             name: FuncletId(

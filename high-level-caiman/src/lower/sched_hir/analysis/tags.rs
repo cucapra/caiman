@@ -229,7 +229,7 @@ impl FlowAnalysis {
     }
     /// Transfer function for an HIR body statement
     #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
-    fn transfer_stmt(&mut self, stmt: &mut HirBody) {
+    fn transfer_stmt(&mut self, stmt: &mut HirBody) -> Result<(), LocalError> {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl {
@@ -247,10 +247,34 @@ impl FlowAnalysis {
                 );
             }
             HirBody::VarDecl {
-                lhs, lhs_tag, rhs, ..
+                lhs,
+                lhs_tag,
+                rhs,
+                info: src_info,
+                ..
             } => {
                 let mut info = lhs_tag.clone();
+                // We could accpet the user's annotation here, and that would probably work for most cases.
+                // I believe these errors are true of the language now, but are not necessarily true
+                // in the general type system.
                 if rhs.is_none() {
+                    if info.value.flow.is_some() && info.value.flow != Some(Flow::Dead) {
+                        return Err(type_error!(
+                            *src_info,
+                            "Illegal value flow {:?}. An unitialized value is dead.",
+                            info.value.flow
+                        ));
+                    }
+                    if info.value.quot.is_some() && info.value.quot != Some(Quotient::None)
+                        || info.value.quot_var.spec_var.is_some()
+                    {
+                        return Err(type_error!(
+                            *src_info,
+                            "Illegal value quotient {:?}({:?}). An unitialized variable is None",
+                            info.value.quot,
+                            info.value.quot_var.spec_var
+                        ));
+                    }
                     info.value = none_tag(SpecType::Value, Flow::Dead);
                 } else if let Some(HirTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
@@ -506,6 +530,7 @@ impl FlowAnalysis {
                 }
             }
         }
+        Ok(())
     }
 
     /// Performs tag analysis on the block terminator
@@ -652,10 +677,9 @@ impl Fact for FlowAnalysis {
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
         self.special_process_block(data.block_id);
         match stmt {
-            HirInstr::Tail(t) => self.transfer_tail(t, data.block_id)?,
+            HirInstr::Tail(t) => self.transfer_tail(t, data.block_id),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
-        Ok(())
     }
 
     type Dir = Forwards;

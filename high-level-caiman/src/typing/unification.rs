@@ -81,6 +81,16 @@ where
         /// The unique id of the equivalence class the term is a member of.
         class_id: Option<String>,
     },
+    /// A term that, when unifying with another term, may opt to splice itself
+    /// out of the tree and replace it with its unified children, excluding the first child,
+    /// which would be ignored in this case.
+    SpliceTerm {
+        parent: Option<NodePtr<T, A>>,
+        op: T,
+        args: Vec<NodePtr<T, A>>,
+        /// The unique id of the equivalence class the term is a member of.
+        class_id: Option<String>,
+    },
 }
 
 /// A newtype for `String` to print strings without quotes.
@@ -138,6 +148,9 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
             }
             | Self::DropTerm {
                 op, args, class_id, ..
+            }
+            | Self::SpliceTerm {
+                op, args, class_id, ..
             } => {
                 let id = class_id.as_ref().map_or_else(
                     || format!("{op:?}"),
@@ -176,7 +189,8 @@ impl<T: Kind, A: Kind> Node<T, A> {
             Self::Var { ref mut parent, .. }
             | Self::Term { ref mut parent, .. }
             | Self::DynamicTerm { ref mut parent, .. }
-            | Self::DropTerm { ref mut parent, .. } => parent,
+            | Self::DropTerm { ref mut parent, .. }
+            | Self::SpliceTerm { ref mut parent, .. } => parent,
             Self::Atom(_) => panic!("Atoms have no parent"),
         }
     }
@@ -187,7 +201,8 @@ impl<T: Kind, A: Kind> Node<T, A> {
             Self::Var { ref parent, .. }
             | Self::Term { ref parent, .. }
             | Self::DynamicTerm { ref parent, .. }
-            | Self::DropTerm { ref parent, .. } => parent.as_ref(),
+            | Self::DropTerm { ref parent, .. }
+            | Self::SpliceTerm { ref parent, .. } => parent.as_ref(),
             Self::Atom(_) => None,
         }
     }
@@ -211,6 +226,9 @@ impl<T: Kind, A: Kind> Node<T, A> {
             }
             | Self::DynamicTerm {
                 ref mut class_id, ..
+            }
+            | Self::SpliceTerm {
+                ref mut class_id, ..
             } => class_id,
             Self::Atom(_) => panic!("Atoms have no class"),
         }
@@ -222,7 +240,8 @@ impl<T: Kind, A: Kind> Node<T, A> {
             Self::Var { class_id, .. }
             | Self::Term { class_id, .. }
             | Self::DynamicTerm { class_id, .. }
-            | Self::DropTerm { class_id, .. } => class_id.as_ref(),
+            | Self::DropTerm { class_id, .. }
+            | Self::SpliceTerm { class_id, .. } => class_id.as_ref(),
             Self::Atom(_) => None,
         }
     }
@@ -254,6 +273,7 @@ impl<T: Kind, A: Kind> Node<T, A> {
                 class_id,
                 ..
             }
+            | Self::SpliceTerm { args, class_id, .. }
             | Self::DropTerm { args, class_id, .. } => {
                 if let Some(class) = class_id {
                     if ignored_subtrees.contains(class) {
@@ -343,6 +363,21 @@ fn deep_clone<T: Kind, A: Kind>(
             cloned_ptrs.insert(key, r.clone());
             r
         }
+        Node::SpliceTerm {
+            op,
+            args,
+            parent,
+            class_id,
+        } => {
+            let r = Rc::new(RefCell::new(Node::SpliceTerm {
+                parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
+                op: op.clone(),
+                args: args.iter().map(|x| deep_clone(x, cloned_ptrs)).collect(),
+                class_id: class_id.clone(),
+            }));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
         Node::DynamicTerm {
             parent,
             op,
@@ -378,7 +413,9 @@ fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
             next_id.clone()
         }
         Node::Var { parent: None, .. } | Node::Atom(_) => n.clone(),
-        Node::Term { parent, args, .. } | Node::DropTerm { parent, args, .. } => {
+        Node::Term { parent, args, .. }
+        | Node::DropTerm { parent, args, .. }
+        | Node::SpliceTerm { parent, args, .. } => {
             for a in args {
                 *a = representative(a);
             }
@@ -453,10 +490,27 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                 op: op_a,
                 args: args_a,
                 ..
+            }
+            | Node::SpliceTerm {
+                op: op_a,
+                args: args_a,
+                ..
             },
             Node::Term {
                 op: op_b,
                 args: args_b,
+                ..
+            },
+        )
+        | (
+            Node::Term {
+                op: op_a,
+                args: args_a,
+                ..
+            },
+            Node::SpliceTerm {
+                args: args_b,
+                op: op_b,
                 ..
             },
         ) => op_a == op_b && args_a.len() == args_b.len(),
@@ -540,15 +594,64 @@ fn unify<T: Kind, A: Kind>(
         && b.borrow().get_class().is_some()
         && a.borrow().get_class() != b.borrow().get_class()
     {
+        eprintln!(
+            "Failing to unify {:?} and {:?}",
+            a.borrow().get_class(),
+            b.borrow().get_class()
+        );
         return false;
     }
     if can_union(&a, &b) {
         union(&a, &b);
+    } else if let Some((splice_term, term)) = can_splice(&a, &b) {
+        if !splice(splice_term, term, ignore_contravariant) {
+            return false;
+        }
     }
     if let Some(ret) = unify_children(&a, &b, ignore_contravariant) {
         return ret;
     }
     union_dynamic_terms(&a, &b, ignore_contravariant);
+    true
+}
+
+/// Returns a tuple of the splice term and the other term if one of `a` or `b`
+/// (exclusively) is a splice term and the other is a potential splice target.
+fn can_splice<'a, T: Kind, A: Kind>(
+    a: &'a NodePtr<T, A>,
+    b: &'a NodePtr<T, A>,
+) -> Option<(&'a NodePtr<T, A>, &'a NodePtr<T, A>)> {
+    let borrow_a = a.borrow();
+    let borrow_b = b.borrow();
+    match (&*borrow_a, &*borrow_b) {
+        (Node::SpliceTerm { .. }, Node::Atom(..) | Node::Term { .. }) => Some((a, b)),
+        (Node::Atom(..) | Node::Term { .. }, Node::SpliceTerm { .. }) => Some((b, a)),
+        _ => None,
+    }
+}
+
+fn splice<T: Kind, A: Kind>(
+    splice: &NodePtr<T, A>,
+    target: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) -> bool {
+    let new_node;
+    if let Node::SpliceTerm { args, .. } = &*splice.borrow() {
+        assert!(args.len() >= 2);
+        let replacement = &args[1];
+        for child in args.iter().skip(2) {
+            if !unify(replacement, child, ignore_contravariant) {
+                return false;
+            }
+        }
+        if !unify(replacement, target, ignore_contravariant) {
+            return false;
+        }
+        new_node = replacement.borrow().clone();
+    } else {
+        unreachable!("Splice argument is not a splice term");
+    }
+    *splice.borrow_mut() = new_node;
     true
 }
 
@@ -577,6 +680,23 @@ fn unify_children<T: Kind, A: Kind>(
         (Node::Atom(a), Node::Atom(b)) => return Some(a == b),
         (
             Node::Term {
+                op: op_a,
+                args: a_args,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: b_args,
+                ..
+            }
+            | Node::SpliceTerm {
+                op: op_b,
+                args: b_args,
+                ..
+            },
+        )
+        | (
+            Node::SpliceTerm {
                 op: op_a,
                 args: a_args,
                 ..
@@ -781,6 +901,7 @@ pub enum Constraint<T: Kind, A: Kind> {
     DynamicTerm(T, BTreeMap<String, Constraint<T, A>>, SubtypeConstraint),
     Var(String),
     DropTerm(T, Vec<Constraint<T, A>>),
+    SpliceTerm(T, Vec<Constraint<T, A>>),
 }
 
 impl<T: Kind, A: Kind> Constraint<T, A> {
@@ -808,7 +929,14 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
         }
     }
 
-    /// Returns true if the constraints are equal, modulo unconstrained variables
+    /// Returns true if the constraints are equal, modulo unconstrained variables.
+    ///
+    /// If two constraints could be unified, then the result of calling `matches`
+    /// on them must be `true`.
+    ///
+    /// This function is conservative in the sense that it can return `true` if two
+    /// constraints can be unified, but doing so would fail to find a solution to
+    /// an otherwise solvable set of equations.
     /// # Panics
     /// Panics if dynamic terms are passed
     pub fn matches(&self, other: &Self) -> bool {
@@ -819,6 +947,29 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
                 if op_a == op_b && args_a.len() == args_b.len() =>
             {
                 args_a.iter().zip(args_b.iter()).all(|(a, b)| a.matches(b))
+            }
+            (Self::SpliceTerm(splice_op, splice_args), other @ Self::Term(term_op, term_args))
+            | (other @ Self::Term(term_op, term_args), Self::SpliceTerm(splice_op, splice_args)) => {
+                let case_one = splice_op == term_op
+                    && splice_args.len() == term_args.len()
+                    && splice_args
+                        .iter()
+                        .zip(term_args.iter())
+                        .all(|(a, b)| a.matches(b));
+                if case_one {
+                    return true;
+                } else if splice_args.len() > 2 {
+                    let replacement = &splice_args[1];
+                    if replacement.matches(other) {
+                        for arg in splice_args.iter().skip(2) {
+                            if !arg.matches(other) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                false
             }
             (Self::DynamicTerm(..), _) | (_, Self::DynamicTerm(..)) => {
                 panic!("Unexpected constraint type in matches")
@@ -1047,6 +1198,15 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
                 class_id: None,
             })),
+            Constraint::SpliceTerm(op, args) => Rc::new(RefCell::new(Node::SpliceTerm {
+                parent: None,
+                op: op.clone(),
+                args: args
+                    .iter()
+                    .map(|c| self.contraint_to_node(c))
+                    .collect::<Vec<_>>(),
+                class_id: None,
+            })),
             Constraint::Var(name) => self.get_or_make_node(name),
             Constraint::DynamicTerm(op, args, constraint_kind) => {
                 Rc::new(RefCell::new(Node::DynamicTerm {
@@ -1076,6 +1236,12 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
             ),
             Node::DropTerm { op, args, .. } => Constraint::DropTerm(
+                op.clone(),
+                args.iter()
+                    .map(|a| Self::node_to_constraint(a))
+                    .collect::<Vec<_>>(),
+            ),
+            Node::SpliceTerm { op, args, .. } => Constraint::SpliceTerm(
                 op.clone(),
                 args.iter()
                     .map(|a| Self::node_to_constraint(a))

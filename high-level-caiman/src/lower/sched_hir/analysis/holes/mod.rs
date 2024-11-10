@@ -378,7 +378,7 @@ pub fn set_hole_initializations(
             &initializers,
         ),
     )?;
-    fill_initializers(cfg, initializers, val_env);
+    fill_initializers(cfg, initializers);
     Ok(())
 }
 

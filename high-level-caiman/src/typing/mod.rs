@@ -83,7 +83,9 @@ pub struct NodeEnv {
     env: Env<VQType, ()>,
     /// Map of quotient type to a map between quotients and their equivalence
     /// class names.
-    spec_nodes: HashMap<VQType, HashMap<ValQuot, HashSet<String>>>,
+    spec_nodes: HashMap<ValQuot, HashSet<String>>,
+    /// A set of all the targets of call nodes in the spec
+    calls: HashSet<String>,
     /// List of spec input node class names, without the leading `$` symbol.
     inputs: Vec<String>,
     /// List of function output node class names, without the leading `$` symbol.
@@ -103,6 +105,7 @@ impl Default for NodeEnv {
             outputs: Vec::new(),
             spec_outputs: Vec::new(),
             sched_vars: HashSet::new(),
+            calls: HashSet::new(),
         }
     }
 }
@@ -152,9 +155,10 @@ impl NodeEnv {
         self.env
             .add_class_constraint(&class_name, &From::from(&constraint))
             .unwrap();
+        if let ValQuot::Call(target, ..) = &constraint {
+            self.calls.insert(target.clone());
+        }
         self.spec_nodes
-            .entry(constraint.get_type())
-            .or_default()
             .entry(constraint)
             .or_default()
             .insert(class_name);
@@ -214,7 +218,11 @@ impl NodeEnv {
     /// annotation overrides to succeed, but not sufficient.
     #[must_use]
     pub fn spec_has_match(&self, constraint: &ValQuot) -> bool {
-        self.spec_nodes.contains_key(&constraint.get_type())
+        if let ValQuot::SchedCall(target, ..) = constraint {
+            self.calls.contains(target)
+        } else {
+            unimplemented!();
+        }
     }
 
     /// Returns true if the name is a wildcard name
@@ -290,11 +298,9 @@ impl NodeEnv {
     #[must_use]
     pub fn literal_classes(&self) -> HashSet<String> {
         let mut res = HashSet::new();
-        for classes in self.spec_nodes.values() {
-            for (c, class) in classes {
-                if matches!(c, ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_)) {
-                    res.extend(class.iter().map(|x| x.trim_matches('$').to_string()));
-                }
+        for (node, classes) in self.spec_nodes.iter() {
+            if matches!(node, ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_)) {
+                res.extend(classes.iter().map(|x| x.trim_matches('$').to_string()));
             }
         }
         res
@@ -314,22 +320,24 @@ impl NodeEnv {
                         continue;
                     }
                     let vq = constraint_to_wildcard_vq(&constraint);
-                    if let Some(matches) = self.spec_nodes.get(&vq.get_type()) {
-                        let to_check = matches
-                            .iter()
-                            .filter(|(x, _)| x.matches(&vq, Self::is_wildcard_name))
-                            .flat_map(|(_, x)| x.iter());
-                        let mut matches = Vec::new();
-                        for class in to_check {
-                            if let Some(constraint2) = self.env.get_type(class) {
-                                if constraint2.matches(&constraint) {
-                                    matches.push(class);
+                    let to_check = self
+                        .spec_nodes
+                        .iter()
+                        .filter(|(x, _)| x.matches(&vq, Self::is_wildcard_name))
+                        .flat_map(|(_, x)| x.iter());
+                    let mut matches = Vec::new();
+                    for class in to_check {
+                        if let Some(constraint2) = self.env.get_type(class) {
+                            if constraint2.matches(&constraint) {
+                                matches.push(class);
+                                if matches.len() > 1 {
+                                    break;
                                 }
                             }
                         }
-                        if matches.len() == 1 {
-                            to_merge.push((var.to_string(), matches.pop().unwrap().clone()));
-                        }
+                    }
+                    if matches.len() == 1 {
+                        to_merge.push((var.to_string(), matches.pop().unwrap().clone()));
                     }
                 }
             }

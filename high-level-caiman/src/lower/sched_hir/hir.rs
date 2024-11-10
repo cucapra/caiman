@@ -1193,11 +1193,17 @@ impl Hir for HirBody {
                     term_get_uses(arg, res);
                 }
             }
-            Self::Hole { uses, .. } => {
+            Self::Hole {
+                uses, initialized, ..
+            } => {
                 if !uses.is_initial() {
                     for u in uses.processed() {
                         res.insert(u.clone());
                     }
+                }
+                for init in initialized.keys() {
+                    assert!(!uses.is_initial() && uses.processed().contains(init));
+                    res.insert(init.clone());
                 }
             }
             Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::BeginEncoding { .. } => (),
@@ -1249,11 +1255,11 @@ impl Hir for HirBody {
                 Some(dests.iter().map(|(name, _)| name.clone()).collect())
             }
             Self::DeviceCopy { dest, .. } => Some(vec![dest.clone()]),
+            Self::Hole { initialized, .. } => Some(initialized.keys().cloned().collect()),
             Self::ConstDecl { .. }
             | Self::VarDecl { .. }
             | Self::RefLoad { .. }
             | Self::Op { .. }
-            | Self::Hole { .. }
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..)
             | Self::BeginEncoding { .. }
@@ -1387,9 +1393,6 @@ impl Hir for HirBody {
                         *arg = f(arg, UseType::Read);
                     }
                 }
-                for (dest, _) in dests {
-                    *dest = f(dest, UseType::Write);
-                }
                 if let Some(extras) = &mut func.extra_uses {
                     if !extras.is_initial() {
                         for u in extras.processed_mut() {
@@ -1398,6 +1401,9 @@ impl Hir for HirBody {
                     }
                 }
                 *encoder = f(encoder, UseType::Read);
+                for (dest, _) in dests {
+                    *dest = f(dest, UseType::Write);
+                }
             }
             Self::Sync { srcs, .. } => match srcs {
                 FillIn::Initial(src) => {
@@ -1409,12 +1415,19 @@ impl Hir for HirBody {
                     }
                 }
             },
-            Self::Hole { uses, .. } => {
+            Self::Hole {
+                uses, initialized, ..
+            } => {
                 if !uses.is_initial() {
                     for u in uses.processed_mut() {
                         *u = f(u, UseType::Read);
                     }
                 }
+                let mut new_map = HashMap::new();
+                for (init, v) in std::mem::take(initialized) {
+                    new_map.insert(f(&init, UseType::Write), v);
+                }
+                *initialized = new_map;
             }
             Self::VarDecl { rhs: None, .. } | Self::BeginEncoding { .. } => (),
         }

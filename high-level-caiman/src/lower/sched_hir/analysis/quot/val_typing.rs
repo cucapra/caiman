@@ -90,7 +90,10 @@ use crate::{
     },
     parse::ast::{Binop, DataType, Quotient, QuotientReference, SchedLiteral, SpecType, Tag},
     type_error,
-    typing::{is_value_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
+    typing::{
+        is_value_dtype, Constraint, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, VQType,
+        ValQuot,
+    },
 };
 
 use super::{
@@ -98,31 +101,42 @@ use super::{
     add_constraint, add_node_eq, add_var_constraint, fill_quotient,
 };
 
-/// Deduces the quotients for the value specification. Returns an error
-/// if unification fails, otherwise, writes the deduced quotients to the tags
-/// of the instructions in the cfg.
-#[allow(clippy::too_many_arguments)]
-pub fn deduce_val_quots(
-    inputs: &mut [(String, TripleTag)],
-    outputs: &mut [TripleTag],
-    output_dtypes: &[DataType],
-    cfg: &mut Cfg,
-    spec_info: &SpecInfo,
-    ctx: &Context,
-    dtypes: &HashMap<String, DataType>,
-    info: Info,
-) -> Result<(NodeEnv, HashMap<usize, String>), LocalError> {
-    let env = spec_info.nodes.clone();
+/// Scans the starting block of the CFG for an input overrides, and uses this
+/// to fill the tags of the function input variables.
+pub fn fill_fn_input_overrides(inputs: &mut [(String, TripleTag)], cfg: &Cfg) {
     let mut overrides = Vec::new();
     for i in &cfg.blocks[&START_BLOCK_ID].stmts {
         if let HirBody::InAnnotation(_, tags) = i {
             overrides.extend(tags.iter().cloned());
         }
     }
+    for (name, tag) in overrides {
+        for (n2, t2) in inputs.iter_mut() {
+            if n2 == &name {
+                t2.set_specified_info(tag.clone());
+            }
+        }
+    }
+}
+
+/// Deduces the quotients for the value specification. Returns an error
+/// if unification fails, otherwise, writes the deduced quotients to the tags
+/// of the instructions in the cfg.
+#[allow(clippy::too_many_arguments)]
+pub fn deduce_val_quots(
+    inputs: &[(String, TripleTag)],
+    outputs: &[TripleTag],
+    output_dtypes: &[DataType],
+    cfg: &Cfg,
+    spec_info: &SpecInfo,
+    ctx: &Context,
+    dtypes: &HashMap<String, DataType>,
+    info: Info,
+) -> Result<(NodeEnv, HashMap<usize, Vec<String>>), LocalError> {
+    let env = spec_info.nodes.clone();
     let env = add_io_constraints(
         env,
         inputs,
-        &overrides,
         outputs,
         output_dtypes,
         dtypes,
@@ -132,21 +146,31 @@ pub fn deduce_val_quots(
     let (mut env, selects) = unify_nodes(cfg, ctx, info, dtypes, env)?;
     env.converge_types()
         .map_err(|e| type_error!(Info::default(), "Convergence failure: {e}"))?;
-    fill_type_info(&env, cfg, &selects);
-    fill_io_type_info(inputs, outputs, output_dtypes, &env);
 
     Ok((env, selects))
+}
+
+/// Fills the value quotient information in the tags of the instructions of the CFG
+/// to be passed to later analysis and IR lowering.
+pub fn fill_val_quots(
+    inputs: &mut [(String, TripleTag)],
+    outputs: &mut [TripleTag],
+    output_dtypes: &[DataType],
+    cfg: &mut Cfg,
+    env: &NodeEnv,
+    selects: &HashMap<usize, Vec<String>>,
+) {
+    fill_type_info(env, cfg, selects);
+    fill_io_type_info(inputs, outputs, output_dtypes, env);
 }
 
 /// Adds constraints to the environment based on input and output annotations.
 /// Any unspecified annotations are going to be assumed to match up with the
 /// spec. Requires that the input and output variables of a given dimension
 /// (timeline, value, etc.) are kept in the same relative order as the spec.
-#[allow(clippy::too_many_arguments)]
 fn add_io_constraints(
     mut env: NodeEnv,
-    inputs: &mut [(String, TripleTag)],
-    input_overrides: &[(String, TripleTag)],
+    inputs: &[(String, TripleTag)],
     outputs: &[TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
@@ -158,13 +182,6 @@ fn add_io_constraints(
         &is_value_dtype,
         0,
     );
-    for (name, tag) in input_overrides {
-        for (n2, t2) in inputs.iter_mut() {
-            if n2 == name {
-                t2.set_specified_info(tag.clone());
-            }
-        }
-    }
     for i in 0..num_dims {
         env = super::add_node_eq(&format!("_dim{i}"), &format!("_dim{i}"), info, env)?;
     }
@@ -427,7 +444,7 @@ fn unify_phi(
     pretinuations: &HashMap<usize, usize>,
     cfg: &Cfg,
     block: usize,
-    selects: &mut HashMap<usize, String>,
+    selects: &mut HashMap<usize, Vec<String>>,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     let split_point = pretinuations[&block];
@@ -444,7 +461,7 @@ fn unify_phi(
                 assert!(cfg.succs.succs[&false_branch].contains(incoming_edges[1].0));
                 env = add_constraint(
                     dest,
-                    &ValQuot::Select {
+                    &ValQuot::SchedSelect {
                         guard: guard
                             .as_ref()
                             .opt()
@@ -460,7 +477,7 @@ fn unify_phi(
                 assert!(cfg.succs.succs[&true_branch].contains(incoming_edges[1].0));
                 env = add_constraint(
                     dest,
-                    &ValQuot::Select {
+                    &ValQuot::SchedSelect {
                         guard: guard
                             .as_ref()
                             .opt()
@@ -472,7 +489,10 @@ fn unify_phi(
                     env,
                 )?;
             }
-            selects.insert(split_point, dest.to_string());
+            selects
+                .entry(split_point)
+                .or_default()
+                .push(dest.to_string());
             Ok(env)
         } else {
             unreachable!()
@@ -582,7 +602,7 @@ fn unify_nodes(
     fn_info: Info,
     dtypes: &HashMap<String, DataType>,
     mut env: NodeEnv,
-) -> Result<(NodeEnv, HashMap<usize, String>), LocalError> {
+) -> Result<(NodeEnv, HashMap<usize, Vec<String>>), LocalError> {
     let pretinuations = compute_pretinuations(cfg);
     let mut selects = HashMap::new();
     for block in cfg.blocks.values() {
@@ -787,7 +807,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
 /// * `specs` - The specs
 /// * `selects` - A map from each block with a select node to the name of the spec variable
 /// which maps to the select node.
-fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>) {
+fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<String>>) {
     // eprintln!("{env:#?}");
     for block in cfg.blocks.values_mut() {
         let mut insertions = vec![];
@@ -804,10 +824,21 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 }
                 HirBody::InAnnotation(_, tags)
                 | HirBody::OutAnnotation(_, tags)
-                | HirBody::Hole { dests: tags, .. }
                 | HirBody::Op { dests: tags, .. } => {
                     for (name, tag) in tags {
                         fill_val_quotient(name, tag, env, block.id);
+                    }
+                }
+                HirBody::Hole {
+                    dests: tags,
+                    initialized,
+                    ..
+                } => {
+                    for (name, tag) in tags {
+                        fill_val_quotient(name, tag, env, block.id);
+                    }
+                    for (name, node) in initialized {
+                        *node = env.get_node_name(name);
                     }
                 }
                 HirBody::EncodeDo { dests, func, .. } => {
@@ -859,14 +890,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                 for (dest, tag) in dests {
                     fill_val_quotient(dest, tag, env, block.id);
                 }
-                if let Some(name) = selects.get(&block.id) {
-                    fill_val_quotient(name, tag, env, block.id);
-                } else {
-                    // I think we can loop ( to ssa - val deduction - initializations - out ssa)
-                    // for number of times equal to depth of most nested hole?
-                    // There may be something simpler.
-                    todo!("Iterate initializations and deduction?")
-                }
+                fill_select_quotient(block.id, selects, tag, env);
             }
             Terminator::Call(..) | Terminator::None(..) => unreachable!(),
             // I think this is right bc returns to parents should be handled
@@ -879,6 +903,52 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
         while let Some((idx, stmt)) = insertions.pop() {
             block.stmts.insert(idx, stmt);
         }
+    }
+}
+
+/// Fills the quotient of the select terminating block `block_id`, storing it in `tag`.
+fn fill_select_quotient(
+    block_id: usize,
+    selects: &HashMap<usize, Vec<String>>,
+    tag: &mut TripleTag,
+    env: &NodeEnv,
+) {
+    if let Some(possible_names) = selects.get(&block_id) {
+        // give the select the quotient of the first variable that matches
+        // a select.
+        // TODO: what if we have nested conditionals like
+        /*
+           var x;
+           if c {
+               x = if c {
+                   1
+               } else {
+                   0
+               };
+               3
+           } else {
+               x = if c {
+                   1
+               } else {
+                   0
+               };
+               2
+           }
+        */
+        for name in possible_names {
+            if let Some(spec_name) = env.get_node_name(name) {
+                if let Some(constraint) = env.get_spec_node(&spec_name) {
+                    if matches!(constraint, Constraint::Term(VQType::Select, ..)) {
+                        fill_val_quotient(name, tag, env, block_id);
+                    }
+                }
+            }
+        }
+    } else {
+        // I think we can loop ( to ssa - val deduction - initializations - out ssa)
+        // for number of times equal to depth of most nested hole?
+        // There may be something simpler.
+        todo!("Iterate initializations and deduction?")
     }
 }
 

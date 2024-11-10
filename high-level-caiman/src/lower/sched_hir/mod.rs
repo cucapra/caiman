@@ -8,8 +8,8 @@ use std::{
 };
 
 use analysis::{
-    analyze, compute_dominators, deduce_tmln_quots, set_hole_defs, set_hole_initializations,
-    ReachingDefs,
+    analyze, compute_dominators, deduce_tmln_quots, fill_fn_input_overrides, fill_val_quots,
+    set_hole_defs, set_hole_initializations, ReachingDefs,
 };
 pub use hir::*;
 
@@ -716,6 +716,7 @@ impl Funclets {
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         if !no_inference {
+            fill_fn_input_overrides(hir_inputs, &cfg);
             deduce_tmln_quots(
                 hir_inputs,
                 hir_outputs,
@@ -730,20 +731,41 @@ impl Funclets {
                 &live_vars,
             )?;
             cfg = transform_to_ssa(cfg, &live_vars, &doms);
-
             let (val_env, _) = deduce_val_quots(
                 hir_inputs,
                 hir_outputs,
                 &type_info.output_dtypes,
-                &mut cfg,
+                &cfg,
                 &ctx.specs[&specs.value.0],
                 ctx,
                 &type_info.data_types,
                 f.info,
             )?;
-
             set_hole_initializations(&mut cfg, &val_env, type_info, hir_inputs, &f.output)?;
+            cfg = transform_out_ssa(cfg);
 
+            // Performing initializations alters the SSA representation of the graph and
+            // can change the quotients deduced, repeat this pass for a second time to
+            // deduce the final quotients.
+            cfg = transform_to_ssa(cfg, &live_vars, &doms);
+            let (val_env, selects) = deduce_val_quots(
+                hir_inputs,
+                hir_outputs,
+                &type_info.output_dtypes,
+                &cfg,
+                &ctx.specs[&specs.value.0],
+                ctx,
+                &type_info.data_types,
+                f.info,
+            )?;
+            fill_val_quots(
+                hir_inputs,
+                hir_outputs,
+                &type_info.output_dtypes,
+                &mut cfg,
+                &val_env,
+                &selects,
+            );
             cfg = transform_out_ssa(cfg);
         }
         Ok((cfg, captured_out, live_vars))

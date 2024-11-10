@@ -5,6 +5,7 @@ mod val_typing;
 
 pub use tmln_typing::deduce_tmln_quots;
 pub use val_typing::deduce_val_quots;
+pub use val_typing::{fill_fn_input_overrides, fill_val_quots};
 
 use crate::{
     error::{hir_to_source_name, Info, LocalError},

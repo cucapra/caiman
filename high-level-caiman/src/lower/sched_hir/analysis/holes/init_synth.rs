@@ -174,15 +174,14 @@ pub fn build_init_set(
 }
 
 /// Places initializations of each variable in the cfg holes' `initialized` set.
-pub fn fill_initializers(cfg: &mut Cfg, init_sets: HashMap<String, HashSet<Loc>>, env: &NodeEnv) {
+pub fn fill_initializers(cfg: &mut Cfg, init_sets: HashMap<String, HashSet<Loc>>) {
     for (var, inits) in init_sets {
         for init in inits {
             if let HirBody::Hole { initialized, .. } =
                 &mut cfg.blocks.get_mut(&init.0).unwrap().stmts[init.1]
             {
-                let val_node = env.get_node_name(&var);
-                assert!(!initialized.contains_key(&var) || initialized[&var] == val_node);
-                initialized.insert(var.clone(), env.get_node_name(&var));
+                // The node will be filled in by the second quotient deduction pass
+                initialized.insert(var.clone(), None);
             } else {
                 unreachable!("Initialization location is not a hole!");
             }

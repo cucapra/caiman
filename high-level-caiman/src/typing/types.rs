@@ -360,7 +360,8 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                             Constraint::Var(_) => Ok(Self::Int(None)),
                             Constraint::Term(..)
                             | Constraint::DynamicTerm(..)
-                            | Constraint::DropTerm(..) => unreachable!(),
+                            | Constraint::DropTerm(..)
+                            | Constraint::SpliceTerm(..) => unreachable!(),
                         }
                     }
                     Constraint::Term(CDataType::Float, mut v) => {
@@ -370,7 +371,8 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                             Constraint::Var(_) => Ok(Self::Float(None)),
                             Constraint::Term(..)
                             | Constraint::DynamicTerm(..)
-                            | Constraint::DropTerm(..) => unreachable!(),
+                            | Constraint::DropTerm(..)
+                            | Constraint::SpliceTerm(..) => unreachable!(),
                         }
                     }
                     _ => unreachable!(),
@@ -498,7 +500,9 @@ impl MetaVar {
         Self(format!("${s}"))
     }
 
-    /// Creates a type variable name
+    /// Creates a type variable name.
+    /// # Panics
+    /// If the type variable name begins with a leading `$`.
     #[must_use]
     pub fn new_var_name(s: &str) -> Self {
         assert!(!s.starts_with('$'));
@@ -552,11 +556,21 @@ pub enum ValQuot {
     /// A call in the schedule, where unmatching unconstrained arguments
     /// can be ignored.
     SchedCall(String, Vec<MetaVar>),
+    /// A select in the schedule, where matching the select can be ignored if branches
+    /// match.
+    SchedSelect {
+        guard: MetaVar,
+        true_id: MetaVar,
+        false_id: MetaVar,
+    },
 }
 
 impl ValQuot {
     /// Returns true if the value quotient matches the other value quotient
-    /// up to variable wildcards
+    /// up to variable wildcards.
+    ///
+    /// This function should be kept in-sync with `Constraint<T, A>::matches`.
+    /// Like that function, if two `ValQuot` can be unified, this will return `true`.
     /// # Arguments
     /// * `other` - The other value quotient to match against
     /// * `is_wildcard_name` - A function that returns true if the given metavariable
@@ -568,15 +582,33 @@ impl ValQuot {
             | (Self::Input(x), Self::Input(y)) => x == y,
             (Self::Output(x), Self::Output(y)) => x == y,
             (Self::Bool(x), Self::Bool(y)) => x == y,
-            (Self::Call(f1, args1) | Self::SchedCall(f1, args1), Self::Call(f2, args2))
-            | (Self::CallOne(f1, args1), Self::CallOne(f2, args2))
-            | (Self::Call(f1, args1), Self::SchedCall(f2, args2)) => {
+            (Self::Call(f1, args1), Self::Call(f2, args2))
+            | (Self::CallOne(f1, args1), Self::CallOne(f2, args2)) => {
                 f1 == f2
                     && args1.len() == args2.len()
                     && args1
                         .iter()
                         .zip(args2.iter())
                         .all(|(x, y)| x == y || is_wildcard_name(x) || is_wildcard_name(y))
+            }
+            (Self::SchedCall(f1, long_args), Self::Call(f2, short_args))
+            | (Self::Call(f2, short_args), Self::SchedCall(f1, long_args)) => {
+                if f1 == f2 && short_args.len() <= long_args.len() {
+                    let mut short_idx = 0;
+                    for arg in long_args {
+                        if short_args.len() == short_idx {
+                            break;
+                        }
+                        let other_arg = &short_args[short_idx];
+                        if arg == other_arg || is_wildcard_name(arg) || is_wildcard_name(other_arg)
+                        {
+                            short_idx += 1;
+                        }
+                    }
+                    short_idx == short_args.len()
+                } else {
+                    false
+                }
             }
             (Self::Extract(x, i), Self::Extract(y, j)) => {
                 i == j && (x == y || is_wildcard_name(x) || is_wildcard_name(y))
@@ -591,8 +623,25 @@ impl ValQuot {
                     guard: g1,
                     true_id: t1,
                     false_id: f1,
+                }
+                | Self::SchedSelect {
+                    guard: g1,
+                    true_id: t1,
+                    false_id: f1,
                 },
                 Self::Select {
+                    guard: g2,
+                    true_id: t2,
+                    false_id: f2,
+                },
+            )
+            | (
+                Self::Select {
+                    guard: g1,
+                    true_id: t1,
+                    false_id: f1,
+                },
+                Self::SchedSelect {
                     guard: g2,
                     true_id: t2,
                     false_id: f2,
@@ -602,14 +651,20 @@ impl ValQuot {
                     && (t1 == t2 || is_wildcard_name(t1) || is_wildcard_name(t2))
                     && (f1 == f2 || is_wildcard_name(f1) || is_wildcard_name(f2))
             }
+            (
+                Self::SchedSelect {
+                    true_id, false_id, ..
+                },
+                _,
+            )
+            | (
+                _,
+                Self::SchedSelect {
+                    true_id, false_id, ..
+                },
+            ) => true_id == false_id || is_wildcard_name(true_id) || is_wildcard_name(false_id),
             _ => false,
         }
-    }
-
-    /// Returns the type of the value quotient
-    #[must_use]
-    pub fn get_type(&self) -> VQType {
-        self.into()
     }
 }
 
@@ -642,23 +697,6 @@ impl std::fmt::Debug for VQType {
             Self::Bop(op) => write!(f, "Bop({op:?})"),
             Self::Select => write!(f, "Select"),
             Self::CallBuiltin(i) => write!(f, "{i}"),
-        }
-    }
-}
-
-impl From<&ValQuot> for VQType {
-    fn from(value: &ValQuot) -> Self {
-        match value {
-            ValQuot::Int(i) => Self::Int(i.clone()),
-            ValQuot::Float(f) => Self::Float(f.clone()),
-            ValQuot::Bool(b) => Self::Bool(*b),
-            ValQuot::Input(i) => Self::Input(i.clone()),
-            ValQuot::Output(_) => Self::Output,
-            ValQuot::Call(f, _) | ValQuot::SchedCall(f, _) => Self::Call(f.clone()),
-            ValQuot::Extract(_, j) => Self::Extract(*j),
-            ValQuot::Bop(op, _, _) => Self::Bop(*op),
-            ValQuot::Select { .. } => Self::Select,
-            ValQuot::CallOne(s, _) => Self::CallBuiltin(s.clone()),
         }
     }
 }
@@ -705,6 +743,18 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
                     Self::Var(false_id.0.clone()),
                 ],
             ),
+            ValQuot::SchedSelect {
+                guard,
+                true_id,
+                false_id,
+            } => Self::SpliceTerm(
+                VQType::Select,
+                vec![
+                    Self::Var(guard.0.clone()),
+                    Self::Var(true_id.0.clone()),
+                    Self::Var(false_id.0.clone()),
+                ],
+            ),
         }
     }
 }
@@ -714,6 +764,10 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
 ///
 /// This intention is for the returned value quotient to be used in a situation
 /// that operates modulo metavariable names.
+///
+/// The returned `ValQuot`'s are meant to be matched with spec `ValQuot`'s,
+/// and as such we translate flexible schedule constraints like `DropTerm`
+/// to their spec counterpart, losing the extra flexibility.
 pub fn constraint_to_wildcard_vq(value: &Constraint<VQType, ()>) -> ValQuot {
     match value {
         Constraint::Term(VQType::Int(i), _) => ValQuot::Int(i.clone()),
@@ -733,6 +787,14 @@ pub fn constraint_to_wildcard_vq(value: &Constraint<VQType, ()>) -> ValQuot {
             f.clone(),
             args.iter().map(|_| MetaVar(String::from("?"))).collect(),
         ),
+        Constraint::SpliceTerm(VQType::Select, args) => {
+            assert_eq!(args.len(), 3);
+            ValQuot::SchedSelect {
+                guard: MetaVar(String::from("?")),
+                true_id: MetaVar(String::from("?")),
+                false_id: MetaVar(String::from("?")),
+            }
+        }
         Constraint::Term(VQType::Extract(j), _) => ValQuot::Extract(MetaVar(String::from("?")), *j),
         Constraint::Term(VQType::Bop(op), _) => {
             ValQuot::Bop(*op, MetaVar(String::from("?")), MetaVar(String::from("?")))

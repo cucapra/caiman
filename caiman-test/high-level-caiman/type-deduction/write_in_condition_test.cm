@@ -1,0 +1,35 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main(a: i32) -> r: i32 {
+    x :- a * 2
+    k :- a + 10 if a >= 0 - 10 else 0 - a
+    z :- k if a < 0 else a
+    returns z + x
+}
+
+fn main_impl(a: i32) -> i32 @ node(val.r)-usable
+    impls main, time, space
+{
+    var x;
+    var z;
+    if a < 0 {
+        // TODO: allow if to be used as an expression beyond just this special case.
+        let k = if a >= 0 - 10 {
+            x = a * 2;
+            a + 10
+        } else {
+            x = a * 2;
+            0 - a
+        };
+        z = k;
+    } else {
+        x = a * 2;
+        z = a;
+    }
+    z + x
+}
+
+pipeline main { main_impl }

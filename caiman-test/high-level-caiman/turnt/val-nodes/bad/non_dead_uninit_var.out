@@ -1,0 +1,2 @@
+Error: At "non_dead_uninit_var.cm" 22:5 - 22:25, 
+  Type Error: Illegal value quotient Some(Node)(Some("r")). An unitialized variable is None

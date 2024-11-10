@@ -86,22 +86,7 @@ pub fn deduce_tmln_quots(
     live_vars: &InOutFacts<LiveVars>,
 ) -> Result<NodeEnv, LocalError> {
     let env = spec_info.nodes.clone();
-    let mut overrides = Vec::new();
-    for i in &cfg.blocks[&START_BLOCK_ID].stmts {
-        if let HirBody::InAnnotation(_, tags) = i {
-            overrides.extend(tags.iter().cloned());
-        }
-    }
-    let env = add_io_constraints(
-        env,
-        inputs,
-        &overrides,
-        outputs,
-        output_dtypes,
-        dtypes,
-        info,
-        num_dims,
-    )?;
+    let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes, info, num_dims)?;
     let implicit_in = get_implicit_input_var(cfg, &spec_info.sig.input[0].0).to_string();
     let (env, implicit_events) = unify_nodes(cfg, &implicit_in, dtypes, ctx, env)?;
     // sort of a hack to support the previous tests without timeline specs:
@@ -876,7 +861,11 @@ fn unify_call(
     let succ_implicit_input = implicit_input_annot(succ);
     if !env.spec_has_match(&call_constraint) {
         // there is no call for this function in the spec, so this isn't something to worry about
-        // we do this for "backwards compatibility", in the sense that if the function
+        // we do this for "backwards compatibility" for all the tests written
+        // before the timeline was implemented and thus do not contain
+        // timeline annotations. This isn't a good reason on its own,
+        // but I quite liked the ability to not need to specify any timeline tags
+        // if it's all none. So if the function
         // call isn't in the spec, we assume it's none. This is slightly different from
         // the value language which requires a type annotation to do this.
 
@@ -930,11 +919,9 @@ fn unify_call(
 /// Any unspecified annotations are going to be assumed to match up with the
 /// spec. Requires that the input and output variables of a given dimension
 /// (timeline, value, etc.) are kept in the same relative order as the spec.
-#[allow(clippy::too_many_arguments)]
 fn add_io_constraints(
     mut env: NodeEnv,
-    inputs: &mut [(String, TripleTag)],
-    input_overrides: &[(String, TripleTag)],
+    inputs: &[(String, TripleTag)],
     outputs: &[TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
@@ -948,13 +935,6 @@ fn add_io_constraints(
         &is_timeline_dtype,
         1,
     );
-    for (name, tag) in input_overrides {
-        for (n2, t2) in inputs.iter_mut() {
-            if n2 == name {
-                t2.set_specified_info(tag.clone());
-            }
-        }
-    }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
         .filter(|(arg, _)| is_timeline_dtype(&dtypes[arg]))
