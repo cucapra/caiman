@@ -4,7 +4,7 @@ use std::{
 };
 
 use caiman::explication::expir::BufferFlags;
-use init_synth::{build_init_set, fill_initializers};
+use init_synth::{build_init_set, fill_initializers, hoist_optimization};
 
 use crate::{
     error::{hir_to_source_name, Info, LocalError},
@@ -378,6 +378,9 @@ pub fn set_hole_initializations(
             &initializers,
         ),
     )?;
+    // dbg!(&initializers);
+    let initializers = hoist_optimization(initializers, cfg, val_env, &dinfo);
+    // dbg!(&initializers);
     fill_initializers(cfg, initializers);
     Ok(())
 }

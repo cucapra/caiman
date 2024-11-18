@@ -298,7 +298,7 @@ impl NodeEnv {
     #[must_use]
     pub fn literal_classes(&self) -> HashSet<String> {
         let mut res = HashSet::new();
-        for (node, classes) in self.spec_nodes.iter() {
+        for (node, classes) in &self.spec_nodes {
             if matches!(node, ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_)) {
                 res.extend(classes.iter().map(|x| x.trim_matches('$').to_string()));
             }

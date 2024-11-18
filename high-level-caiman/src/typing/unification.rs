@@ -617,6 +617,7 @@ fn unify<T: Kind, A: Kind>(
 
 /// Returns a tuple of the splice term and the other term if one of `a` or `b`
 /// (exclusively) is a splice term and the other is a potential splice target.
+#[allow(clippy::type_complexity)]
 fn can_splice<'a, T: Kind, A: Kind>(
     a: &'a NodePtr<T, A>,
     b: &'a NodePtr<T, A>,

@@ -5,6 +5,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use caiman::explication::Hole;
+use smallvec::{smallvec, SmallVec};
 
 use crate::{
     error::Info,
@@ -829,6 +830,22 @@ impl Loc {
             doms.postdom(self.0, b.0)
         }
     }
+
+    /// Gets the immediate successor locations of the current location
+    pub fn succs(&self, cfg: &Cfg) -> SmallVec<[Self; 2]> {
+        if cfg.blocks[&self.0].stmts.len() > self.1 {
+            // note: terminator has local id of `stmts.len()`
+            smallvec![Self(self.0, self.1 + 1)]
+        } else if let Some(edge) = cfg.graph.get(&self.0) {
+            let mut res = SmallVec::new();
+            for next_block in edge {
+                res.push(Self(*next_block, 0));
+            }
+            res
+        } else {
+            smallvec![]
+        }
+    }
 }
 
 impl std::fmt::Display for Loc {
@@ -849,9 +866,9 @@ pub trait CollectiveDom {
 /// Returns true if, starting from `start`, we can reach some element in `goal_set`
 /// without crossing an element in `blocking_set`.
 ///
-/// We check membership of the goal set before the blocking set. So if we reach
+/// We check membership of the blocking set before the goal set. So if we reach
 /// an element that is both in the blocking and goal set, we consider that we
-/// can reach the goal.
+/// don't reach the goal.
 pub fn can_reach_goal(
     cfg: &Cfg,
     start: &Loc,
@@ -862,6 +879,9 @@ pub fn can_reach_goal(
     q.push(start.clone());
     let mut visited = HashSet::new();
     'worklist: while let Some(s) = q.pop() {
+        if blocking_set.contains(&s) {
+            continue;
+        }
         if goal_set.contains(&s) {
             return true;
         }
@@ -871,11 +891,11 @@ pub fn can_reach_goal(
         }
         visited.insert(s.0);
         for local_id in s.1..=blk.stmts.len() {
-            if goal_set.contains(&Loc(s.0, local_id)) {
-                return true;
-            }
             if blocking_set.contains(&Loc(s.0, local_id)) {
                 continue 'worklist;
+            }
+            if goal_set.contains(&Loc(s.0, local_id)) {
+                return true;
             }
         }
         for succ in cfg.graph[&s.0] {

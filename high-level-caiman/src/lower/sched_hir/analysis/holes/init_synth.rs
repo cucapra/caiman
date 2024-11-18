@@ -24,21 +24,25 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    cmp::Ordering,
+    collections::{hash_map::Entry, HashMap, HashSet},
     rc::Rc,
+    usize,
 };
 
 use crate::{
+    error::{Info, LocalError},
     lower::sched_hir::{
-        analysis::{analyze, Backwards, DomInfo, Fact, Forwards},
+        analysis::{analyze, Backwards, DomInfo, Fact, Forwards, TransferData},
         cfg::{can_reach_goal, Cfg, CollectiveDom, Loc, FINAL_BLOCK_ID, START_BLOCK_ID},
-        Hir, HirBody, HirInstr, TripleTag,
+        Hir, HirBody, HirInstr, Terminator, TripleTag,
     },
     parse::ast::{DataType, FullType},
     typing::{MetaVar, NodeEnv},
 };
 
 use super::{get_usable_uses, invert_map};
+use smallvec::{smallvec, SmallVec};
 
 /// Gets the locations of all holes in topological order.
 fn hole_topo(cfg: &Cfg) -> Vec<Loc> {
@@ -288,25 +292,32 @@ fn get_val_uses(
     res
 }
 
+/// A map from location to a map from variable name to nodes that need to be initialized
+/// if the given variable were to be initialized at the given location.
+///
+/// Ie. `f(l, v) =` set of classes (with leading '$') that need to be
+/// initialized if `v` were to be initialized at `l`
+type UnavailableNodes = HashMap<Loc, HashMap<String, HashSet<String>>>;
+
 /// For each location, gets a set of class names (with the leading `$`) that
 /// would need to be generated given the initialization set of `inits`.
-fn unavailable_nodes(
+fn unavailable_nodes<'a, T: Iterator<Item = &'a String> + Clone>(
     cfg: &Cfg,
     env: &NodeEnv,
-    inits: &HashMap<String, HashSet<Loc>>,
-) -> HashMap<Loc, HashSet<String>> {
-    let inits = invert_map(inits);
+    to_init: &T,
+) -> UnavailableNodes {
     let mut res = HashMap::new();
     for block in cfg.blocks.values() {
         for (local_id, s) in block.stmts.iter().enumerate() {
-            let mut unavailable = HashSet::new();
+            let mut unavailable = HashMap::new();
             if let HirBody::Hole { uses, .. } = s {
-                if let Some(to_init) = inits.get(&Loc(block.id, local_id)) {
-                    for node in to_init {
-                        unavailable.extend(env.unavailable_nodes(
-                            &MetaVar::new_class_name(node),
-                            uses.processed().iter(),
-                        ));
+                for var in to_init.clone() {
+                    if let Some(node) = env.get_node_name(var) {
+                        let node_name = MetaVar::new_class_name(&node);
+                        unavailable.insert(
+                            var.clone(),
+                            env.unavailable_nodes(&node_name, uses.processed().iter()),
+                        );
                     }
                 }
             }
@@ -353,7 +364,7 @@ impl<'a> PartialEq for AnticipatedInits<'a> {
 }
 
 impl<'a> Fact for AnticipatedInits<'a> {
-    fn meet(self, other: &Self, _: crate::error::Info) -> Result<Self, crate::error::LocalError> {
+    fn meet(self, other: &Self, _: Info) -> Result<Self, LocalError> {
         Ok(Self {
             anticipated_var_inits: self
                 .anticipated_var_inits
@@ -365,11 +376,7 @@ impl<'a> Fact for AnticipatedInits<'a> {
         })
     }
 
-    fn transfer_instr(
-        &mut self,
-        stmt: HirInstr<'_>,
-        data: crate::lower::sched_hir::analysis::TransferData,
-    ) -> Result<(), crate::error::LocalError> {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
         if matches!(stmt, HirInstr::Stmt(HirBody::Hole { .. })) {
             let cur_loc = Loc(data.block_id, data.local_instr_id);
             self.anticipated_vars
@@ -384,4 +391,484 @@ impl<'a> Fact for AnticipatedInits<'a> {
     }
 
     type Dir = Backwards;
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq, Copy)]
+struct Rational(u32, u32);
+impl Rational {
+    const fn gcd(mut a: u32, mut b: u32) -> u32 {
+        const fn diff(a: u32, b: u32) -> (u32, u32) {
+            if a > b {
+                (a - b, b)
+            } else {
+                (b - a, a)
+            }
+        }
+        loop {
+            (a, b) = diff(a, b);
+            if a == 0 || b == 0 {
+                return b;
+            }
+        }
+    }
+    pub const fn new(num: u32, den: u32) -> Self {
+        let gcd = Self::gcd(num, den);
+        Self(num / gcd, den / gcd)
+    }
+
+    pub const fn one() -> Self {
+        Self(1, 1)
+    }
+
+    pub const fn num(self) -> u32 {
+        self.0
+    }
+
+    pub const fn den(self) -> u32 {
+        self.1
+    }
+
+    pub fn min(self, other: Self) -> Self {
+        if self <= other {
+            self
+        } else {
+            other
+        }
+    }
+}
+
+impl PartialOrd for Rational {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Rational {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.0 * other.1).cmp(&(other.0 * self.1))
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_rational() {
+    assert_eq!(Rational::gcd(22, 104), 2);
+    assert_eq!(Rational::gcd(96, 144), 48);
+    assert_eq!(Rational::new(3, 9), Rational::new(1, 3));
+    assert_eq!(Rational::new(1, 1), Rational::new(7, 7));
+    assert_eq!(Rational::new(22, 121), Rational::new(2, 11));
+    assert_ne!(Rational::new(1, 2), Rational::new(2, 2));
+    assert!(Rational::new(3, 4) > Rational::new(5, 7));
+    assert!(Rational::new(1, 2) < Rational::new(2, 1));
+}
+
+#[derive(Default, Clone, Debug)]
+struct FractionalMultiSet<T: std::hash::Hash + Eq> {
+    map: HashMap<T, Rational>,
+}
+
+impl<T: std::hash::Hash + Eq> FractionalMultiSet<T> {
+    fn subset(&self, other: &Self) -> bool {
+        let mut better = false;
+        for (entry, amount) in &self.map {
+            if let Some(other_amount) = other.map.get(entry) {
+                match amount.cmp(other_amount) {
+                    Ordering::Greater => return false,
+                    Ordering::Less => better = true,
+                    Ordering::Equal => (),
+                }
+            } else {
+                return false;
+            }
+        }
+        better
+    }
+
+    fn intersect(self, other: &Self) -> Self {
+        let mut new_map = HashMap::new();
+        for (entry, amount) in self.map {
+            if let Some(other_amount) = other.map.get(&entry) {
+                new_map.insert(entry, amount.min(*other_amount));
+            }
+        }
+        Self { map: new_map }
+    }
+
+    #[allow(unused)]
+    fn insert(&mut self, e: T) {
+        if let Some(val) = self.map.get_mut(&e) {
+            *val = Rational::new(val.num() + 1, val.den());
+        } else {
+            self.map.insert(e, Rational::one());
+        }
+    }
+
+    /// Insert `e` into the multi-set, increasing the denominator if it already is present
+    fn insert_frac(&mut self, e: T) {
+        if let Some(val) = self.map.get_mut(&e) {
+            *val = Rational::new(val.num(), val.den() + 1);
+        } else {
+            self.map.insert(e, Rational::one());
+        }
+    }
+
+    fn contains(&self, e: &T) -> bool {
+        self.map.contains_key(e)
+    }
+
+    #[allow(unused)]
+    fn remove_all(&mut self, e: &T) {
+        self.map.remove(e);
+    }
+}
+
+#[derive(Clone)]
+struct DependencyCalc<'a> {
+    env: &'a NodeEnv,
+    /// map from location to mutables we are currently initializing at this location
+    inv_inits: &'a HashMap<Loc, HashSet<String>>,
+    unavailable_nodes: &'a UnavailableNodes,
+    cache: HashMap<Loc, Rc<FractionalMultiSet<String>>>,
+}
+
+impl<'a> DependencyCalc<'a> {
+    /// Computes the nodes that must be initialized if `var` were to be made usable at `loc`.
+    /// Takes into account sharing of dependencies by making the contribution
+    /// of a dependency count as `1/n` where `n` is the number of variables
+    /// being initialized at `loc` that require an initialization of the dependency.
+    fn calc(&mut self, var: &str, loc: &Loc) -> Rc<FractionalMultiSet<String>> {
+        if let Some(res) = self.cache.get(loc) {
+            return res.clone();
+        }
+        let var_class =
+            MetaVar::new_class_name(&self.env.get_node_name(var).unwrap()).into_string();
+        let needed = &self.unavailable_nodes[loc][var];
+        let mut res = FractionalMultiSet::default();
+        for (v, deps) in &self.unavailable_nodes[loc] {
+            // for all variables (including ourselves) being initialized here,
+            // take into account dependencies they are initializing at this
+            // hole location if we also need them.
+            if self.inv_inits.get(loc).is_some_and(|s| s.contains(v)) || var == v {
+                for dep in deps {
+                    if needed.contains(dep) || dep == &var_class {
+                        res.insert_frac(dep.clone());
+                    }
+                }
+            }
+        }
+        // take ourselves into account
+        res.insert_frac(var_class);
+        if let Some(being_inited) = self.inv_inits.get(loc) {
+            for init_mutable in being_inited {
+                // take other variables (not ourself) being initialized at this hole into account
+                // if we depend on them.
+                if init_mutable != var {
+                    if let Some(var_node_name) = self.env.get_node_name(init_mutable) {
+                        let init_var_node_class =
+                            MetaVar::new_class_name(&var_node_name).into_string();
+                        if res.contains(&init_var_node_class) {
+                            // take into account things we're already initializing
+                            res.insert_frac(init_var_node_class);
+                        }
+                    }
+                }
+            }
+        }
+        let res = Rc::new(res);
+        self.cache.insert(loc.clone(), res.clone());
+        res
+    }
+}
+
+#[derive(Clone)]
+struct Hoist<'a> {
+    cfg: &'a Cfg,
+    prev_var_inits: &'a HashSet<Loc>,
+    var_inits: HashSet<Loc>,
+    /// The variable to handle
+    var: &'a String,
+    /// Location of definition of mutable variable.
+    var_def: Loc,
+    /// Map from mark location to a tuple of `(origin location, set of initializations)`
+    mark: HashMap<Loc, (Loc, HashSet<Loc>)>,
+    anticipated_inits: &'a HashMap<Loc, HashSet<String>>,
+    doms: &'a DomInfo,
+    dep_calc: DependencyCalc<'a>,
+}
+
+impl<'a> Hoist<'a> {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        env: &'a NodeEnv,
+        cfg: &'a Cfg,
+        var: &'a String,
+        var_def: Loc,
+        anticipated_inits: &'a HashMap<Loc, HashSet<String>>,
+        doms: &'a DomInfo,
+        inits: &'a HashMap<String, HashSet<Loc>>,
+        inv_inits: &'a HashMap<Loc, HashSet<String>>,
+        unavailable_nodes: &'a UnavailableNodes,
+    ) -> Self {
+        Self {
+            cfg,
+            var,
+            prev_var_inits: &inits[var],
+            mark: HashMap::new(),
+            anticipated_inits,
+            doms,
+            var_inits: inits[var].clone(),
+            var_def,
+            dep_calc: DependencyCalc {
+                env,
+                inv_inits,
+                unavailable_nodes,
+                cache: HashMap::new(),
+            },
+        }
+    }
+}
+
+impl<'a> PassState for Hoist<'a> {
+    fn handle_terminator(&mut self, _: &Terminator, loc: Loc) {
+        let next = loc.succs(self.cfg);
+        match next.len() {
+            0 => {
+                self.mark.insert(loc.clone(), (loc, HashSet::new()));
+            }
+            1 => {
+                self.mark.insert(loc, self.mark[&next[0]].clone());
+            }
+            2 => {
+                let (loc_a, mark_a) = &self.mark[&next[0]];
+                let (loc_b, mark_b) = &self.mark[&next[1]];
+                if loc_a.pdom(self.doms, loc_b) {
+                    self.mark
+                        .insert(loc.clone(), (loc_a.clone(), mark_a.clone()));
+                } else if loc_b.pdom(self.doms, loc_a) {
+                    self.mark
+                        .insert(loc.clone(), (loc_b.clone(), mark_b.clone()));
+                } else {
+                    self.mark.insert(
+                        loc.clone(),
+                        (loc.clone(), mark_a.union(mark_b).cloned().collect()),
+                    );
+                    let mark_cur = &self.mark[&loc].1;
+                    let mut to_remove: SmallVec<[_; 4]> = smallvec![];
+                    for loc in &self.var_inits {
+                        if !mark_cur.contains(loc)
+                            && mark_cur.cdom(self.cfg, &{
+                                let mut s = HashSet::new();
+                                s.insert(loc.clone());
+                                s
+                            })
+                        {
+                            to_remove.push(loc.clone());
+                        }
+                    }
+                    while let Some(loc) = to_remove.pop() {
+                        self.var_inits.remove(&loc);
+                    }
+                    if !to_remove.is_empty() {
+                        self.var_inits.extend(mark_cur.iter().cloned());
+                    }
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn handle_body(&mut self, t: &HirBody, loc: Loc) {
+        let is_hole = matches!(t, HirBody::Hole { .. });
+        if self.prev_var_inits.contains(&loc) {
+            assert!(is_hole);
+            self.mark.insert(
+                loc.clone(),
+                (loc.clone(), {
+                    let mut set = HashSet::new();
+                    set.insert(loc);
+                    set
+                }),
+            );
+        } else {
+            let next = loc.succs(self.cfg);
+            assert_eq!(next.len(), 1);
+            self.mark.insert(loc.clone(), self.mark[&next[0]].clone());
+            if matches!(self.anticipated_inits.get(&loc), Some(set) if set.contains(self.var))
+                && is_hole
+                && self.var_def.dom(&self.doms, &loc)
+            {
+                let calc_here = self.dep_calc.calc(self.var, &loc);
+                if let Some(prev_calcs) = self.mark[&loc]
+                    .1
+                    .iter()
+                    .map(|loc| self.dep_calc.calc(self.var, loc))
+                    .next()
+                {
+                    let mut prev_calcs = (*prev_calcs).clone();
+                    for marked_loc in self.mark[&loc]
+                        .1
+                        .iter()
+                        .skip(1)
+                        .map(|loc| self.dep_calc.calc(self.var, loc))
+                    {
+                        prev_calcs = prev_calcs.intersect(&marked_loc);
+                    }
+                    if calc_here.subset(&prev_calcs) {
+                        self.mark.insert(loc.clone(), {
+                            let mut hs = HashSet::new();
+                            hs.insert(loc.clone());
+                            (loc.clone(), hs)
+                        });
+                        let mut to_remove: SmallVec<[_; 8]> = smallvec![];
+                        for init_loc in &self.var_inits {
+                            if loc.dom(self.doms, init_loc) {
+                                to_remove.push(init_loc.clone());
+                            }
+                        }
+                        while let Some(to_rem) = to_remove.pop() {
+                            self.var_inits.remove(&to_rem);
+                        }
+                        self.var_inits.insert(loc);
+                    }
+                }
+            }
+        }
+    }
+}
+impl<'a> BackwardPass for Hoist<'a> {}
+
+/// A pass that iterates over the entire CFG, producing a single final result instead
+/// of input and output results for each block.
+trait PassState {
+    fn handle_terminator(&mut self, t: &Terminator, loc: Loc);
+    fn handle_body(&mut self, t: &HirBody, loc: Loc);
+}
+
+/// A pass that is meant to be run backwards.
+trait BackwardPass: PassState {
+    fn backward_pass(&mut self, cfg: &Cfg) -> &mut Self {
+        let mut order = cfg.topo_order.clone();
+        while let Some(block) = order.pop() {
+            let block = &cfg.blocks[&block];
+            self.handle_terminator(&block.terminator, Loc(block.id, block.stmts.len()));
+            for (id, stmt) in block.stmts.iter().enumerate().rev() {
+                self.handle_body(stmt, Loc(block.id, id));
+            }
+        }
+        self
+    }
+}
+
+/// A pass that is meant to be run forwards.
+trait ForwardPass: PassState {
+    fn forward_pass(&mut self, cfg: &Cfg) -> &mut Self {
+        let mut order = cfg.topo_order_rev.clone();
+        while let Some(block) = order.pop() {
+            let block = &cfg.blocks[&block];
+            for (id, stmt) in block.stmts.iter().enumerate() {
+                self.handle_body(stmt, Loc(block.id, id));
+            }
+            self.handle_terminator(&block.terminator, Loc(block.id, block.stmts.len()));
+        }
+        self
+    }
+}
+
+struct Defs<'a> {
+    to_init: &'a [String],
+    def_locs: HashMap<String, Loc>,
+}
+
+impl<'a> Defs<'a> {
+    fn handle(&mut self, t: &dyn Hir, loc: Loc) {
+        if let Some(defs) = t.get_defs() {
+            for def in defs {
+                if self.to_init.contains(&def) {
+                    match self.def_locs.entry(def) {
+                        Entry::Occupied(..) => unreachable!(),
+                        Entry::Vacant(e) => {
+                            e.insert(loc.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn new(to_init: &'a [String]) -> Self {
+        Self {
+            to_init,
+            def_locs: HashMap::new(),
+        }
+    }
+}
+
+impl<'a> PassState for Defs<'a> {
+    fn handle_terminator(&mut self, t: &Terminator, loc: Loc) {
+        self.handle(t, loc)
+    }
+
+    fn handle_body(&mut self, t: &HirBody, loc: Loc) {
+        self.handle(t, loc)
+    }
+}
+
+impl<'a> ForwardPass for Defs<'a> {}
+
+/// Optimizes the placement of holes in `init_sets` to reduce the amount of nodes
+/// we will need to recalculate.
+///
+/// # Returns
+/// The updated initializing set
+pub fn hoist_optimization(
+    mut init_sets: HashMap<String, HashSet<Loc>>,
+    cfg: &mut Cfg,
+    env: &NodeEnv,
+    doms: &DomInfo,
+) -> HashMap<String, HashSet<Loc>> {
+    if init_sets.is_empty() {
+        return init_sets;
+    }
+    let mut changed = false;
+    let anticipated_inits = Rc::new(RefCell::new(HashMap::new()));
+    let _ = analyze(
+        cfg,
+        AnticipatedInits::top(&invert_map(&init_sets), anticipated_inits.clone()),
+    );
+    let anticipated_inits = anticipated_inits.take();
+    let to_init: Vec<_> = init_sets.keys().cloned().collect();
+    let unavailable_nodes = unavailable_nodes(cfg, env, &to_init.iter());
+    let mut calc_defs = Defs::new(&to_init);
+    calc_defs.forward_pass(cfg);
+    let defs = calc_defs.def_locs;
+    // bound the number of iterations to converge arbitrarily
+    for _ in 0..5 {
+        for v in &to_init {
+            if init_sets[v].is_empty() || !defs.contains_key(v) {
+                continue;
+            }
+            let inv_inits = invert_map(&init_sets);
+            let the_def = &defs[v];
+            let mut hoist_v = Hoist::new(
+                env,
+                cfg,
+                v,
+                the_def.clone(),
+                &anticipated_inits,
+                doms,
+                &init_sets,
+                &inv_inits,
+                &unavailable_nodes,
+            );
+            hoist_v.backward_pass(cfg);
+            if hoist_v.var_inits != init_sets[v] {
+                changed = true;
+                assert!(hoist_v.var_inits.cdom(cfg, &init_sets[v]));
+                init_sets.insert(v.clone(), hoist_v.var_inits);
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    init_sets
 }
