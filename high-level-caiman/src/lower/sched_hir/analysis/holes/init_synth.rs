@@ -694,7 +694,7 @@ impl<'a> PassState for Hoist<'a> {
             self.mark.insert(loc.clone(), self.mark[&next[0]].clone());
             if matches!(self.anticipated_inits.get(&loc), Some(set) if set.contains(self.var))
                 && is_hole
-                && self.var_def.dom(&self.doms, &loc)
+                && self.var_def.dom(self.doms, &loc)
             {
                 let calc_here = self.dep_calc.calc(self.var, &loc);
                 if let Some(prev_calcs) = self.mark[&loc]
@@ -774,12 +774,12 @@ trait ForwardPass: PassState {
 }
 
 struct Defs<'a> {
-    to_init: &'a [String],
+    to_init: &'a HashSet<String>,
     def_locs: HashMap<String, Loc>,
 }
 
 impl<'a> Defs<'a> {
-    fn handle(&mut self, t: &dyn Hir, loc: Loc) {
+    fn handle(&mut self, t: &dyn Hir, loc: &Loc) {
         if let Some(defs) = t.get_defs() {
             for def in defs {
                 if self.to_init.contains(&def) {
@@ -794,7 +794,7 @@ impl<'a> Defs<'a> {
         }
     }
 
-    fn new(to_init: &'a [String]) -> Self {
+    fn new(to_init: &'a HashSet<String>) -> Self {
         Self {
             to_init,
             def_locs: HashMap::new(),
@@ -804,15 +804,76 @@ impl<'a> Defs<'a> {
 
 impl<'a> PassState for Defs<'a> {
     fn handle_terminator(&mut self, t: &Terminator, loc: Loc) {
-        self.handle(t, loc)
+        self.handle(t, &loc);
     }
 
     fn handle_body(&mut self, t: &HirBody, loc: Loc) {
-        self.handle(t, loc)
+        self.handle(t, &loc);
     }
 }
 
 impl<'a> ForwardPass for Defs<'a> {}
+
+/// Gets a map from variable to definition location
+/// for variables that are defined by a hole and have a node in the environment.
+struct HoleDefs<'a> {
+    env: &'a NodeEnv,
+    defs: HashMap<String, Loc>,
+}
+
+impl<'a> HoleDefs<'a> {
+    fn new(env: &'a NodeEnv) -> Self {
+        Self {
+            env,
+            defs: HashMap::new(),
+        }
+    }
+}
+
+impl<'a> PassState for HoleDefs<'a> {
+    fn handle_terminator(&mut self, _: &Terminator, _: Loc) {}
+
+    fn handle_body(&mut self, t: &HirBody, loc: Loc) {
+        if let HirBody::Hole { dests, .. } = t {
+            for dest in dests.iter().map(|(dest, _)| dest) {
+                if self.env.get_node_name(dest).is_some() {
+                    assert!(!self.defs.contains_key(dest));
+                    self.defs.insert(dest.clone(), loc.clone());
+                }
+            }
+        }
+    }
+}
+
+impl<'a> ForwardPass for HoleDefs<'a> {}
+
+/// Determines all the definitions by holes and the locations those definitions occur
+/// at, returning a mapping from hole-defined var to def location.
+///
+/// Also appends the initialization locations of these variables to `init_sets`
+fn append_static_hole_defs(
+    init_sets: &mut HashMap<String, HashSet<Loc>>,
+    cfg: &Cfg,
+    env: &NodeEnv,
+) -> HashMap<String, Loc> {
+    // take into account definitions of a hole.
+    let mut hole_defs = HoleDefs::new(env);
+    hole_defs.forward_pass(cfg);
+    let hole_defs = hole_defs.defs;
+    for (var, loc) in &hole_defs {
+        assert!(
+            !init_sets.contains_key(var)
+                || init_sets.get(var).map_or(false, |set| set.is_empty()
+                    || (set.len() == 1 && set.contains(loc)))
+        );
+        init_sets.insert(var.clone(), {
+            let mut hs = HashSet::new();
+            hs.insert(loc.clone());
+            hs
+        });
+    }
+    hole_defs
+}
 
 /// Optimizes the placement of holes in `init_sets` to reduce the amount of nodes
 /// we will need to recalculate.
@@ -821,6 +882,7 @@ impl<'a> ForwardPass for Defs<'a> {}
 /// The updated initializing set
 pub fn hoist_optimization(
     mut init_sets: HashMap<String, HashSet<Loc>>,
+    to_init: &HashSet<String>,
     cfg: &mut Cfg,
     env: &NodeEnv,
     doms: &DomInfo,
@@ -835,14 +897,14 @@ pub fn hoist_optimization(
         AnticipatedInits::top(&invert_map(&init_sets), anticipated_inits.clone()),
     );
     let anticipated_inits = anticipated_inits.take();
-    let to_init: Vec<_> = init_sets.keys().cloned().collect();
-    let unavailable_nodes = unavailable_nodes(cfg, env, &to_init.iter());
-    let mut calc_defs = Defs::new(&to_init);
+    let hole_defs = append_static_hole_defs(&mut init_sets, cfg, env);
+    let unavailable_nodes = unavailable_nodes(cfg, env, &to_init.iter().chain(hole_defs.keys()));
+    let mut calc_defs = Defs::new(to_init);
     calc_defs.forward_pass(cfg);
     let defs = calc_defs.def_locs;
     // bound the number of iterations to converge arbitrarily
     for _ in 0..5 {
-        for v in &to_init {
+        for v in to_init {
             if init_sets[v].is_empty() || !defs.contains_key(v) {
                 continue;
             }

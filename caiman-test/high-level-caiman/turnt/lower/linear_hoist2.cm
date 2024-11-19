@@ -17,8 +17,7 @@ sptl space(b: BufferSpace) -> BufferSpace {
 
 fn main(a: i32) -> i32 impls value, time, space {
     var z;
-    var x;
-    ???;
+    let x = ???;
     let y = if x > a {
         /* #CHECK-LABEL:
         name: FuncletId(

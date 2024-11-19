@@ -185,15 +185,15 @@ impl<'a> UninitCheck<'a> {
     /// * `maybe_uninit` - set of references and GPU variables to check to see if
     /// they're value is used before they're `usable`
     pub fn top(
-        mut maybe_uninit: HashSet<String>,
+        maybe_uninit: &HashSet<String>,
         inputs: &[(String, TripleTag)],
         env: &'a NodeEnv,
         dtypes: &'a HashMap<String, DataType>,
         init_sets: &'a HashMap<String, HashSet<Loc>>,
     ) -> Self {
-        maybe_uninit = maybe_uninit
+        let mut maybe_uninit: HashSet<_> = maybe_uninit
             .into_iter()
-            .map(|x| ssa_original_name(&x))
+            .map(|x| ssa_original_name(x))
             .collect();
         for i in 0..4 {
             maybe_uninit.remove(&format!("_dim{i}"));
@@ -371,16 +371,14 @@ pub fn set_hole_initializations(
     analyze(
         cfg,
         UninitCheck::top(
-            maybe_uninit,
+            &maybe_uninit,
             hir_inputs,
             val_env,
             &type_info.data_types,
             &initializers,
         ),
     )?;
-    // dbg!(&initializers);
-    let initializers = hoist_optimization(initializers, cfg, val_env, &dinfo);
-    // dbg!(&initializers);
+    let initializers = hoist_optimization(initializers, &maybe_uninit, cfg, val_env, &dinfo);
     fill_initializers(cfg, initializers);
     Ok(())
 }

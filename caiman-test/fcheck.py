@@ -243,5 +243,5 @@ with open(src_file) as f_src:
         if not success:
             st = "Found" if opt == "NOT" else "Failed to find"
             print(f"{st}:\n {txt}", file=sys.stderr)
-            print(f"\n\nWith regex:\n{regex}", file=sys.stderr)
+            # print(f"\n\nWith regex:\n{regex}", file=sys.stderr)
             exit(1)
