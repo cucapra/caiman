@@ -1,0 +1,67 @@
+val value(a: i32) -> i32 {
+    t :- a * 2
+    x :- t + t
+    z :- t + x
+    left :- x if 0 > a else x * 2
+    right :- x if 0 < a else x * 2
+    y :- left if 0 > a else right
+    returns y + z
+
+}
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(b: BufferSpace) -> BufferSpace {
+    returns b
+}
+
+fn main(a: i32) -> i32 impls value, time, space {
+    var z;
+    let y = if 0 > a {
+        if 0 > a {
+            ???
+        } else {
+            ???
+        }
+    } else {
+        let x = a * 2 + a * 2;
+        if 0 < a {
+            x
+        } else {
+            x * 2
+        }
+    };
+    /* #CHECK:
+    name: FuncletId(
+        "_main2",
+    ),
+    args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "_z%0_ref",
+                ),
+            ),
+            typ: TypeId(
+                "&i32",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: None,
+                        },
+                    ),
+                    flow: Filled(
+                        Dead,
+                    ),
+                },
+    #END */
+    ???;
+    y + z
+}

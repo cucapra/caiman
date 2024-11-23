@@ -249,8 +249,8 @@ impl<T: Kind, A: Kind> Node<T, A> {
     /// Gets the name of all classes which this node depends on, including the node itself
     /// # Args
     /// * `deps` - the set of dependencies to add nodes to
-    /// * `ignored_subtrees` - the set of class names that we ignore depending on and all
-    /// of the things they depend on.
+    /// * `ignored_subtrees` - the set of class names (with leading $)
+    ///     that we ignore depending on and all of the things they depend on.
     pub fn dependencies(&self, deps: &mut HashSet<String>, ignored_subtrees: &HashSet<String>) {
         match self {
             Self::Var {
@@ -304,7 +304,7 @@ impl<T: Kind, A: Kind> Node<T, A> {
 /// # Arguments
 /// - `ptr`: The node to clone.
 /// - `cloned_ptrs`: A map of pointers to cloned pointers. This is used to
-///  avoid cloning the same node multiple times.
+///     avoid cloning the same node multiple times.
 fn deep_clone<T: Kind, A: Kind>(
     ptr: &NodePtr<T, A>,
     cloned_ptrs: &mut HashMap<*const Node<T, A>, NodePtr<T, A>>,
@@ -1089,7 +1089,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// # Args
     /// * `node_name` - the name of the node to get dependencies for
     /// * `ignored_subtrees` - the set of class names that we ignore depending upon and all
-    /// of the nodes they depend upon.
+    ///     of the nodes they depend upon.
     pub fn dependencies(
         &self,
         node_name: &str,

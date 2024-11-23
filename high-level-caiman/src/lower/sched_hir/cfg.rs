@@ -198,13 +198,13 @@ pub struct Cfg {
 /// and incrementing the id counter. The current statements are cleared.
 /// # Arguments
 /// * `cur_id` - The id of the next block. For every new block created, this is incremented
-///  and thus always is the id of the next block.
+///     and thus always is the id of the next block.
 /// * `cur_stmt` - The list of scheduling statements that are part of this block.
 /// * `term` - The terminator for the block.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
-/// This is the next block in the parent stack frame.
+///     This is the next block in the parent stack frame.
 /// * `cont_block` - The block whose live-out set is the return arguments of this block. This is
-/// either the block itself (`None`), or the block's continuation.
+///     either the block itself (`None`), or the block's continuation.
 /// * `src_loc` - The source location of the block.
 /// # Returns
 /// The newly created basic block.
@@ -383,7 +383,7 @@ fn handle_return(
 /// * `false_block` - The list of scheduling statements for the false branch of the select.
 /// * `end_info` - The source location of the select statement.
 /// * `children` - The list of pending children to add to that will queue up the
-///  children of this block to be processed in the next BFS level.
+///     children of this block to be processed in the next BFS level.
 #[allow(clippy::too_many_arguments)]
 fn handle_select(
     cur_id: &mut usize,
@@ -502,14 +502,14 @@ fn handle_call(
 /// # Arguments
 /// * `block` - The sequence statement to handle.
 /// * `cur_stmts` - The list of scheduling statements to convert to blocks. Will be
-/// cleared for the continuation block.
+///     cleared for the continuation block.
 /// * `info` - The source location of the sequence statement.
 /// * `dests` - The list of variables to assign the return values to.
 /// * `cur_id` - The id of the next block. For every new block created, this is incremented
 ///   and thus always is the id of the next block.
 /// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
 /// * `children` - The list of pending children to add to that will queue up the
-/// children of this block to be processed in the next BFS level.
+///     children of this block to be processed in the next BFS level.
 /// * `last_info` - Will become the source location of the last statement in the sequence.
 #[allow(clippy::too_many_arguments)]
 fn handle_seq(
@@ -578,7 +578,7 @@ fn handle_seq(
 /// * `stmts` - The list of scheduling statements to convert to blocks.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
 /// * `ret_names` - The names of the return variables to write to in order to return
-///  from the current scope.
+///     from the current scope.
 #[allow(clippy::too_many_lines)]
 fn make_blocks(
     cur_id: &mut usize,

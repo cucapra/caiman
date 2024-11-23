@@ -409,7 +409,7 @@ fn collect_if(
 /// * `call_info` - The information about the call.
 /// * `info` - The source info of the call.
 /// * `arg_dest_prefix` - The prefix to add to the destination variables and arguments
-/// of the call. None if the call is not an encoded call.
+///     of the call. None if the call is not an encoded call.
 fn collect_assign_call(
     ctx: &Context,
     env: &mut DTypeEnv,

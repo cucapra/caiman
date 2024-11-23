@@ -78,7 +78,7 @@ impl<'a> EncodeTransform<'a> {
     /// # Arguments
     /// * `args` - The arguments to expand
     /// * `dt_getter` - A function that returns the datatype of an argument given the
-    /// argument name and the index of the argument in the list.
+    ///     argument name and the index of the argument in the list.
     /// # Returns
     /// A list of expanded arguments
     fn expand_arg_helper<T: Iterator<Item = (String, TripleTag)>>(
@@ -153,8 +153,8 @@ impl<'a> EncodeTransform<'a> {
     /// * `args` - The arguments to replace
     /// * `sig` - The signature of the target, excluding the template arguments
     /// * `num_dims` - The number of dimensional arguments of the target. Dimensional
-    /// arguments are copied as is to the new args since they must all be `i32`.
-    /// Furthermore, dimensional arguments are not expressed in the target signature.
+    ///     arguments are copied as is to the new args since they must all be `i32`.
+    ///     Furthermore, dimensional arguments are not expressed in the target signature.
     fn replace_call_args(
         &self,
         args: &[Hole<String>],

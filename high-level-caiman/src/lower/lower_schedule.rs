@@ -978,8 +978,8 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         } else {
             funclet.get_out_tag(name).cloned()
         };
-        t.map_or(
-            asm::Tag {
+        t.map_or_else(
+            || asm::Tag {
                 quot: Hole::Filled(asm::RemoteNodeId {
                     node: None,
                     funclet: SpecType::Timeline.get_meta_id(),

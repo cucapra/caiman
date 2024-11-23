@@ -1,0 +1,99 @@
+extern(cpu) pure foo() -> i32
+
+val value(a: i32) -> i32 {
+    t :- 2
+    h :- foo()
+    x :- t + h
+    z :- t + x
+    // note if `0 - x` didn't depend on `t`, then nothing would be hoisted
+    // since hoisting `z` to this position would require temporarily making things
+    // worse as we'd go from sharing `t` to needing to calculate `t`.
+    y :- 0 - x if 0 > a else x
+    returns y + z + t
+
+}
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(b: BufferSpace) -> BufferSpace {
+    returns b
+}
+
+fn main(a: i32) -> i32 impls value, time, space {
+    var z;
+    var t;
+    ???;
+    let y = if 0 > a {
+        /* #CHECK-LABEL:
+        name: FuncletId(
+            "_main3",
+        ),
+        args: [...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_t%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+        #END */
+        ???
+    } else {
+        ???
+    };
+    /* #CHECK-LABEL:
+    name: FuncletId(
+        "_main2",
+    ),
+    args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "_t%0_ref",
+                ),
+            ),
+            typ: TypeId(
+                "&i32",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "t",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+    #END */
+    ???;
+    y + z + t
+}

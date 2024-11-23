@@ -1,0 +1,2 @@
+Error: At "undefined_spec_var.cm" 8:16 - 8:17, 
+  Type Error: Undefined node 'C'

@@ -20,14 +20,16 @@
 //! an initializing set such that for any other initializing set, there exists a path
 //! requiring generation of a set of dependent nodes that is not a subset of the
 //! dependent nodes we need to generate. Colloqially, that is to say every other
-//! initializing set is potentially worse on some path.
+//! initializing set is potentially worse on some path. Since this is a statement
+//! with regards to a single variable, another way to think of this is that we
+//! find a local maxima without ever making things worse, even if temporarily doing
+//! so would result in a better solution overall.
 
 use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::{hash_map::Entry, HashMap, HashSet},
     rc::Rc,
-    usize,
 };
 
 use crate::{
@@ -37,7 +39,7 @@ use crate::{
         cfg::{can_reach_goal, Cfg, CollectiveDom, Loc, FINAL_BLOCK_ID, START_BLOCK_ID},
         Hir, HirBody, HirInstr, Terminator, TripleTag,
     },
-    parse::ast::{DataType, FullType},
+    parse::ast::{self, DataType, FullType},
     typing::{MetaVar, NodeEnv},
 };
 
@@ -275,6 +277,28 @@ fn get_val_uses(
                     }
                 }
             }
+            // allow annotations to tell us where something must be initialized
+            // We don't add this to `get_usable_uses` more generally bc I don't think we
+            // need to and it doesn't fit with handling in-annotations
+            let mut add_annot_use = |tags: &[(String, TripleTag)], loc: Loc| {
+                for (var, tag) in tags {
+                    if to_init.contains(var)
+                        && !matches!(tag.value.quot, Some(ast::Quotient::None))
+                        && matches!(tag.value.flow, Some(ast::Flow::Usable))
+                    {
+                        res.entry(var.clone()).or_default().insert(loc.clone());
+                    }
+                }
+            };
+            if let HirInstr::Stmt(HirBody::OutAnnotation(_, tags)) = instr {
+                add_annot_use(tags, Loc(*block_id, local_id));
+            }
+            if let HirInstr::Stmt(HirBody::InAnnotation(_, tags)) = instr {
+                add_annot_use(tags, Loc(*block_id, 0));
+                for pred in &cfg.succs.preds[block_id] {
+                    add_annot_use(tags, Loc(*pred, usize::MAX));
+                }
+            }
         }
     }
     for (v, loc) in defs {
@@ -305,6 +329,7 @@ fn unavailable_nodes<'a, T: Iterator<Item = &'a String> + Clone>(
     cfg: &Cfg,
     env: &NodeEnv,
     to_init: &T,
+    uninit: &HashSet<String>,
 ) -> UnavailableNodes {
     let mut res = HashMap::new();
     for block in cfg.blocks.values() {
@@ -316,7 +341,12 @@ fn unavailable_nodes<'a, T: Iterator<Item = &'a String> + Clone>(
                         let node_name = MetaVar::new_class_name(&node);
                         unavailable.insert(
                             var.clone(),
-                            env.unavailable_nodes(&node_name, uses.processed().iter()),
+                            env.unavailable_nodes(
+                                &node_name,
+                                // we ignore the variable we're trying to initialize
+                                // TODO: we can count them if their initializations dominate this location...
+                                uses.processed().iter().filter(|&u| !uninit.contains(u)),
+                            ),
                         );
                     }
                 }
@@ -344,7 +374,7 @@ impl<'a> AnticipatedInits<'a> {
     /// # Args
     /// * `inits` - map from hole location to set of variables initialized there
     /// * `output` - result map which will store map of hole locations to variables whose
-    /// initialization is anticipated.
+    ///     initialization is anticipated.
     pub fn top(
         inits: &'a HashMap<Loc, HashSet<String>>,
         output: Rc<RefCell<HashMap<Loc, HashSet<String>>>>,
@@ -480,7 +510,17 @@ impl<T: std::hash::Hash + Eq> FractionalMultiSet<T> {
                 return false;
             }
         }
-        better
+        // at this point, we know that self \subseteq other
+        if better {
+            return true;
+        }
+        for entry in other.map.keys() {
+            if !self.map.contains_key(entry) {
+                return true;
+            }
+        }
+        // self = other
+        false
     }
 
     fn intersect(self, other: &Self) -> Self {
@@ -579,6 +619,8 @@ impl<'a> DependencyCalc<'a> {
     }
 }
 
+/// A backwards pass that hoists variable initializations up in the cfg
+/// to locations that would require initializing fewer variables.
 #[derive(Clone)]
 struct Hoist<'a> {
     cfg: &'a Cfg,
@@ -593,6 +635,8 @@ struct Hoist<'a> {
     anticipated_inits: &'a HashMap<Loc, HashSet<String>>,
     doms: &'a DomInfo,
     dep_calc: DependencyCalc<'a>,
+    /// no location that precedes any of these can be hoisted to
+    freezes: &'a HashSet<Loc>,
 }
 
 impl<'a> Hoist<'a> {
@@ -607,6 +651,7 @@ impl<'a> Hoist<'a> {
         inits: &'a HashMap<String, HashSet<Loc>>,
         inv_inits: &'a HashMap<Loc, HashSet<String>>,
         unavailable_nodes: &'a UnavailableNodes,
+        freezes: &'a HashSet<Loc>,
     ) -> Self {
         Self {
             cfg,
@@ -617,12 +662,70 @@ impl<'a> Hoist<'a> {
             doms,
             var_inits: inits[var].clone(),
             var_def,
+            freezes,
             dep_calc: DependencyCalc {
                 env,
                 inv_inits,
                 unavailable_nodes,
                 cache: HashMap::new(),
             },
+        }
+    }
+}
+
+impl<'a> Hoist<'a> {
+    /// Marks the current location as an initialization point if the multi-set of
+    /// nodes we have to calculate at the current location is a subset of the nodes
+    /// of `self.mark[&loc]`
+    ///
+    /// Requires that `loc` is a hole and `self.mark[&loc]` is set.
+    fn mark_cur_loc_if_better(&mut self, loc: Loc) {
+        if matches!(self.anticipated_inits.get(&loc), Some(set) if set.contains(self.var))
+            && self.var_def.dom(self.doms, &loc)
+        {
+            for freeze_loc in self.freezes {
+                if loc.lte(self.cfg, freeze_loc) {
+                    // user says variable is dead here
+                    return;
+                }
+            }
+            let calc_here = self.dep_calc.calc(self.var, &loc);
+            if let Some(prev_calcs) = self.mark[&loc]
+                .1
+                .iter()
+                .map(|loc| self.dep_calc.calc(self.var, loc))
+                .next()
+            {
+                let mut prev_calcs = (*prev_calcs).clone();
+                for marked_loc in self.mark[&loc]
+                    .1
+                    .iter()
+                    .skip(1)
+                    .map(|loc| self.dep_calc.calc(self.var, loc))
+                {
+                    prev_calcs = prev_calcs.intersect(&marked_loc);
+                }
+                if calc_here.subset(&prev_calcs) {
+                    self.mark.insert(loc.clone(), {
+                        let mut hs = HashSet::new();
+                        hs.insert(loc.clone());
+                        (loc.clone(), hs)
+                    });
+                    let mut to_remove: SmallVec<[_; 8]> = smallvec![];
+                    for init_loc in &self.var_inits {
+                        if loc.dom(self.doms, init_loc) {
+                            to_remove.push(init_loc.clone());
+                        }
+                    }
+                    let should_insert = !to_remove.is_empty();
+                    while let Some(to_rem) = to_remove.pop() {
+                        self.var_inits.remove(&to_rem);
+                    }
+                    if should_insert {
+                        self.var_inits.insert(loc);
+                    }
+                }
+            }
         }
     }
 }
@@ -664,10 +767,11 @@ impl<'a> PassState for Hoist<'a> {
                             to_remove.push(loc.clone());
                         }
                     }
+                    let should_insert = !to_remove.is_empty();
                     while let Some(loc) = to_remove.pop() {
                         self.var_inits.remove(&loc);
                     }
-                    if !to_remove.is_empty() {
+                    if should_insert {
                         self.var_inits.extend(mark_cur.iter().cloned());
                     }
                 }
@@ -692,44 +796,8 @@ impl<'a> PassState for Hoist<'a> {
             let next = loc.succs(self.cfg);
             assert_eq!(next.len(), 1);
             self.mark.insert(loc.clone(), self.mark[&next[0]].clone());
-            if matches!(self.anticipated_inits.get(&loc), Some(set) if set.contains(self.var))
-                && is_hole
-                && self.var_def.dom(self.doms, &loc)
-            {
-                let calc_here = self.dep_calc.calc(self.var, &loc);
-                if let Some(prev_calcs) = self.mark[&loc]
-                    .1
-                    .iter()
-                    .map(|loc| self.dep_calc.calc(self.var, loc))
-                    .next()
-                {
-                    let mut prev_calcs = (*prev_calcs).clone();
-                    for marked_loc in self.mark[&loc]
-                        .1
-                        .iter()
-                        .skip(1)
-                        .map(|loc| self.dep_calc.calc(self.var, loc))
-                    {
-                        prev_calcs = prev_calcs.intersect(&marked_loc);
-                    }
-                    if calc_here.subset(&prev_calcs) {
-                        self.mark.insert(loc.clone(), {
-                            let mut hs = HashSet::new();
-                            hs.insert(loc.clone());
-                            (loc.clone(), hs)
-                        });
-                        let mut to_remove: SmallVec<[_; 8]> = smallvec![];
-                        for init_loc in &self.var_inits {
-                            if loc.dom(self.doms, init_loc) {
-                                to_remove.push(init_loc.clone());
-                            }
-                        }
-                        while let Some(to_rem) = to_remove.pop() {
-                            self.var_inits.remove(&to_rem);
-                        }
-                        self.var_inits.insert(loc);
-                    }
-                }
+            if is_hole {
+                self.mark_cur_loc_if_better(loc);
             }
         }
     }
@@ -773,6 +841,7 @@ trait ForwardPass: PassState {
     }
 }
 
+/// A pass that finds the definition locations of all variables we need to initialize.
 struct Defs<'a> {
     to_init: &'a HashSet<String>,
     def_locs: HashMap<String, Loc>,
@@ -898,10 +967,16 @@ pub fn hoist_optimization(
     );
     let anticipated_inits = anticipated_inits.take();
     let hole_defs = append_static_hole_defs(&mut init_sets, cfg, env);
-    let unavailable_nodes = unavailable_nodes(cfg, env, &to_init.iter().chain(hole_defs.keys()));
+    let unavailable_nodes =
+        unavailable_nodes(cfg, env, &to_init.iter().chain(hole_defs.keys()), to_init);
     let mut calc_defs = Defs::new(to_init);
     calc_defs.forward_pass(cfg);
     let defs = calc_defs.def_locs;
+    let mut freezes = HoistFreezes::default();
+    freezes.forward_pass(cfg);
+    let freezes = freezes.freezes;
+    let empty = HashSet::new();
+
     // bound the number of iterations to converge arbitrarily
     for _ in 0..5 {
         for v in to_init {
@@ -920,6 +995,7 @@ pub fn hoist_optimization(
                 &init_sets,
                 &inv_inits,
                 &unavailable_nodes,
+                freezes.get(v).unwrap_or(&empty),
             );
             hoist_v.backward_pass(cfg);
             if hoist_v.var_inits != init_sets[v] {
@@ -934,3 +1010,36 @@ pub fn hoist_optimization(
     }
     init_sets
 }
+
+/// Calculates the locations where we cannot hoist to any predecessor. This is
+/// caused by a user manually adding a `dead` type annotation.
+#[derive(Default)]
+struct HoistFreezes {
+    freezes: HashMap<String, HashSet<Loc>>,
+}
+
+impl PassState for HoistFreezes {
+    fn handle_terminator(&mut self, _: &Terminator, _: Loc) {}
+
+    fn handle_body(&mut self, t: &HirBody, loc: Loc) {
+        let mut add_to_freezes = |tags: &[(String, TripleTag)], loc: Loc| {
+            for (var, tag) in tags {
+                if (tag.value.quot.is_none() || tag.value.quot == Some(ast::Quotient::None))
+                    && tag.value.flow == Some(ast::Flow::Dead)
+                {
+                    self.freezes
+                        .entry(var.clone())
+                        .or_default()
+                        .insert(loc.clone());
+                }
+            }
+        };
+        match t {
+            HirBody::InAnnotation(_, tags) => add_to_freezes(tags, Loc(loc.0, 0)),
+            HirBody::OutAnnotation(_, tags) => add_to_freezes(tags, Loc(loc.0, usize::MAX)),
+            _ => (),
+        }
+    }
+}
+
+impl ForwardPass for HoistFreezes {}

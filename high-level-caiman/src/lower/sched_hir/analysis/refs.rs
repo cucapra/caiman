@@ -322,8 +322,8 @@ fn unref_type(typ: &DataType) -> DataType {
 /// * `names` - the current name versions for each variable
 /// * `types` - the types of each variable
 /// * `insertions` - a list of insertions to make to the basic block. A list of
-/// tuples of the insertion index (wrt the unmodified list of instructions)
-/// and the instruction to insert.
+///     tuples of the insertion index (wrt the unmodified list of instructions)
+///     and the instruction to insert.
 /// * `id` - the basic block id
 /// * `name` - the name of the variable to insert a deref instruction for
 fn insert_deref_if_needed(
@@ -360,8 +360,8 @@ fn insert_deref_if_needed(
 /// * `names` - the current name versions for each variable
 /// * `types` - the types of each variable
 /// * `insertions` - a list of insertions to make to the basic block. A list of
-/// tuples of the insertion index (wrt the unmodified list of instructions)
-/// and the instruction to insert.
+///     tuples of the insertion index (wrt the unmodified list of instructions)
+///     and the instruction to insert.
 /// * `last_deref` - the last derefed version for each variable
 #[allow(clippy::too_many_arguments)]
 fn deref_transform_instr(

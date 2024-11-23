@@ -1,7 +1,7 @@
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
-#![allow(clippy::unused_self, clippy::option_option)]
+#![allow(clippy::unused_self, clippy::option_option, clippy::too_long_first_doc_paragraph)]
 use std::collections::{BTreeSet, HashMap};
 use std::iter;
 

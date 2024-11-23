@@ -168,7 +168,7 @@ where
                         .collect();
                 }
                 new_dom.insert(*block);
-                if new_dom != *doms.get(block).unwrap_or(&HashSet::new()) {
+                if !doms.contains_key(block) || new_dom != doms[block] {
                     doms.insert(*block, new_dom);
                     changed = true;
                 }

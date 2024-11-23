@@ -89,7 +89,7 @@ impl<'a> FillHoleDefs<'a> {
     /// ## Args
     /// * `data` - current program point
     /// * `init_var` - function to call if an undefined or uninitialized variable can
-    /// be defined/initialized here
+    ///     be defined/initialized here
     fn process_vars(&mut self, data: &TransferData, mut init_var: impl FnMut(String)) {
         let mut to_rem = vec![];
         let dominated = self.dom.dominated(data.block_id);
@@ -183,7 +183,7 @@ struct UninitCheck<'a> {
 impl<'a> UninitCheck<'a> {
     /// # Arguments
     /// * `maybe_uninit` - set of references and GPU variables to check to see if
-    /// they're value is used before they're `usable`
+    ///     they're value is used before they're `usable`
     pub fn top(
         maybe_uninit: &HashSet<String>,
         inputs: &[(String, TripleTag)],
@@ -191,10 +191,8 @@ impl<'a> UninitCheck<'a> {
         dtypes: &'a HashMap<String, DataType>,
         init_sets: &'a HashMap<String, HashSet<Loc>>,
     ) -> Self {
-        let mut maybe_uninit: HashSet<_> = maybe_uninit
-            .into_iter()
-            .map(|x| ssa_original_name(x))
-            .collect();
+        let mut maybe_uninit: HashSet<_> =
+            maybe_uninit.iter().map(|x| ssa_original_name(x)).collect();
         for i in 0..4 {
             maybe_uninit.remove(&format!("_dim{i}"));
         }
@@ -221,7 +219,7 @@ impl<'a> PartialEq for UninitCheck<'a> {
 /// Get's the uses of a statement that must be value `usable`
 /// # Arguments
 /// * `on_remove` - a callback invoked when a variable is removed from the use set during
-/// computation of the `usable` use set
+///     computation of the `usable` use set
 fn get_usable_uses(
     stmt: &HirInstr,
     env: &NodeEnv,

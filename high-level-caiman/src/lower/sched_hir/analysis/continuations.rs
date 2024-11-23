@@ -79,7 +79,7 @@ where
                         .collect();
                 }
                 new_preds.insert(*block);
-                if new_preds != *pred_map.get(block).unwrap_or(&HashSet::new()) {
+                if !pred_map.contains_key(block) || new_preds != pred_map[block] {
                     pred_map.insert(*block, new_preds);
                     changed = true;
                 }

@@ -131,13 +131,13 @@ fn is_single_return_builtin(fn_name: &str) -> bool {
 /// to a function call.
 /// # Panics
 /// Panics if the arguments are not lowered to variables
-fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Vec<String> {
+fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Vec<(String, Info)> {
     let mut arg_nodes: Vec<_> = args
         .iter()
         .map(|arg| {
             let t = enum_cast!(SpecExpr::Term, arg);
-            let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-            name.to_string()
+            let (name, info) = enum_cast!(SpecTerm::Var { name, info }, (name, info), t);
+            (name.to_string(), *info)
         })
         .collect();
     if let Some(TemplateArgs::Vals(vs)) = templates {
@@ -145,8 +145,8 @@ fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Ve
             .iter()
             .map(|arg| {
                 let t = enum_cast!(SpecExpr::Term, arg);
-                let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-                name.to_string()
+                let (name, info) = enum_cast!(SpecTerm::Var { name, info }, (name, info), t);
+                (name.to_string(), *info)
             })
             .collect();
         res.extend(arg_nodes);
@@ -166,6 +166,7 @@ fn collect_spec_assign_call(
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<String, LocalError> {
     if let SpecExpr::Term(SpecTerm::Var {
         name: func_name, ..
@@ -174,6 +175,11 @@ fn collect_spec_assign_call(
         let (input_types, output_types) =
             get_target_signature(func_name, signatures, args, lhs.len(), info)?;
         let arg_nodes = get_call_arguments(args, templates);
+        for (arg, arg_info) in &arg_nodes {
+            if !defined_nodes.contains(arg) {
+                return Err(type_error!(*arg_info, "Undefined node '{arg}'"));
+            }
+        }
         let single_ret_builtin = is_single_return_builtin(func_name);
         assert!(!single_ret_builtin || lhs.len() == 1);
         let tuple_name = if single_ret_builtin {
@@ -188,7 +194,7 @@ fn collect_spec_assign_call(
                     func_name.clone(),
                     arg_nodes
                         .iter()
-                        .map(|x| MetaVar::new_class_name(x))
+                        .map(|(x, _)| MetaVar::new_class_name(x))
                         .collect(),
                 ),
             );
@@ -199,7 +205,7 @@ fn collect_spec_assign_call(
                     func_name.clone(),
                     arg_nodes
                         .iter()
-                        .map(|x| MetaVar::new_class_name(x))
+                        .map(|(x, _)| MetaVar::new_class_name(x))
                         .collect(),
                 ),
             );
@@ -223,13 +229,15 @@ fn collect_spec_assign_call(
             }
         }
         let num_dims = dimensions.get(func_name).copied().unwrap_or(0);
-        for arg_name in arg_nodes.iter().take(num_dims) {
+        for (arg_name, arg_info) in arg_nodes.iter().take(num_dims) {
             ctx.types
-                .add_dtype_constraint(arg_name, DataType::Int(IntSize::I32), info)?;
+                .add_dtype_constraint(arg_name, DataType::Int(IntSize::I32), *arg_info)?;
         }
-        for (arg_name, arg_type) in arg_nodes.iter().skip(num_dims).zip(input_types.iter()) {
+        for ((arg_name, arg_info), arg_type) in
+            arg_nodes.iter().skip(num_dims).zip(input_types.iter())
+        {
             ctx.types
-                .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
+                .add_dtype_constraint(arg_name, arg_type.base.clone(), *arg_info)?;
         }
         Ok(func_name.clone())
     } else {
@@ -248,6 +256,7 @@ fn collect_spec_assign_term(
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
     called_specs: &mut HashSet<String>,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
@@ -284,7 +293,15 @@ fn collect_spec_assign_term(
             ..
         } => {
             let r = collect_spec_assign_call(
-                lhs, function, args, templates, ctx, signatures, dimensions, *info,
+                lhs,
+                function,
+                args,
+                templates,
+                ctx,
+                signatures,
+                dimensions,
+                *info,
+                defined_nodes,
             )?;
             called_specs.insert(r);
             Ok(())
@@ -307,16 +324,32 @@ fn collect_spec_assign_if(
     guard: &SpecExpr,
     ctx: &mut SpecEnvs,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     if let (
-        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
-        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name1,
+            info: info1,
+        }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name2,
+            info: info2,
+        }),
         SpecExpr::Term(SpecTerm::Var {
             name: guard,
             info: g_info,
         }),
     ) = (if_true, if_false, guard)
     {
+        if !defined_nodes.contains(name1) {
+            return Err(type_error!(*info1, "Undefined node '{name1}'"));
+        }
+        if !defined_nodes.contains(name2) {
+            return Err(type_error!(*info2, "Undefined node '{name2}'"));
+        }
+        if !defined_nodes.contains(guard) {
+            return Err(type_error!(*g_info, "Undefined node '{guard}'"));
+        }
         ctx.types
             .add_dtype_constraint(guard, DataType::Bool, *g_info)?;
         ctx.types.add_var_equiv(name1, name2, info)?;
@@ -346,6 +379,7 @@ fn collect_spec_assign_if(
 /// # Panics
 /// Panics if the statement is not lowered or it uses a variable that is
 /// undefined (i.e. not present in `names`).
+#[allow(clippy::too_many_arguments)]
 fn collect_spec_assign_bop(
     op_l: &SpecExpr,
     op_r: &SpecExpr,
@@ -354,12 +388,25 @@ fn collect_spec_assign_bop(
     lhs: &[(String, Option<DataType>)],
     ctx: &mut SpecEnvs,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     if let (
-        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
-        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name1,
+            info: info1,
+        }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name2,
+            info: info2,
+        }),
     ) = (op_l, op_r)
     {
+        if !defined_nodes.contains(name1) {
+            return Err(type_error!(*info1, "Undefined node '{name1}'"));
+        }
+        if !defined_nodes.contains(name2) {
+            return Err(type_error!(*info2, "Undefined node '{name2}'"));
+        }
         let (left_constraint, right_constraint, ret_constraint) =
             binop_to_contraints(op, &mut ctx.types.env);
         ctx.types
@@ -440,6 +487,7 @@ fn collect_spec_returns(
     ctx: &SpecInfo,
     e: &SpecExpr,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     env.nodes.set_output_classes(&ctx.sig);
     match e {
@@ -477,8 +525,15 @@ fn collect_spec_returns(
             }
             let mut constraints = vec![];
             for (r, out) in rets.iter().zip(ctx.sig.output.iter()) {
-                if let SpecExpr::Term(SpecTerm::Var { name, .. }) = r {
+                if let SpecExpr::Term(SpecTerm::Var {
+                    name,
+                    info: name_info,
+                }) = r
+                {
                     constraints.push((name, out.clone()));
+                    if !defined_nodes.contains(name) {
+                        return Err(type_error!(*name_info, "Undefined node '{name}'"));
+                    }
                 } else {
                     panic!("Not lowered")
                 }
@@ -513,9 +568,9 @@ impl SpecEnvs {
 /// # Arguments
 /// * `stmts` - the statements to scan
 /// * `externs` - a set of all extern operations used in `stmts`. This is updated
-/// as we scan `stmts` for all new extern operations.
+///     as we scan `stmts` for all new extern operations.
 /// * `types` - a map from variable names to their types. This is updated as
-/// we scan `stmts` for all new variables.
+///     we scan `stmts` for all new variables.
 /// * `signatures` - a map from spec names to their signatures
 pub(super) fn collect_spec(
     stmts: &Vec<SpecStmt>,
@@ -539,6 +594,7 @@ pub(super) fn collect_spec(
                         signatures,
                         dimensions,
                         &mut called_specs,
+                        &names,
                     )?;
                 }
                 SpecExpr::Conditional {
@@ -546,7 +602,9 @@ pub(super) fn collect_spec(
                     guard,
                     if_false,
                     info,
-                } => collect_spec_assign_if(lhs, if_true, if_false, guard, &mut env, *info)?,
+                } => {
+                    collect_spec_assign_if(lhs, if_true, if_false, guard, &mut env, *info, &names)?;
+                }
                 SpecExpr::Binop {
                     op,
                     lhs: op_l,
@@ -560,11 +618,12 @@ pub(super) fn collect_spec(
                     lhs,
                     &mut env,
                     *info,
+                    &names,
                 )?,
 
                 SpecExpr::Uop { .. } => todo!(),
             },
-            SpecStmt::Returns(info, e) => collect_spec_returns(&mut env, ctx, e, *info)?,
+            SpecStmt::Returns(info, e) => collect_spec_returns(&mut env, ctx, e, *info, &names)?,
         }
     }
     resolve_types(&env.types, &names, ctx)?;

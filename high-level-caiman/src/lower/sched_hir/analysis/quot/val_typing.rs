@@ -432,11 +432,11 @@ fn unify_op(
 /// * `dest` - The name of the phi node
 /// * `inputs` - The inputs to the phi node
 /// * `pretinuations` - A map from each block to the block that contains the split point
-/// for that block
+///     for that block
 /// * `cfg` - The cfg
 /// * `block` - The block that contains the phi node
 /// * `selects` - A map from each block with a select node to the name of the variable
-/// which maps to the select node. Updated by this function.
+///     which maps to the select node. Updated by this function.
 /// * `env` - The current environment
 fn unify_phi(
     dest: &str,
@@ -806,7 +806,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
 /// * `cfg` - The cfg (mutated)
 /// * `specs` - The specs
 /// * `selects` - A map from each block with a select node to the name of the spec variable
-/// which maps to the select node.
+///     which maps to the select node.
 fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<String>>) {
     // eprintln!("{env:#?}");
     for block in cfg.blocks.values_mut() {

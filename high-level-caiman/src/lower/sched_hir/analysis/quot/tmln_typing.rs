@@ -261,8 +261,8 @@ fn unify_nodes(
 /// * `cfg` - The control flow graph
 /// * `env` - The current environment
 /// * `first_last_events` - The map from block id to the list of local events. Index i
-/// of this vector is the local event right after the `i + 1` instruction in the block.
-/// So index 0 is the implicit input and the last index is the implicit output.
+///     of this vector is the local event right after the `i + 1` instruction in the block.
+///     So index 0 is the implicit input and the last index is the implicit output.
 fn into_input_output_annotations(
     cfg: &Cfg,
     env: &NodeEnv,
@@ -386,11 +386,11 @@ impl<'a> ImplicitAnnotations<'a> {
 /// * `bb` - The basic block to unify
 /// * `env` - The current environment
 /// * `last_loc` - The last local event number along the current path through
-/// the CFG
+///     the CFG
 /// * `latest_loc` - The last used local event number globally for the entire
-/// CFG
+///     CFG
 /// * `output_annotations` - Will be pushed with annotations for the final
-/// local event
+///     local event
 /// # Returns
 /// The updated environment
 /// # Errors
@@ -566,9 +566,9 @@ fn unify_instrs(
 /// * `bb` - The basic block to unify
 /// * `env` - The current environment
 /// * `last_loc` - The last local event number along the current path through
-/// the CFG
+///     the CFG
 /// * `latest_loc` - The last used local event number globally for the entire
-/// CFG
+///     CFG
 /// * `dtypes` - The data types of the variables in the program
 /// * `ctx` - The context of the program
 /// # Returns

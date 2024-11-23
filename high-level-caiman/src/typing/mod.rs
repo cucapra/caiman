@@ -136,6 +136,7 @@ impl NodeEnv {
     ) -> HashSet<String> {
         let ignored_subtrees = reaching_defs
             .filter_map(|x| self.get_node_name(x))
+            .map(|x| MetaVar::new_class_name(&x).into_string())
             .collect();
         self.env.dependencies(node_name.get(), &ignored_subtrees)
     }
@@ -193,9 +194,9 @@ impl NodeEnv {
     /// # Arguments
     /// * `outputs` - An iterator over the output types and their tags.
     /// * `filter` - A filter function that returns true if the output should
-    /// be considered.
+    ///     be considered.
     /// * `offset` - The number of spec outputs to skip when matching function outputs.
-    /// This is for implicit output parameters.
+    ///     This is for implicit output parameters.
     pub fn override_output_classes<'a, T: Iterator<Item = (&'a DataType, &'a Tag)>>(
         &mut self,
         outputs: T,
@@ -604,6 +605,7 @@ pub struct SchedInfo {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum SchedOrExtern {
     Sched(SchedInfo),
     Extern(Signature),

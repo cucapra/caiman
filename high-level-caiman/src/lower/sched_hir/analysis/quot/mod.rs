@@ -155,7 +155,7 @@ fn add_type_annot(
 /// * `specs` - The specs
 /// * `spec_type` - The type of the spec node
 /// * `skip_if_filled` - If true, the function will not fill the tag if it is already filled
-/// with a value that conflicts with the information in `env`.
+///     with a value that conflicts with the information in `env`.
 /// # Panics
 /// If the quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
