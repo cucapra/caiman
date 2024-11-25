@@ -17,7 +17,7 @@ use crate::{
     },
     parse::ast::{DataType, Flow, FullType},
     type_error,
-    typing::{MetaVar, NodeEnv},
+    typing::{NodeEnv, VarName},
 };
 
 use super::{
@@ -153,16 +153,12 @@ fn get_potentially_uninit_vars(
     flags: &HashMap<String, BufferFlags>,
 ) -> HashSet<String> {
     let mut to_init = HashSet::new();
-    let mut deps: HashMap<_, Vec<_>> = HashMap::new();
 
     for ssa_var in env.get_sched_vars() {
-        let var = ssa_original_name(ssa_var);
-        if let (Some(node_name), Some(typ)) = (env.get_node_name(ssa_var), data_types.get(&var)) {
+        let var = ssa_original_name(ssa_var.get_name());
+        if let Some(typ) = data_types.get(&var) {
             if matches!(typ, DataType::Ref(_)) || flags.contains_key(&var) {
-                to_init.insert(ssa_var.clone());
-                for dep in env.dependencies(&MetaVar::new_class_name(&node_name)) {
-                    deps.entry(dep).or_default().push(ssa_var.clone());
-                }
+                to_init.insert(ssa_var.get_name().to_owned());
             }
         }
     }
@@ -253,11 +249,13 @@ fn get_usable_uses(
         HirInstr::Tail(Terminator::CaptureCall { dests, .. }) => {
             // special handling for calls, which are currently the only way for a reference to be
             // used (in the traditional compilers sense) without consuming it
-            let t = tuple_id(&dests.iter().map(|(nm, _)| nm.clone()).collect::<Vec<_>>());
+            let t = VarName::new(tuple_id(
+                &dests.iter().map(|(nm, _)| nm.clone()).collect::<Vec<_>>(),
+            ));
             if let Some(class_name) = env.get_node_name(&t) {
-                let deps = env.dependencies(&MetaVar::new_class_name(&class_name));
+                let deps = env.dependencies(&class_name);
                 uses.retain(|u| {
-                    env.get_node_name(u)
+                    env.get_node_name(VarName::new_ref(u))
                         .map_or(false, |node| deps.contains(&node))
                 });
             } else {
@@ -265,7 +263,7 @@ fn get_usable_uses(
                 uses.clear();
             }
             for (d, _) in dests {
-                if env.get_node_name(d).is_some() {
+                if env.get_node_name(VarName::new_ref(d)).is_some() {
                     uses.remove(d);
                     on_remove(d);
                 }

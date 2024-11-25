@@ -7,6 +7,7 @@ pub use tmln_typing::deduce_tmln_quots;
 pub use val_typing::deduce_val_quots;
 pub use val_typing::{fill_fn_input_overrides, fill_val_quots};
 
+use crate::typing::{ClassName, UTypeName, VarName};
 use crate::{
     error::{hir_to_source_name, Info, LocalError},
     lower::sched_hir::{cfg::START_BLOCK_ID, TripleTag},
@@ -29,7 +30,7 @@ fn add_constraint(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_constraint(lhs, rhs).map_err(|e| {
+    env.add_constraint(lhs.into(), rhs).map_err(|e| {
         type_error!(
             info,
             "Failed to unify node constraints of '{}':\n {e}",
@@ -61,7 +62,7 @@ fn add_overrideable_constraint(
         return Ok(env);
     }
     if let Some(annot) = &dimension_getter(lhs_tag).quot_var.spec_var {
-        if let Some(class_constraint) = env.get_spec_node(annot) {
+        if let Some(class_constraint) = env.get_spec_node(&ClassName::new(annot)) {
             if !class_constraint.alpha_equiv(&From::from(rhs)) {
                 return Ok(env);
             }
@@ -85,7 +86,7 @@ fn add_var_constraint(
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_var_eq(lhs, var).map_err(|e| {
+    env.add_var_eq(lhs.into(), var.into()).map_err(|e| {
         type_error!(
             info,
             "Failed to unify '{}' with '{}':\n {e}",
@@ -106,18 +107,20 @@ fn add_var_constraint(
 /// The updated environment
 #[allow(clippy::unnecessary_wraps)]
 fn add_node_eq(
-    name: &str,
-    class_name: &str,
+    name: &VarName,
+    class_name: &ClassName,
     info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    env.add_node_eq(name, class_name).map_err(|e| {
-        type_error!(
-            info,
-            "Failed to unify '{}' with node '{class_name}':\n {e}",
-            hir_to_source_name(name)
-        )
-    })?;
+    env.add_node_eq(name.clone(), class_name.clone())
+        .map_err(|e| {
+            type_error!(
+                info,
+                "Failed to unify '{}' with node '{}':\n {e}",
+                hir_to_source_name(name.get_name()),
+                class_name.get_name()
+            )
+        })?;
     Ok(env)
 }
 
@@ -137,7 +140,7 @@ fn add_type_annot(
     dimension_getter: &dyn Fn(&TripleTag) -> &Tag,
 ) -> Result<NodeEnv, LocalError> {
     if let Some(class_name) = &dimension_getter(annot).quot_var.spec_var {
-        add_node_eq(name, class_name, info, env)
+        add_node_eq(&name.into(), &ClassName::new(class_name), info, env)
     } else {
         Ok(env)
     }
@@ -160,7 +163,7 @@ fn add_type_annot(
 /// If the quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
 fn fill_quotient(
-    name: &str,
+    name: &dyn UTypeName,
     tag: &mut TripleTag,
     env: &NodeEnv,
     block_id: usize,
@@ -174,14 +177,16 @@ fn fill_quotient(
         let old_spec_var = tag_getter(tag).quot_var.spec_var.as_ref();
         if !skip_if_filled {
             assert!(
-                old_spec_var.is_none() || old_spec_var.unwrap() == &node,
-                "Cannot fill {spec_type:?} {name} node {node} into {}",
+                old_spec_var.is_none() || old_spec_var.unwrap() == node.get_name(),
+                "Cannot fill {spec_type:?} {} node {} into {}",
+                name.as_metavar().get_raw(),
+                node.get_name(),
                 old_spec_var.unwrap()
             );
         }
         #[allow(clippy::unnecessary_unwrap)]
         let node = if skip_if_filled && old_spec_var.is_some() {
-            old_spec_var.unwrap().clone()
+            ClassName::new(old_spec_var.unwrap())
         } else {
             node
         };
@@ -194,7 +199,7 @@ fn fill_quotient(
                 }
             })),
             quot_var: QuotientReference {
-                spec_var: Some(node),
+                spec_var: Some(node.get_name().to_owned()),
                 spec_type,
             },
             flow,

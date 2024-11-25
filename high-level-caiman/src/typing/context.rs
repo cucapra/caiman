@@ -18,7 +18,7 @@ use caiman::ir;
 
 use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
-use super::types::DTypeConstraint;
+use super::types::{DTypeConstraint, UTypeName, VarName};
 use super::{
     sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo, SchedOrExtern, Signature,
     SpecInfo, SpecType, TypedBinop,
@@ -267,7 +267,7 @@ fn resolve_types(
     flags: &mut HashMap<String, ir::BufferFlags>,
 ) -> Result<(), LocalError> {
     for name in names.keys() {
-        if let Some(dt) = env.env.get_type(name) {
+        if let Some(dt) = env.env.get_type(VarName::new(name.clone()).as_metavar()) {
             let dt = DTypeConstraint::try_from(dt).unwrap();
             {
                 if let Ok(dt) = DataType::try_from(dt.clone()) {

@@ -91,8 +91,8 @@ use crate::{
     parse::ast::{Binop, DataType, Quotient, QuotientReference, SchedLiteral, SpecType, Tag},
     type_error,
     typing::{
-        is_value_dtype, Constraint, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, VQType,
-        ValQuot,
+        is_value_dtype, ClassName, Constraint, Context, NodeEnv, SchedOrExtern, SpecInfo,
+        UTypeName, VQType, ValQuot, VarName,
     },
 };
 
@@ -183,7 +183,12 @@ fn add_io_constraints(
         0,
     );
     for i in 0..num_dims {
-        env = super::add_node_eq(&format!("_dim{i}"), &format!("_dim{i}"), info, env)?;
+        env = super::add_node_eq(
+            &VarName::new(format!("_dim{i}")),
+            &ClassName::new(&format!("_dim{i}")),
+            info,
+            env,
+        )?;
     }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
@@ -194,7 +199,7 @@ fn add_io_constraints(
             continue;
         }
         let class_name = if let Some(annoted_quot) = &fn_in_tag.value.quot_var.spec_var {
-            annoted_quot.clone()
+            ClassName::new(annoted_quot)
         } else {
             let spec_classes = env.get_input_classes();
             if idx < spec_classes.len() {
@@ -203,7 +208,7 @@ fn add_io_constraints(
                 continue;
             }
         };
-        env = super::add_node_eq(arg_name, &class_name, info, env)?;
+        env = super::add_node_eq(VarName::new_ref(arg_name), &class_name, info, env)?;
     }
     Ok(env)
 }
@@ -377,11 +382,13 @@ fn unify_op(
                     arg_names[0]
                         .as_ref()
                         .opt()
-                        .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
+                        .map_or_else(|| env.new_temp(), VarName::from)
+                        .into(),
                     arg_names[1]
                         .as_ref()
                         .opt()
-                        .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
+                        .map_or_else(|| env.new_temp(), VarName::from)
+                        .into(),
                 ),
                 info,
                 env,
@@ -406,7 +413,8 @@ fn unify_op(
                         .map(|x| {
                             x.as_ref()
                                 .opt()
-                                .map_or_else(|| env.new_temp(), |y| MetaVar::new_var_name(y))
+                                .map_or_else(|| env.new_temp(), VarName::from)
+                                .into()
                         })
                         .collect(),
                 ),
@@ -416,7 +424,7 @@ fn unify_op(
             for (id, (dest, _)) in dests.iter().enumerate() {
                 env = add_constraint(
                     dest,
-                    &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest_tuple}")), id),
+                    &ValQuot::Extract(VarName::new(format!("!{dest_tuple}")).into(), id),
                     info,
                     env,
                 )?;
@@ -465,9 +473,10 @@ fn unify_phi(
                         guard: guard
                             .as_ref()
                             .opt()
-                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
-                        true_id: MetaVar::new_var_name(incoming_edges[0].1),
-                        false_id: MetaVar::new_var_name(incoming_edges[1].1),
+                            .map_or_else(|| env.new_temp(), VarName::from)
+                            .into(),
+                        true_id: VarName::from(incoming_edges[0].1).into(),
+                        false_id: VarName::from(incoming_edges[1].1).into(),
                     },
                     *info,
                     env,
@@ -481,9 +490,10 @@ fn unify_phi(
                         guard: guard
                             .as_ref()
                             .opt()
-                            .map_or_else(|| env.new_temp(), |x| MetaVar::new_var_name(x)),
-                        true_id: MetaVar::new_var_name(incoming_edges[1].1),
-                        false_id: MetaVar::new_var_name(incoming_edges[0].1),
+                            .map_or_else(|| env.new_temp(), VarName::from)
+                            .into(),
+                        true_id: VarName::from(incoming_edges[1].1).into(),
+                        false_id: VarName::from(incoming_edges[0].1).into(),
                     },
                     *info,
                     env,
@@ -546,12 +556,12 @@ fn unify_call(
                     if let Hole::Filled(arg) = arg {
                         let t = &dtypes[&ssa::ssa_original_name(arg)];
                         if is_value_dtype(t) {
-                            Some(MetaVar::new_var_name(arg))
+                            Some(VarName::from(arg).into())
                         } else {
                             None
                         }
                     } else {
-                        Some(env.new_temp())
+                        Some(env.new_temp().into())
                     }
                 })
                 .collect(),
@@ -576,7 +586,7 @@ fn unify_call(
         env = add_overrideable_constraint(
             dest,
             tag,
-            &ValQuot::Extract(MetaVar::new_var_name(&tuple_name), idx),
+            &ValQuot::Extract(VarName::from(&tuple_name).into(), idx),
             info,
             env,
         )?;
@@ -734,13 +744,18 @@ fn unify_terminator(
                     {
                         env = add_constraint(
                             &format!("{ret_name}!"),
-                            &ValQuot::Output(MetaVar::new_var_name(ret_name)),
+                            &ValQuot::Output(VarName::from(ret_name).into()),
                             fn_info,
                             env,
                         )?;
-                        env = add_node_eq(&format!("{ret_name}!"), &func_class, *info, env)?;
+                        env = add_node_eq(
+                            &VarName::new(format!("{ret_name}!")),
+                            &func_class,
+                            *info,
+                            env,
+                        )?;
                     } else {
-                        env = add_node_eq(ret_name, &func_class, fn_info, env)?;
+                        env = add_node_eq(VarName::new_ref(ret_name), &func_class, fn_info, env)?;
                     }
                 }
             }
@@ -766,7 +781,7 @@ fn unify_terminator(
 /// # Panics
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
-fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
+fn fill_val_quotient(name: &dyn UTypeName, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
     fill_quotient(name, tag, env, block_id, SpecType::Value, false, &|dt| {
         &mut dt.value
     });
@@ -774,7 +789,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: u
 
 /// Constructs a new triple tag based on information from the environment.
 /// Any information the environment does not have is left as `None`.
-fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
+fn construct_new_tag(name: &VarName, env: &NodeEnv, block_id: usize) -> TripleTag {
     env.get_node_name(name)
         .map_or_else(TripleTag::new_unspecified, |node| TripleTag {
             value: Tag {
@@ -786,7 +801,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
                     },
                 ),
                 quot_var: QuotientReference {
-                    spec_var: Some(node),
+                    spec_var: Some(node.get_name().to_owned()),
                     spec_type: SpecType::Value,
                 },
                 flow: None,
@@ -820,13 +835,13 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<Str
                     lhs_tags: lhs_tag,
                     ..
                 } => {
-                    fill_val_quotient(lhs, lhs_tag, env, block.id);
+                    fill_val_quotient(VarName::new_ref(lhs), lhs_tag, env, block.id);
                 }
                 HirBody::InAnnotation(_, tags)
                 | HirBody::OutAnnotation(_, tags)
                 | HirBody::Op { dests: tags, .. } => {
                     for (name, tag) in tags {
-                        fill_val_quotient(name, tag, env, block.id);
+                        fill_val_quotient(VarName::new_ref(name), tag, env, block.id);
                     }
                 }
                 HirBody::Hole {
@@ -835,25 +850,27 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<Str
                     ..
                 } => {
                     for (name, tag) in tags {
-                        fill_val_quotient(name, tag, env, block.id);
+                        fill_val_quotient(VarName::new_ref(name), tag, env, block.id);
                     }
                     for (name, node) in initialized {
-                        *node = env.get_node_name(name);
+                        *node = env.get_node_name(VarName::new_ref(name));
                     }
                 }
                 HirBody::EncodeDo { dests, func, .. } => {
                     fill_val_quotient(
-                        &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                        &VarName::new(tuple_id(
+                            &dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>(),
+                        )),
                         &mut func.tag,
                         env,
                         block.id,
                     );
                     for (dest, tag) in dests {
-                        fill_val_quotient(dest, tag, env, block.id);
+                        fill_val_quotient(VarName::new_ref(dest), tag, env, block.id);
                     }
                 }
                 HirBody::DeviceCopy { dest, dest_tag, .. } => {
-                    fill_val_quotient(dest, dest_tag, env, block.id);
+                    fill_val_quotient(VarName::new_ref(dest), dest_tag, env, block.id);
                 }
                 HirBody::RefLoad { .. }
                 | HirBody::BeginEncoding { .. }
@@ -863,13 +880,16 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<Str
                         idx,
                         HirBody::InAnnotation(
                             *info,
-                            vec![(dest.clone(), construct_new_tag(dest, env, block.id))],
+                            vec![(
+                                dest.clone(),
+                                construct_new_tag(VarName::new_ref(dest), env, block.id),
+                            )],
                         ),
                     ));
                 }
                 HirBody::Sync { dests, .. } => {
                     for (dest, dest_tag) in dests.processed_mut() {
-                        fill_val_quotient(dest, dest_tag, env, block.id);
+                        fill_val_quotient(VarName::new_ref(dest), dest_tag, env, block.id);
                     }
                 }
             }
@@ -877,10 +897,12 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<Str
         match &mut block.terminator {
             Terminator::CaptureCall { dests, call, .. } => {
                 for (dest, tag) in dests.iter_mut() {
-                    fill_val_quotient(dest, tag, env, block.id);
+                    fill_val_quotient(VarName::new_ref(dest), tag, env, block.id);
                 }
                 fill_val_quotient(
-                    &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                    &VarName::new(tuple_id(
+                        &dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>(),
+                    )),
                     &mut call.tag,
                     env,
                     block.id,
@@ -888,7 +910,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, Vec<Str
             }
             Terminator::Select { dests, tag, .. } => {
                 for (dest, tag) in dests {
-                    fill_val_quotient(dest, tag, env, block.id);
+                    fill_val_quotient(VarName::new_ref(dest), tag, env, block.id);
                 }
                 fill_select_quotient(block.id, selects, tag, env);
             }
@@ -936,10 +958,10 @@ fn fill_select_quotient(
            }
         */
         for name in possible_names {
-            if let Some(spec_name) = env.get_node_name(name) {
+            if let Some(spec_name) = env.get_node_name(VarName::new_ref(name)) {
                 if let Some(constraint) = env.get_spec_node(&spec_name) {
                     if matches!(constraint, Constraint::Term(VQType::Select, ..)) {
-                        fill_val_quotient(name, tag, env, block_id);
+                        fill_val_quotient(VarName::new_ref(name), tag, env, block_id);
                     }
                 }
             }
@@ -965,7 +987,7 @@ fn fill_io_type_info(
     env: &NodeEnv,
 ) {
     for (name, tag) in inputs.iter_mut() {
-        fill_val_quotient(name, tag, env, START_BLOCK_ID);
+        fill_val_quotient(VarName::new_ref(name), tag, env, START_BLOCK_ID);
     }
     let output_classes = env.get_function_output_classes().to_vec();
     for (tag, output_class) in outputs
@@ -978,12 +1000,7 @@ fn fill_io_type_info(
             tag.value.quot = Some(Quotient::Node);
         }
         if let Some(output_class) = output_class {
-            fill_val_quotient(
-                &MetaVar::new_class_name(&output_class).into_string(),
-                tag,
-                env,
-                START_BLOCK_ID,
-            );
+            fill_val_quotient(&output_class, tag, env, START_BLOCK_ID);
         }
     }
 }

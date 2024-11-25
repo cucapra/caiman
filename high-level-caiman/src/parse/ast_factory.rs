@@ -11,9 +11,9 @@ use super::ast::*;
 use crate::error::{CustomParsingError, HasInfo, Info};
 use crate::custom_parse_error;
 
-const MAJOR_VERSION: &str = "0";
-const MINOR_VERSION: &str = "1";
-const PATCH_VERSION: &str = "0";
+const MAJOR_VERSION: usize = 0;
+const MINOR_VERSION: usize = 2;
+const PATCH_VERSION: usize = 0;
 
 /// A macro for creating tuple-like enum variants that handles the passing along
 /// of location information.
@@ -749,19 +749,21 @@ impl ASTFactory {
     /// Returns an error if the program is not a valid high-level-caiman program
     pub fn program(&self, maj_min: &str, patch: &str, prog: Program) -> Result<Program, ParserError> {
         let split_maj_min: Vec<_> = maj_min.split('.').collect();
+        let make_err = || custom_parse_error!(Info {
+            start_ln_and_col: (0, 0),
+            end_ln_and_col: (0, 0),
+        }, "Invalid version string: {}.{}", maj_min, patch);
         if split_maj_min.len() != 2 {
-            return Err(custom_parse_error!(Info {
-                start_ln_and_col: (0, 0),
-                end_ln_and_col: (0, 0),
-            }, "Invalid version string: {}.{}", maj_min, patch));
+            return Err(make_err());
         }
-        let maj = split_maj_min[0];
-        let min = split_maj_min[1];
-        if (MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION) != (maj, min, patch) {
+        let maj = split_maj_min[0].parse::<usize>().map_err(|_| make_err())?;
+        let min = split_maj_min[1].parse::<usize>().map_err(|_| make_err())?;
+        let patch = patch.parse::<usize>().map_err(|_| make_err())?;
+        if MAJOR_VERSION != maj || min > MINOR_VERSION {
             return Err(custom_parse_error!(Info {
                 start_ln_and_col: (0, 0),
                 end_ln_and_col: (0, 0),
-            }, "Version mismatch: expected {}.{}.{} but found {}.{}.{}", 
+            }, "Version mismatch: compiler version {}.{}.{} cannot support {}.{}.{}", 
                 MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, maj, min, patch));
         }
         Ok(prog)

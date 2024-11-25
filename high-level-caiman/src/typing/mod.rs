@@ -23,7 +23,7 @@ mod test;
 mod types;
 mod unification;
 
-pub use types::{MetaVar, VQType, ValQuot};
+pub use types::{ClassName, MetaVar, UTypeName, VQType, ValQuot, VarName};
 pub use unification::Constraint;
 
 /// WGPU flags for all frontent temporaries.
@@ -83,17 +83,17 @@ pub struct NodeEnv {
     env: Env<VQType, ()>,
     /// Map of quotient type to a map between quotients and their equivalence
     /// class names.
-    spec_nodes: HashMap<ValQuot, HashSet<String>>,
+    spec_nodes: HashMap<ValQuot, HashSet<ClassName>>,
     /// A set of all the targets of call nodes in the spec
     calls: HashSet<String>,
     /// List of spec input node class names, without the leading `$` symbol.
-    inputs: Vec<String>,
+    inputs: Vec<ClassName>,
     /// List of function output node class names, without the leading `$` symbol.
-    outputs: Vec<Option<String>>,
+    outputs: Vec<Option<ClassName>>,
     /// List of spec output node class names, without the leading `$` symbol.
-    spec_outputs: Vec<String>,
+    spec_outputs: Vec<ClassName>,
     /// Set of variables in the schedule
-    sched_vars: HashSet<String>,
+    sched_vars: HashSet<VarName>,
 }
 
 impl Default for NodeEnv {
@@ -116,29 +116,28 @@ impl NodeEnv {
         Self::default()
     }
 
-    /// Gets the class constraint of the spec node.
+    /// Gets the class constraint of the class or variable.
     #[must_use]
-    pub fn get_spec_node(&self, class: &str) -> Option<Constraint<VQType, ()>> {
-        self.env.get_type(&format!("${class}"))
+    pub fn get_spec_node(&self, name: &dyn UTypeName) -> Option<Constraint<VQType, ()>> {
+        self.env.get_type(name)
     }
 
     #[must_use]
-    pub fn dependencies(&self, node_name: &MetaVar) -> HashSet<String> {
-        self.env.dependencies(node_name.get(), &HashSet::new())
+    pub fn dependencies(&self, node_name: &ClassName) -> HashSet<ClassName> {
+        self.env.dependencies(node_name, &HashSet::new())
     }
 
     /// Returns the list of nodes that are unavailable given the set of reaching variables.
     /// The list of nodes are class names with the leading '$'.
     pub fn unavailable_nodes<'a>(
         &self,
-        node_name: &MetaVar,
-        reaching_defs: impl Iterator<Item = &'a String>,
-    ) -> HashSet<String> {
+        node_name: &ClassName,
+        reaching_defs: impl Iterator<Item = &'a VarName>,
+    ) -> HashSet<ClassName> {
         let ignored_subtrees = reaching_defs
             .filter_map(|x| self.get_node_name(x))
-            .map(|x| MetaVar::new_class_name(&x).into_string())
             .collect();
-        self.env.dependencies(node_name.get(), &ignored_subtrees)
+        self.env.dependencies(node_name, &ignored_subtrees)
     }
 
     /// Adds a quotient class and its constraints to the environment.
@@ -147,14 +146,12 @@ impl NodeEnv {
     /// # Panics
     /// If the class name contains a `$` or if the constraint could not
     /// be added to the environment.
-    pub fn add_quotient(&mut self, class_name: &str, constraint: ValQuot) {
-        assert!(!class_name.contains('$'));
+    pub fn add_quotient(&mut self, class_name: ClassName, constraint: ValQuot) {
         if let ValQuot::Input(_) = &constraint {
-            self.inputs.push(class_name.to_string());
+            self.inputs.push(class_name.clone());
         }
-        let class_name = format!("${class_name}");
         self.env
-            .add_class_constraint(&class_name, &From::from(&constraint))
+            .add_class_constraint(class_name.clone(), &From::from(&constraint))
             .unwrap();
         if let ValQuot::Call(target, ..) = &constraint {
             self.calls.insert(target.clone());
@@ -170,22 +167,20 @@ impl NodeEnv {
     /// If any of the class names contain a `$`.
     pub fn set_output_classes(&mut self, sig: &NamedSignature) {
         assert!(sig.output.iter().all(|(x, _)| !x.contains('$')));
-        self.spec_outputs = sig.output.iter().map(|(x, _)| x.clone()).collect();
+        self.spec_outputs = sig.output.iter().map(|(x, _)| ClassName::new(x)).collect();
         self.outputs = self.spec_outputs.iter().cloned().map(Some).collect();
     }
 
-    /// Gets the output classes of the spec,
-    /// without the leading `$` symbol.
+    /// Gets the output classes of the spec
     #[must_use]
-    pub fn get_spec_output_classes(&self) -> &[String] {
+    pub fn get_spec_output_classes(&self) -> &[ClassName] {
         &self.spec_outputs
     }
 
-    /// Gets the output classes of the function,
-    /// without the leading `$` symbol. A class may be `None` if it is not  
+    /// Gets the output classes of the function. A class may be `None` if it is not  
     /// annotated and does not match up with anything in the spec.
     #[must_use]
-    pub fn get_function_output_classes(&self) -> &[Option<String>] {
+    pub fn get_function_output_classes(&self) -> &[Option<ClassName>] {
         &self.outputs
     }
 
@@ -208,7 +203,7 @@ impl NodeEnv {
                 self.outputs.push(None);
             }
             if let Some(annotated_quot) = &tag.quot_var.spec_var {
-                self.outputs[id + offset] = Some(annotated_quot.clone());
+                self.outputs[id + offset] = Some(ClassName::new(annotated_quot));
             }
         }
     }
@@ -231,8 +226,8 @@ impl NodeEnv {
         !name.is_class()
     }
 
-    pub fn new_temp(&mut self) -> MetaVar {
-        MetaVar::new_var_name(&self.env.new_temp_type())
+    pub fn new_temp(&mut self) -> VarName {
+        self.env.new_temp_type()
     }
 
     /// Adds a constraint to the type variable `name`. If the constraint
@@ -242,10 +237,9 @@ impl NodeEnv {
     /// Returns an error if unification fails.
     /// # Panics
     /// If the name contains a `$`.
-    pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
-        assert!(!name.contains('$'));
-        self.env.add_constraint(name, &From::from(constraint))?;
-        self.sched_vars.insert(name.to_string());
+    pub fn add_constraint(&mut self, name: VarName, constraint: &ValQuot) -> Result<(), String> {
+        self.env.add_constraint(&name, &From::from(constraint))?;
+        self.sched_vars.insert(name);
         Ok(())
     }
 
@@ -254,13 +248,13 @@ impl NodeEnv {
     /// Returns an error if unification fails.
     /// # Panics
     /// If the name contains a `$` or if the equiv contains a `$`.
-    pub fn add_var_eq(&mut self, name: &str, equiv: &str) -> Result<(), String> {
-        assert!(!name.contains('$'));
-        assert!(!equiv.contains('$'));
-        self.sched_vars.insert(name.to_string());
-        self.sched_vars.insert(equiv.to_string());
-        self.env
-            .add_constraint(name, &Constraint::Var(equiv.to_string()))
+    pub fn add_var_eq(&mut self, name: VarName, equiv: VarName) -> Result<(), String> {
+        let r = self
+            .env
+            .add_constraint(&name, &Constraint::Var(equiv.clone().into_string()));
+        self.sched_vars.insert(name);
+        self.sched_vars.insert(equiv);
+        r
     }
 
     /// Adds an equivalence between variable `name` and spec node name `class_name`.
@@ -268,40 +262,31 @@ impl NodeEnv {
     /// If the name contains a `$` or if the class name contains a `$`.
     /// # Errors
     /// Returns an error if unification fails.
-    pub fn add_node_eq(&mut self, name: &str, class_name: &str) -> Result<(), String> {
-        assert!(!name.contains('$'));
-        let class_name = if class_name.starts_with('$') {
-            class_name.to_string()
-        } else {
-            format!("${class_name}")
-        };
-        assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
-        self.sched_vars.insert(name.to_string());
+    pub fn add_node_eq(&mut self, name: VarName, class_name: ClassName) -> Result<(), String> {
+        self.sched_vars.insert(name.clone());
         self.env
-            .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
+            .add_class_constraint(class_name, &Constraint::Var(name.into_string()))
     }
 
     /// Returns the variable's matching node name in the spec if it has one.
     #[must_use]
-    pub fn get_node_name(&self, name: &str) -> Option<String> {
-        self.env
-            .get_class_id(name)
-            .map(|x| x.trim_matches('$').to_string())
+    pub fn get_node_name(&self, name: &dyn UTypeName) -> Option<ClassName> {
+        self.env.get_class_id(name.as_metavar())
     }
 
     /// Returns the classes of the input variables
     #[must_use]
-    pub fn get_input_classes(&self) -> &[String] {
+    pub fn get_input_classes(&self) -> &[ClassName] {
         &self.inputs
     }
 
     /// Gets names of equivalence classes that are literals in the spec.
     #[must_use]
-    pub fn literal_classes(&self) -> HashSet<String> {
+    pub fn literal_classes(&self) -> HashSet<ClassName> {
         let mut res = HashSet::new();
         for (node, classes) in &self.spec_nodes {
             if matches!(node, ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_)) {
-                res.extend(classes.iter().map(|x| x.trim_matches('$').to_string()));
+                res.extend(classes.iter().cloned());
             }
         }
         res
@@ -316,8 +301,8 @@ impl NodeEnv {
         loop {
             let mut to_merge = Vec::new();
             for var in &self.sched_vars {
-                if let Some(constraint) = self.env.get_type(var) {
-                    if constraint.is_var() || self.env.get_class_id(var).is_some() {
+                if let Some(constraint) = self.env.get_type(var.as_metavar()) {
+                    if constraint.is_var() || self.env.get_class_id(var.as_metavar()).is_some() {
                         continue;
                     }
                     let vq = constraint_to_wildcard_vq(&constraint);
@@ -328,7 +313,7 @@ impl NodeEnv {
                         .flat_map(|(_, x)| x.iter());
                     let mut matches = Vec::new();
                     for class in to_check {
-                        if let Some(constraint2) = self.env.get_type(class) {
+                        if let Some(constraint2) = self.env.get_type(class.as_metavar()) {
                             if constraint2.matches(&constraint) {
                                 matches.push(class);
                                 if matches.len() > 1 {
@@ -338,7 +323,7 @@ impl NodeEnv {
                         }
                     }
                     if matches.len() == 1 {
-                        to_merge.push((var.to_string(), matches.pop().unwrap().clone()));
+                        to_merge.push((var.clone(), matches.pop().unwrap().clone()));
                     }
                 }
             }
@@ -346,14 +331,14 @@ impl NodeEnv {
                 break;
             }
             for (var, class) in to_merge {
-                self.add_node_eq(&var, &class)?;
+                self.add_node_eq(var, class)?;
             }
         }
         Ok(())
     }
 
-    pub fn get_sched_vars(&self) -> impl Iterator<Item = &String> {
-        self.env.node_names().filter(|x| !x.starts_with('$'))
+    pub fn get_sched_vars(&self) -> impl Iterator<Item = &VarName> {
+        self.env.node_names().filter_map(|x| x.get_var_name())
     }
 }
 
@@ -363,7 +348,7 @@ pub struct DTypeEnv {
     env: Env<CDataType, ADataType>,
     flags: HashMap<String, ir::BufferFlags>,
     /// A side condition that `(sub, sup)` must be an element of the subtype relation.
-    side_conditions: HashSet<(String, String)>,
+    side_conditions: HashSet<(VarName, VarName)>,
 }
 
 impl Default for DTypeEnv {
@@ -391,20 +376,21 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         let c = constraint.instantiate(&mut self.env);
-        self.env.add_constraint(name, &c).map_err(|c| {
-            type_error!(
-                info,
-                "Failed to unify type constraints of variable '{}'\n\n{c}",
-                hir_to_source_name(name)
-            )
-        })?;
+        self.env
+            .add_constraint(&VarName::from(name), &c)
+            .map_err(|c| {
+                type_error!(
+                    info,
+                    "Failed to unify type constraints of variable '{}'\n\n{c}",
+                    hir_to_source_name(name)
+                )
+            })?;
         self.enforce_side_conds(info)
     }
 
     /// Adds a side condition that `(subtype, supertype)` must be an element of the subtype relation.
-    pub fn add_var_side_cond(&mut self, subtype: &str, supertype: &str) {
-        self.side_conditions
-            .insert((subtype.to_string(), supertype.to_string()));
+    pub fn add_var_side_cond(&mut self, subtype: VarName, supertype: VarName) {
+        self.side_conditions.insert((subtype, supertype));
     }
 
     /// Returns ok if all side conditions are satisfied.
@@ -414,19 +400,22 @@ impl DTypeEnv {
         let side_conds: Vec<_> = self
             .side_conditions
             .iter()
-            .map(|(a, b)| (a.to_owned(), b.to_owned()))
+            .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
         for (subtype, supertype) in side_conds {
-            let sub_dt = self.env.get_type(&subtype).map(DTypeConstraint::try_from);
-            let super_c = self.env.get_type(&supertype);
+            let sub_dt = self
+                .env
+                .get_type(subtype.as_metavar())
+                .map(DTypeConstraint::try_from);
+            let super_c = self.env.get_type(supertype.as_metavar());
             let super_dt = super_c.clone().map(DTypeConstraint::try_from);
             if let Some(super_c) = super_c {
                 self.env.add_constraint_ignore_contravariance(&subtype, &super_c).map_err(|e| {
                     type_error!(
                         info,
                         "Constraint caused violation of condition that '{}' is a subtype of '{}'\nHowever {sub_dt:#?}\n !<:\n{super_dt:#?}\n\n{e}",
-                        hir_to_source_name(&subtype),
-                        hir_to_source_name(&supertype)
+                        hir_to_source_name(subtype.get_name()),
+                        hir_to_source_name(supertype.get_name())
                     )
                 })?;
             }
@@ -514,7 +503,7 @@ impl DTypeEnv {
     /// Returns an error if unification fails.
     pub fn add_var_equiv(&mut self, name: &str, equiv: &str, info: Info) -> Result<(), LocalError> {
         self.env
-            .add_constraint(name, &Constraint::Var(equiv.to_string()))
+            .add_constraint(&VarName::from(name), &Constraint::Var(equiv.to_string()))
             .map_err(|c| {
                 type_error!(
                     info,
@@ -534,13 +523,15 @@ impl DTypeEnv {
         constraint: &Constraint<CDataType, ADataType>,
         info: Info,
     ) -> Result<(), LocalError> {
-        self.env.add_constraint(name, constraint).map_err(|c| {
-            type_error!(
-                info,
-                "Failed to unify type constraints of variable '{}'\n\n{c}",
-                hir_to_source_name(name)
-            )
-        })?;
+        self.env
+            .add_constraint(&From::from(name), constraint)
+            .map_err(|c| {
+                type_error!(
+                    info,
+                    "Failed to unify type constraints of variable '{}'\n\n{c}",
+                    hir_to_source_name(name)
+                )
+            })?;
         self.enforce_side_conds(info)
     }
 }

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::typing::types::{ClassName, UTypeName, VarName};
+
 use super::unification::{Constraint, Env, Kind};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -21,30 +23,33 @@ impl Kind for CompoundType {}
 #[test]
 fn test_unification() {
     let mut env: Env<CompoundType, BaseType> = Env::new();
-    env.new_type_if_absent("v");
+    env.new_type_if_absent(&VarName::from("v"));
     env.add_constraint(
-        "v",
+        &"v".into(),
         &Constraint::Term(CompoundType::Int, vec![Constraint::Atom(BaseType::I32)]),
     )
     .unwrap();
     assert_eq!(
-        env.get_type("v").unwrap(),
+        env.get_type(VarName::from("v").as_metavar()).unwrap(),
         Constraint::Term(CompoundType::Int, vec![Constraint::Atom(BaseType::I32)])
     );
-    env.new_type_if_absent("w");
-    env.new_type_if_absent("a");
-    env.add_constraint("a", &Constraint::Var("v".to_string()))
+    env.new_type_if_absent(&VarName::from("w"));
+    env.new_type_if_absent(&VarName::from("a"));
+    env.add_constraint(&"a".into(), &Constraint::Var("v".to_string()))
         .unwrap();
-    env.add_constraint("w", &Constraint::Var("a".to_string()))
+    env.add_constraint(&"w".into(), &Constraint::Var("a".to_string()))
         .unwrap();
-    assert_eq!(env.get_type("w"), env.get_type("v"));
     assert_eq!(
-        env.get_type("w").unwrap(),
+        env.get_type(VarName::from("w").as_metavar()),
+        env.get_type(VarName::from("v").as_metavar())
+    );
+    assert_eq!(
+        env.get_type(VarName::from("w").as_metavar()).unwrap(),
         Constraint::Term(CompoundType::Int, vec![Constraint::Atom(BaseType::I32)])
     );
 
-    env.new_type_if_absent("alpha");
-    env.new_type_if_absent("beta");
+    env.new_type_if_absent(&VarName::from("alpha"));
+    env.new_type_if_absent(&VarName::from("beta"));
     let t = env.new_temp_type();
     env.add_constraint(
         &t,
@@ -78,7 +83,7 @@ fn test_unification() {
     )
     .unwrap();
     assert_eq!(
-        env.get_type("beta").unwrap(),
+        env.get_type(VarName::from("beta").as_metavar()).unwrap(),
         Constraint::Term(
             CompoundType::Array,
             vec![Constraint::Term(
@@ -95,14 +100,14 @@ fn test_unification() {
 #[test]
 fn test_fails() {
     let mut env: Env<CompoundType, BaseType> = Env::new();
-    env.new_type_if_absent("v");
+    env.new_type_if_absent(&VarName::from("v"));
     env.add_constraint(
-        "v",
+        &"v".into(),
         &Constraint::Term(CompoundType::Int, vec![Constraint::Atom(BaseType::I32)]),
     )
     .unwrap();
     env.add_constraint(
-        "v",
+        &"v".into(),
         &Constraint::Term(CompoundType::Int, vec![Constraint::Atom(BaseType::I64)]),
     )
     .unwrap_err();
@@ -111,23 +116,26 @@ fn test_fails() {
 #[test]
 fn test_polymorphism() {
     let mut env: Env<CompoundType, BaseType> = Env::new();
-    env.new_type_if_absent("v");
+    env.new_type_if_absent(&VarName::from("v"));
     let t = env.new_temp_type();
     env.add_constraint(
-        "v",
-        &Constraint::Term(CompoundType::Int, vec![Constraint::Var(t)]),
+        &"v".into(),
+        &Constraint::Term(CompoundType::Int, vec![Constraint::Var(t.into_string())]),
     )
     .unwrap();
     let t2 = env.new_temp_type();
     env.add_constraint(
-        "v",
-        &Constraint::Term(CompoundType::Int, vec![Constraint::Var(t2.clone())]),
+        &"v".into(),
+        &Constraint::Term(
+            CompoundType::Int,
+            vec![Constraint::Var(t2.clone().into_string())],
+        ),
     )
     .unwrap();
-    let any = env.get_type(&t2).unwrap();
+    let any = env.get_type(t2.as_metavar()).unwrap();
     assert!(any.is_var());
     assert_eq!(
-        env.get_type("v"),
+        env.get_type(VarName::from("v").as_metavar()),
         Some(Constraint::Term(CompoundType::Int, vec![any]))
     );
 
@@ -184,7 +192,7 @@ impl Kind for String {}
 fn test_rev_lookup() {
     let mut env: Env<String, String> = Env::new();
     env.add_class_constraint(
-        "$a",
+        ClassName::from_raw("$a".to_string()),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -195,7 +203,7 @@ fn test_rev_lookup() {
     )
     .unwrap();
     env.add_class_constraint(
-        "$b",
+        ClassName::new("b"),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -206,7 +214,7 @@ fn test_rev_lookup() {
     )
     .unwrap();
     env.add_class_constraint(
-        "$c",
+        ClassName::new("c"),
         &Constraint::Term(
             String::from("add"),
             vec![
@@ -218,7 +226,7 @@ fn test_rev_lookup() {
     .unwrap();
 
     env.add_constraint(
-        "a",
+        &"a".into(),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -229,7 +237,7 @@ fn test_rev_lookup() {
     )
     .unwrap();
     env.add_constraint(
-        "j",
+        &"j".into(),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -240,7 +248,7 @@ fn test_rev_lookup() {
     )
     .unwrap();
     env.add_constraint(
-        "r",
+        &"r".into(),
         &Constraint::Term(
             String::from("add"),
             vec![
@@ -251,21 +259,30 @@ fn test_rev_lookup() {
     )
     .unwrap();
 
-    env.add_constraint("r", &Constraint::Var(String::from("$c")))
+    env.add_constraint(&"r".into(), &Constraint::Var(String::from("$c")))
         .unwrap();
 
-    println!("{:?}", env.get_type("r"));
-    println!("{:?}", env.get_type("$c"));
-    assert_eq!(env.get_class_id("r").unwrap(), "$c");
-    assert_eq!(env.get_class_id("a").unwrap(), "$a");
-    assert_eq!(env.get_class_id("j").unwrap(), "$b");
+    println!("{:?}", env.get_type(&VarName::from("r")));
+    println!("{:?}", env.get_type(&ClassName::new("c")));
+    assert_eq!(
+        env.get_class_id(&VarName::from("r")).unwrap().get_raw(),
+        "$c"
+    );
+    assert_eq!(
+        env.get_class_id(&VarName::from("a")).unwrap().get_raw(),
+        "$a"
+    );
+    assert_eq!(
+        env.get_class_id(&VarName::from("j")).unwrap().get_raw(),
+        "$b"
+    );
 }
 
 #[test]
 fn step_wise_rev_lookup() {
     let mut env: Env<String, String> = Env::new();
     env.add_class_constraint(
-        "$a",
+        ClassName::from_raw_str("$a"),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -276,7 +293,7 @@ fn step_wise_rev_lookup() {
     )
     .unwrap();
     env.add_class_constraint(
-        "$b",
+        ClassName::from_raw_str("$b"),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -287,7 +304,7 @@ fn step_wise_rev_lookup() {
     )
     .unwrap();
     env.add_class_constraint(
-        "$c",
+        ClassName::from_raw_str("$c"),
         &Constraint::Term(
             String::from("add"),
             vec![
@@ -299,7 +316,7 @@ fn step_wise_rev_lookup() {
     .unwrap();
 
     env.add_constraint(
-        "a",
+        &"a".into(),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -309,13 +326,16 @@ fn step_wise_rev_lookup() {
         ),
     )
     .unwrap();
-    env.add_constraint("a", &Constraint::Var(String::from("$a")))
+    env.add_constraint(&"a".into(), &Constraint::Var(String::from("$a")))
         .unwrap();
 
-    assert_eq!(env.get_class_id("a").unwrap(), "$a");
+    assert_eq!(
+        env.get_class_id(&VarName::from("a")).unwrap().get_raw(),
+        "$a"
+    );
 
     env.add_constraint(
-        "j",
+        &"j".into(),
         &Constraint::Term(
             String::from("int"),
             vec![Constraint::Term(
@@ -326,7 +346,7 @@ fn step_wise_rev_lookup() {
     )
     .unwrap();
     env.add_constraint(
-        "r",
+        &"r".into(),
         &Constraint::Term(
             String::from("add"),
             vec![
@@ -337,12 +357,24 @@ fn step_wise_rev_lookup() {
     )
     .unwrap();
 
-    env.add_class_constraint("$c", &Constraint::Var(String::from("r")))
-        .unwrap();
+    env.add_class_constraint(
+        ClassName::from_raw_str("$c"),
+        &Constraint::Var(String::from("r")),
+    )
+    .unwrap();
 
-    assert_eq!(env.get_class_id("r").unwrap(), "$c");
-    assert_eq!(env.get_class_id("a").unwrap(), "$a");
-    assert_eq!(env.get_class_id("j").unwrap(), "$b");
+    assert_eq!(
+        env.get_class_id(&VarName::from("r")).unwrap().get_raw(),
+        "$c"
+    );
+    assert_eq!(
+        env.get_class_id(&VarName::from("a")).unwrap().get_raw(),
+        "$a"
+    );
+    assert_eq!(
+        env.get_class_id(&VarName::from("j")).unwrap().get_raw(),
+        "$b"
+    );
 }
 
 #[test]
@@ -358,7 +390,7 @@ fn test_subtype_lattice() {
     );
     r1.insert(String::from("l2"), Constraint::Atom(String::from("I32")));
     env.add_class_constraint(
-        "$r",
+        ClassName::from_raw("$r".to_owned()),
         &Constraint::DynamicTerm(
             String::from("record"),
             r1,
@@ -376,7 +408,7 @@ fn test_subtype_lattice() {
     );
     r2.insert(String::from("l3"), Constraint::Atom(String::from("bool")));
     env.add_class_constraint(
-        "$r",
+        ClassName::new("r"),
         &Constraint::DynamicTerm(
             String::from("record"),
             r2,
@@ -384,7 +416,7 @@ fn test_subtype_lattice() {
         ),
     )
     .unwrap();
-    let ty = env.get_type("$r").unwrap();
+    let ty = env.get_type(&ClassName::new("r")).unwrap();
     if let Constraint::DynamicTerm(_, r, _) = ty {
         assert_eq!(r.len(), 3);
         assert_eq!(

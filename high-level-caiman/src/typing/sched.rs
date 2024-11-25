@@ -15,7 +15,7 @@ use std::iter::once;
 
 use super::{
     binop_to_contraints,
-    types::{DTypeConstraint, RecordConstraint},
+    types::{DTypeConstraint, RecordConstraint, VarName},
     unification::SubtypeConstraint,
     uop_to_contraints, Context, DTypeEnv, Mutability,
 };
@@ -597,7 +597,10 @@ fn collect_timeline_op(
         TimelineOperation::Await => {
             // env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
             if let Hole::Filled(arg_name) = arg_name {
-                env.add_var_side_cond(&format!("{dest_name}-defined_fields"), dest_name);
+                env.add_var_side_cond(
+                    VarName::new(format!("{dest_name}-defined_fields")),
+                    VarName::new(dest_name.clone()),
+                );
                 env.add_constraint(
                     arg_name,
                     DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
@@ -718,7 +721,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => {
                 mutables.insert(dest.clone(), *info);
                 if *lhs_is_ref {
-                    let x = env.env.get_type(name).unwrap();
+                    let x = env.env.get_type(&VarName::new(name.clone())).unwrap();
                     env.add_constraint(dest, DTypeConstraint::Ref(x), *info)?;
                 } else {
                     env.add_var_equiv(dest, name, *info)?;

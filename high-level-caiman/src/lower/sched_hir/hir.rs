@@ -9,6 +9,7 @@ use crate::{
         self, hole_or_var, Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr,
         SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop,
     },
+    typing::ClassName,
 };
 use caiman::assembly::ast as asm;
 use caiman::explication::Hole;
@@ -313,7 +314,7 @@ pub enum HirBody {
         uses: FillIn<(), Vec<String>>,
         /// variables that must be initialized (made usable) at this hole, and the
         /// value node they will be initialized to.
-        initialized: HashMap<String, Option<String>>,
+        initialized: HashMap<String, Option<ClassName>>,
         /// the fences that are active at the current point
         active_fences: Vec<String>,
     },

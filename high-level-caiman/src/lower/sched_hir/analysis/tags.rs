@@ -426,7 +426,7 @@ impl FlowAnalysis {
                     tag.value.flow = Some(Flow::Usable);
                     if let Some(node) = init_val_node {
                         let new_node = Some(node.clone());
-                        tag.value.quot_var.spec_var = new_node;
+                        tag.value.quot_var.spec_var = new_node.map(|x| x.get_name().to_owned());
                         // can't be input bc we're initializing it
                         tag.value.quot = Some(Quotient::Node);
                     }

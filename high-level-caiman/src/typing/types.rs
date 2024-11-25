@@ -1,3 +1,4 @@
+#![allow(clippy::ptr_as_ptr, clippy::ref_as_ptr)]
 use std::{
     collections::{BTreeMap, BTreeSet},
     vec,
@@ -195,7 +196,7 @@ impl DTypeConstraint {
             RecordConstraint::Var(s) => Constraint::Var(s),
             RecordConstraint::Any => {
                 let t = env.new_temp_type();
-                Constraint::Var(t)
+                Constraint::Var(t.into_string())
             }
         }
     }
@@ -208,7 +209,7 @@ impl DTypeConstraint {
         match self {
             Self::Num => {
                 let t = env.new_temp_type();
-                Constraint::Term(CDataType::Num, vec![Constraint::Var(t)])
+                Constraint::Term(CDataType::Num, vec![Constraint::Var(t.into_string())])
             }
             Self::Int(Some(x)) => Constraint::Term(
                 CDataType::Num,
@@ -221,7 +222,10 @@ impl DTypeConstraint {
                 let t = env.new_temp_type();
                 Constraint::Term(
                     CDataType::Num,
-                    vec![Constraint::Term(CDataType::Int, vec![Constraint::Var(t)])],
+                    vec![Constraint::Term(
+                        CDataType::Int,
+                        vec![Constraint::Var(t.into_string())],
+                    )],
                 )
             }
             Self::Float(Some(x)) => Constraint::Term(
@@ -235,12 +239,15 @@ impl DTypeConstraint {
                 let t = env.new_temp_type();
                 Constraint::Term(
                     CDataType::Num,
-                    vec![Constraint::Term(CDataType::Float, vec![Constraint::Var(t)])],
+                    vec![Constraint::Term(
+                        CDataType::Float,
+                        vec![Constraint::Var(t.into_string())],
+                    )],
                 )
             }
             Self::Any => {
                 let t = env.new_temp_type();
-                Constraint::Var(t)
+                Constraint::Var(t.into_string())
             }
             Self::Bool => Constraint::Atom(ADataType::Bool),
             Self::BufferSpace => Constraint::Atom(ADataType::BufferSpace),
@@ -482,9 +489,104 @@ impl From<DataType> for DTypeConstraint {
         }
     }
 }
+/// A type class name
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct ClassName(String);
+
+impl ClassName {
+    #[must_use]
+    /// Constructs a class name.
+    /// # Panics
+    /// If `s` starts with a class identifier
+    pub fn new(s: &str) -> Self {
+        assert!(!s.starts_with('$'));
+        Self(format!("${s}"))
+    }
+
+    #[must_use]
+    /// Gets the name without the class identifier.
+    pub fn get_name(&self) -> &str {
+        &self.0[1..]
+    }
+
+    #[must_use]
+    /// Constructs a class name from its raw string representation.
+    /// # Panics
+    /// If `s` doesn't start with a class identifier
+    pub fn from_raw(s: String) -> Self {
+        assert!(s.starts_with('$'));
+        Self(s)
+    }
+
+    /// Constructs a class name for its raw string representation.
+    #[must_use]
+    pub fn from_raw_str(s: &str) -> Self {
+        Self::from_raw(s.to_string())
+    }
+
+    /// Converts the class name into its raw string representation.
+    #[must_use]
+    pub fn into_raw(self) -> String {
+        self.0
+    }
+}
+
+/// A type variable name
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct VarName(String);
+
+impl VarName {
+    #[must_use]
+    /// # Panics
+    /// If `s` starts with a class identifier
+    pub fn new(s: String) -> Self {
+        assert!(!s.starts_with('$'));
+        Self(s)
+    }
+
+    #[must_use]
+    /// # Panics
+    /// If `s` starts with a class identifier
+    pub fn new_ref(s: &String) -> &Self {
+        assert!(!s.starts_with('$'));
+        unsafe { &*(s as *const String as *const Self) }
+    }
+
+    /// Gets the name of this variable.
+    #[must_use]
+    pub fn get_name(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl From<String> for VarName {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl<'a> From<&'a String> for VarName {
+    fn from(value: &'a String) -> Self {
+        Self::new(value.clone())
+    }
+}
+
+impl<'a> From<&'a str> for VarName {
+    fn from(value: &'a str) -> Self {
+        Self::new(value.to_string())
+    }
+}
 
 /// A type metavariable. Either a class name or a variable name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct MetaVar(String);
 
 impl MetaVar {
@@ -494,41 +596,79 @@ impl MetaVar {
         self.0.starts_with('$')
     }
 
-    /// Creates a type equivalence class name
     #[must_use]
-    pub fn new_class_name(s: &str) -> Self {
-        Self(format!("${s}"))
+    pub fn get_var_name(&self) -> Option<&VarName> {
+        if self.is_class() {
+            None
+        } else {
+            Some(unsafe { &*(self as *const Self as *const VarName) })
+        }
     }
 
-    /// Creates a type variable name.
-    /// # Panics
-    /// If the type variable name begins with a leading `$`.
     #[must_use]
-    pub fn new_var_name(s: &str) -> Self {
-        assert!(!s.starts_with('$'));
+    pub fn from_raw(s: &str) -> Self {
         Self(s.to_string())
     }
+}
 
-    /// Returns the string representation of the metavariable
-    #[must_use]
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn into_string(self) -> String {
-        self.0
+impl<'a> From<&'a ClassName> for MetaVar {
+    fn from(value: &'a ClassName) -> Self {
+        Self(value.0.clone())
     }
+}
 
-    #[must_use]
-    pub fn get(&self) -> &str {
+impl<'a> From<&'a VarName> for MetaVar {
+    fn from(value: &'a VarName) -> Self {
+        Self(value.0.clone())
+    }
+}
+
+impl From<ClassName> for MetaVar {
+    fn from(value: ClassName) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<VarName> for MetaVar {
+    fn from(value: VarName) -> Self {
+        Self(value.0)
+    }
+}
+
+/// A type name for unification. Either a unification class name or a metavariable name.
+pub trait UTypeName {
+    /// Gets the raw string representation of the type name.
+    fn get_raw(&self) -> &str;
+    /// Converts this type name to a general `MetaVar`.
+    fn as_metavar(&self) -> &MetaVar;
+}
+
+impl UTypeName for VarName {
+    fn get_raw(&self) -> &str {
+        &self.0
+    }
+    fn as_metavar(&self) -> &MetaVar {
+        unsafe { &*(self as *const Self as *const MetaVar) }
+    }
+}
+
+impl UTypeName for ClassName {
+    fn get_raw(&self) -> &str {
         &self.0
     }
 
-    /// If this is a class name, returns that name without the leading `$`
-    #[must_use]
-    pub fn get_class_name(&self) -> Option<&str> {
-        if self.0.starts_with('$') {
-            Some(&self.0[1..])
-        } else {
-            None
-        }
+    fn as_metavar(&self) -> &MetaVar {
+        unsafe { &*(self as *const Self as *const MetaVar) }
+    }
+}
+
+impl UTypeName for MetaVar {
+    fn get_raw(&self) -> &str {
+        &self.0
+    }
+
+    fn as_metavar(&self) -> &MetaVar {
+        self
     }
 }
 

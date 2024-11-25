@@ -40,7 +40,7 @@ use crate::{
         Hir, HirBody, HirInstr, Terminator, TripleTag,
     },
     parse::ast::{self, DataType, FullType},
-    typing::{MetaVar, NodeEnv},
+    typing::{ClassName, NodeEnv, VarName},
 };
 
 use super::{get_usable_uses, invert_map};
@@ -319,12 +319,15 @@ fn get_val_uses(
 /// A map from location to a map from variable name to nodes that need to be initialized
 /// if the given variable were to be initialized at the given location.
 ///
-/// Ie. `f(l, v) =` set of classes (with leading '$') that need to be
-/// initialized if `v` were to be initialized at `l`
-type UnavailableNodes = HashMap<Loc, HashMap<String, HashSet<String>>>;
+/// Ie. `f(l, v) =` set of classes  that need to be initialized if
+/// `v` were to be initialized at `l`
+type UnavailableNodes = HashMap<Loc, HashMap<String, HashSet<ClassName>>>;
 
-/// For each location, gets a set of class names (with the leading `$`) that
+/// For each location, gets a set of class names that
 /// would need to be generated given the initialization set of `inits`.
+///
+/// Ie. `unavailable_nodes(...)(l, v) =` set of classes that need to be initialized if
+/// `v` were to be initialized at `l`
 fn unavailable_nodes<'a, T: Iterator<Item = &'a String> + Clone>(
     cfg: &Cfg,
     env: &NodeEnv,
@@ -337,15 +340,20 @@ fn unavailable_nodes<'a, T: Iterator<Item = &'a String> + Clone>(
             let mut unavailable = HashMap::new();
             if let HirBody::Hole { uses, .. } = s {
                 for var in to_init.clone() {
-                    if let Some(node) = env.get_node_name(var) {
-                        let node_name = MetaVar::new_class_name(&node);
+                    if let Some(node) = env.get_node_name(VarName::new_ref(var)) {
                         unavailable.insert(
                             var.clone(),
                             env.unavailable_nodes(
-                                &node_name,
+                                &node,
                                 // we ignore the variable we're trying to initialize
                                 // TODO: we can count them if their initializations dominate this location...
-                                uses.processed().iter().filter(|&u| !uninit.contains(u)),
+                                uses.processed().iter().filter_map(|u| {
+                                    if uninit.contains(u) {
+                                        None
+                                    } else {
+                                        Some(VarName::new_ref(u))
+                                    }
+                                }),
                             ),
                         );
                     }
@@ -523,6 +531,8 @@ impl<T: std::hash::Hash + Eq> FractionalMultiSet<T> {
         false
     }
 
+    /// Gets the intersection between `self` and `other`. If `self` and `other` share an element `e`,
+    /// the result's cardinality of `e` is the minimum of the cardinality of `e` in `self` and `other`.
     fn intersect(self, other: &Self) -> Self {
         let mut new_map = HashMap::new();
         for (entry, amount) in self.map {
@@ -555,19 +565,24 @@ impl<T: std::hash::Hash + Eq> FractionalMultiSet<T> {
         self.map.contains_key(e)
     }
 
-    #[allow(unused)]
-    fn remove_all(&mut self, e: &T) {
-        self.map.remove(e);
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
     }
 }
 
+/// Data structure for calculating the dependencies that need to be computed
+/// to initialize a variable at a given location.
 #[derive(Clone)]
 struct DependencyCalc<'a> {
     env: &'a NodeEnv,
     /// map from location to mutables we are currently initializing at this location
     inv_inits: &'a HashMap<Loc, HashSet<String>>,
+    /// map from location and variable name to set of nodes that must be initialized for
+    /// the variable at that location.
     unavailable_nodes: &'a UnavailableNodes,
-    cache: HashMap<Loc, Rc<FractionalMultiSet<String>>>,
+    cache: HashMap<Loc, Rc<FractionalMultiSet<ClassName>>>,
 }
 
 impl<'a> DependencyCalc<'a> {
@@ -575,14 +590,13 @@ impl<'a> DependencyCalc<'a> {
     /// Takes into account sharing of dependencies by making the contribution
     /// of a dependency count as `1/n` where `n` is the number of variables
     /// being initialized at `loc` that require an initialization of the dependency.
-    fn calc(&mut self, var: &str, loc: &Loc) -> Rc<FractionalMultiSet<String>> {
+    fn calc(&mut self, var: &str, loc: &Loc) -> Rc<FractionalMultiSet<ClassName>> {
         if let Some(res) = self.cache.get(loc) {
             return res.clone();
         }
-        let var_class =
-            MetaVar::new_class_name(&self.env.get_node_name(var).unwrap()).into_string();
+        let var_class = self.env.get_node_name(&VarName::from(var)).unwrap();
         let needed = &self.unavailable_nodes[loc][var];
-        let mut res = FractionalMultiSet::default();
+        let mut res = FractionalMultiSet::new();
         for (v, deps) in &self.unavailable_nodes[loc] {
             // for all variables (including ourselves) being initialized here,
             // take into account dependencies they are initializing at this
@@ -602,12 +616,12 @@ impl<'a> DependencyCalc<'a> {
                 // take other variables (not ourself) being initialized at this hole into account
                 // if we depend on them.
                 if init_mutable != var {
-                    if let Some(var_node_name) = self.env.get_node_name(init_mutable) {
-                        let init_var_node_class =
-                            MetaVar::new_class_name(&var_node_name).into_string();
-                        if res.contains(&init_var_node_class) {
+                    if let Some(var_node_name) =
+                        self.env.get_node_name(VarName::new_ref(init_mutable))
+                    {
+                        if res.contains(&var_node_name) {
                             // take into account things we're already initializing
-                            res.insert_frac(init_var_node_class);
+                            res.insert_frac(var_node_name);
                         }
                     }
                 }
@@ -624,7 +638,9 @@ impl<'a> DependencyCalc<'a> {
 #[derive(Clone)]
 struct Hoist<'a> {
     cfg: &'a Cfg,
+    /// Locations `self.var` was initialized in the last iteration
     prev_var_inits: &'a HashSet<Loc>,
+    /// Locations we are initializing `self.var`
     var_inits: HashSet<Loc>,
     /// The variable to handle
     var: &'a String,
@@ -632,6 +648,7 @@ struct Hoist<'a> {
     var_def: Loc,
     /// Map from mark location to a tuple of `(origin location, set of initializations)`
     mark: HashMap<Loc, (Loc, HashSet<Loc>)>,
+    /// Map from location `l` to set of variables that are initialized along every path from `l` to the end.
     anticipated_inits: &'a HashMap<Loc, HashSet<String>>,
     doms: &'a DomInfo,
     dep_calc: DependencyCalc<'a>,
@@ -905,7 +922,7 @@ impl<'a> PassState for HoleDefs<'a> {
     fn handle_body(&mut self, t: &HirBody, loc: Loc) {
         if let HirBody::Hole { dests, .. } = t {
             for dest in dests.iter().map(|(dest, _)| dest) {
-                if self.env.get_node_name(dest).is_some() {
+                if self.env.get_node_name(VarName::new_ref(dest)).is_some() {
                     assert!(!self.defs.contains_key(dest));
                     self.defs.insert(dest.clone(), loc.clone());
                 }
@@ -1015,6 +1032,7 @@ pub fn hoist_optimization(
 /// caused by a user manually adding a `dead` type annotation.
 #[derive(Default)]
 struct HoistFreezes {
+    /// map from variable name to locations we cannot hoist earlier than (inclusive)
     freezes: HashMap<String, HashSet<Loc>>,
 }
 

@@ -17,8 +17,8 @@ use crate::{
     error::{hir_to_source_name, LocalError},
     parse::ast::{DataType, FlaggedType, FullType, IntSize, SchedulingFunc},
     typing::{
-        Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
-        ENCODE_STORAGE_FLAGS,
+        ClassName, Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS,
+        ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS,
     },
 };
 use caiman::assembly::ast::{self as asm};
@@ -69,7 +69,7 @@ pub struct Funclets {
     /// function call
     captured_out: HashMap<usize, BTreeSet<String>>,
     /// Set of value quotients which are literals in the value specification
-    literal_value_classes: HashSet<String>,
+    literal_value_classes: HashSet<ClassName>,
     /// Set of mutables used in the schedule. This does not include the `_ref`
     /// backing refs
     variables: HashSet<String>,
@@ -485,9 +485,11 @@ impl<'a> Funclet<'a> {
     /// Returns true if the specified tag is a literal node in the value specification
     pub fn is_literal_value(&self, t: &asm::RemoteNodeId) -> bool {
         t.node.as_ref().map_or(false, |n| {
-            n.as_ref()
-                .opt()
-                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
+            n.as_ref().opt().map_or(false, |r| {
+                self.parent
+                    .literal_value_classes
+                    .contains(&ClassName::new(&r.0))
+            })
         })
     }
 

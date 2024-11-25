@@ -21,6 +21,11 @@ use std::{
     rc::Rc,
 };
 
+use super::{
+    types::{ClassName, UTypeName, VarName},
+    MetaVar,
+};
+
 type NodePtr<T, A> = Rc<RefCell<Node<T, A>>>;
 
 /// A component of a type expression
@@ -1005,7 +1010,7 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
 #[derive(Debug)]
 pub struct Env<T: Kind, A: Kind> {
     temp_id: usize,
-    nodes: HashMap<String, NodePtr<T, A>>,
+    nodes: HashMap<MetaVar, NodePtr<T, A>>,
 }
 
 impl<T: Kind, A: Kind> Clone for Env<T, A> {
@@ -1034,52 +1039,52 @@ impl<T: Kind, A: Kind> Env<T, A> {
         }))
     }
 
-    pub fn node_names(&self) -> impl Iterator<Item = &String> {
+    pub fn node_names(&self) -> impl Iterator<Item = &MetaVar> {
         self.nodes.keys()
     }
     /// Creates a fresh type variable that represents a named class if one
     /// does not already exist. If a type variable already exists with the
     /// given name, it will be reused and made into a class node.
     /// Any new nodes will be inserted into the environment.
-    fn new_class_type(&mut self, class_name: &str) -> NodePtr<T, A> {
-        if self.nodes.contains_key(class_name) {
-            self.nodes
-                .get_mut(class_name)
-                .unwrap()
+    fn new_class_type(&mut self, class_name: ClassName) -> NodePtr<T, A> {
+        if self.nodes.contains_key(class_name.as_metavar()) {
+            let class = self.nodes.get_mut(class_name.as_metavar()).unwrap();
+            class
                 .borrow_mut()
                 .get_class_mut()
-                .replace(class_name.to_string());
-            return self.nodes.get(class_name).unwrap().clone();
+                .replace(class_name.into_raw());
+            return class.clone();
         }
         let id = self.temp_id;
         self.temp_id += 1;
         let r = Rc::new(RefCell::new(Node::Var {
             parent: None,
             id,
-            class_id: Some(class_name.to_string()),
+            class_id: Some(class_name.clone().into_raw()),
         }));
-        self.nodes.insert(class_name.to_string(), r.clone());
+        self.nodes.insert(class_name.into(), r.clone());
         r
     }
 
     /// Creates a fresh type variable for a name. This will overwrite any existing
     /// type variable for that name.
-    fn new_type(&mut self, name: &str) {
+    fn new_type(&mut self, name: &dyn UTypeName) -> NodePtr<T, A> {
         let node = self.new_var();
-        self.nodes.insert(name.to_string(), node);
+        self.nodes.insert(name.as_metavar().clone(), node.clone());
+        node
     }
 
     /// Creates a fresh type variable, returning its name to refer to it
-    pub fn new_temp_type(&mut self) -> String {
-        let name = format!("%{}", self.temp_id);
+    pub fn new_temp_type(&mut self) -> VarName {
+        let name = VarName::new(format!("%{}", self.temp_id));
         let v = self.new_var();
-        self.nodes.insert(name.clone(), v);
+        self.nodes.insert(name.clone().into(), v);
         name
     }
 
     /// Creates a fresh type variable if one is not already associated with a given name.
-    pub fn new_type_if_absent(&mut self, name: &str) {
-        if !self.nodes.contains_key(name) {
+    pub fn new_type_if_absent(&mut self, name: &dyn UTypeName) {
+        if !self.nodes.contains_key(name.as_metavar()) {
             self.new_type(name);
         }
     }
@@ -1092,16 +1097,22 @@ impl<T: Kind, A: Kind> Env<T, A> {
     ///     of the nodes they depend upon.
     pub fn dependencies(
         &self,
-        node_name: &str,
-        ignored_subtrees: &HashSet<String>,
-    ) -> HashSet<String> {
+        node_name: &ClassName,
+        ignored_subtrees: &HashSet<ClassName>,
+    ) -> HashSet<ClassName> {
         let mut set = HashSet::new();
-        if let Some(node) = self.nodes.get(node_name) {
-            node.borrow().dependencies(&mut set, ignored_subtrees);
+        if let Some(node) = self.nodes.get(node_name.as_metavar()) {
+            node.borrow().dependencies(
+                &mut set,
+                &ignored_subtrees
+                    .iter()
+                    .map(|x| x.get_raw().to_string())
+                    .collect(),
+            );
             // we do not depend on ourself
             node.borrow().get_class().map(|class| set.remove(class));
         }
-        set
+        set.into_iter().map(ClassName::from_raw).collect()
     }
 
     /// Adds a constraint to the environment.
@@ -1112,7 +1123,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// Returns `Err` if the constraint cannot be added (unification fails)
     pub fn add_constraint(
         &mut self,
-        var: &str,
+        var: &VarName,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let var = self.get_or_make_node(var);
@@ -1128,7 +1139,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// Returns `Err` if the constraint cannot be added (unification fails)
     pub fn add_constraint_ignore_contravariance(
         &mut self,
-        var: &str,
+        var: &VarName,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let var = self.get_or_make_node(var);
@@ -1161,7 +1172,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// - `constraint`: The constraint to add.
     pub fn add_class_constraint(
         &mut self,
-        class_name: &str,
+        class_name: ClassName,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let class = self.new_class_type(class_name);
@@ -1170,11 +1181,11 @@ impl<T: Kind, A: Kind> Env<T, A> {
 
     /// Gets the node for a variable, creating it if it does not exist.
     /// If the variable is a polymorphic constraint, it will be instantiated.
-    fn get_or_make_node(&mut self, name: &str) -> NodePtr<T, A> {
-        if !self.nodes.contains_key(name) {
-            self.new_type(name);
+    fn get_or_make_node(&mut self, name: &dyn UTypeName) -> NodePtr<T, A> {
+        if !self.nodes.contains_key(name.as_metavar()) {
+            return self.new_type(name);
         }
-        self.nodes.get(name).unwrap().clone()
+        self.nodes.get(name.as_metavar()).unwrap().clone()
     }
 
     /// Converts a constraint to a node.
@@ -1208,7 +1219,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
                 class_id: None,
             })),
-            Constraint::Var(name) => self.get_or_make_node(name),
+            Constraint::Var(name) => self.get_or_make_node(&MetaVar::from_raw(name)),
             Constraint::DynamicTerm(op, args, constraint_kind) => {
                 Rc::new(RefCell::new(Node::DynamicTerm {
                     parent: None,
@@ -1281,8 +1292,10 @@ impl<T: Kind, A: Kind> Env<T, A> {
     }
 
     /// Gets the type of a variable.
-    pub fn get_type(&self, name: &str) -> Option<Constraint<T, A>> {
-        self.nodes.get(name).map(|n| Self::node_to_constraint(n))
+    pub fn get_type(&self, name: &dyn UTypeName) -> Option<Constraint<T, A>> {
+        self.nodes
+            .get(name.as_metavar())
+            .map(|n| Self::node_to_constraint(n))
     }
 
     /// Gets a unique identifier for the equivalence class the type variable
@@ -1291,9 +1304,13 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// # Returns
     /// Returns `None` if the type variable is not a member of an equivalence class
     /// or if the equivalence class does not have an identifier.
-    pub fn get_class_id(&self, name: &str) -> Option<String> {
-        self.nodes
-            .get(name)
-            .and_then(|n| representative(n).borrow().get_class().cloned())
+    pub fn get_class_id(&self, name: &dyn UTypeName) -> Option<ClassName> {
+        self.nodes.get(name.as_metavar()).and_then(|n| {
+            representative(n)
+                .borrow()
+                .get_class()
+                .cloned()
+                .map(ClassName::from_raw)
+        })
     }
 }

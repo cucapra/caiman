@@ -9,11 +9,12 @@ use crate::{
         TemplateArgs,
     },
     type_error,
+    typing::types::ClassName,
 };
 
 use super::{
     binop_to_contraints,
-    types::{DTypeConstraint, MetaVar, ValQuot},
+    types::{DTypeConstraint, ValQuot, VarName},
     DTypeEnv, NodeEnv, Signature, SpecInfo, TypedBinop, UnresolvedTypedBinop,
 };
 
@@ -189,23 +190,23 @@ fn collect_spec_assign_call(
         };
         if single_ret_builtin {
             ctx.nodes.add_quotient(
-                &tuple_name,
+                ClassName::new(&tuple_name),
                 ValQuot::CallOne(
                     func_name.clone(),
                     arg_nodes
                         .iter()
-                        .map(|(x, _)| MetaVar::new_class_name(x))
+                        .map(|(x, _)| ClassName::new(x).into())
                         .collect(),
                 ),
             );
         } else {
             ctx.nodes.add_quotient(
-                &tuple_name,
+                ClassName::new(&tuple_name),
                 ValQuot::Call(
                     func_name.clone(),
                     arg_nodes
                         .iter()
-                        .map(|(x, _)| MetaVar::new_class_name(x))
+                        .map(|(x, _)| ClassName::new(x).into())
                         .collect(),
                 ),
             );
@@ -223,8 +224,8 @@ fn collect_spec_assign_call(
                 .add_dtype_constraint(name, typ.base.clone(), info)?;
             if !single_ret_builtin {
                 ctx.nodes.add_quotient(
-                    name,
-                    ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
+                    ClassName::new(name),
+                    ValQuot::Extract(ClassName::new(&tuple_name).into(), idx),
                 );
             }
         }
@@ -261,7 +262,7 @@ fn collect_spec_assign_term(
     match t {
         SpecTerm::Lit { lit, info } => {
             ctx.nodes.add_quotient(
-                &lhs[0].0,
+                ClassName::new(&lhs[0].0),
                 match lit {
                     SpecLiteral::Int(i) => ValQuot::Int(i.clone()),
                     SpecLiteral::Bool(b) => ValQuot::Bool(*b),
@@ -358,11 +359,11 @@ fn collect_spec_assign_if(
             ctx.types.add_dtype_constraint(&lhs[0].0, t.clone(), info)?;
         }
         ctx.nodes.add_quotient(
-            &lhs[0].0,
+            ClassName::new(&lhs[0].0),
             ValQuot::Select {
-                guard: MetaVar::new_class_name(guard),
-                true_id: MetaVar::new_class_name(name1),
-                false_id: MetaVar::new_class_name(name2),
+                guard: ClassName::new(guard).into(),
+                true_id: ClassName::new(name1).into(),
+                false_id: ClassName::new(name2).into(),
             },
         );
     } else {
@@ -426,11 +427,11 @@ fn collect_spec_assign_bop(
             ret: lhs[0].0.clone(),
         });
         ctx.nodes.add_quotient(
-            &lhs[0].0,
+            ClassName::new(&lhs[0].0),
             ValQuot::Bop(
                 op,
-                MetaVar::new_class_name(name1),
-                MetaVar::new_class_name(name2),
+                ClassName::new(name1).into(),
+                ClassName::new(name2).into(),
             ),
         );
     } else {
@@ -446,7 +447,7 @@ fn resolve_types(
     ctx: &mut SpecInfo,
 ) -> Result<(), LocalError> {
     for name in names {
-        match env.env.get_type(name) {
+        match env.env.get_type(VarName::new_ref(name)) {
             Some(c) => {
                 let dt = DTypeConstraint::try_from(c.clone()).map_err(|e| {
                     type_error!(ctx.info, "Failed to resolve type of variable '{name}': {e}")
@@ -471,13 +472,15 @@ fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError
     let info = ctx.info;
     for (arg, typ) in ctx.sig.input.clone() {
         env.types.add_dtype_constraint(&arg, typ.base, info)?;
-        env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
+        env.nodes
+            .add_quotient(ClassName::new(&arg), ValQuot::Input(arg.clone()));
     }
     for i in 0..ctx.sig.num_dims {
         let name = format!("_dim{i}");
         env.types
             .add_dtype_constraint(&name, DataType::Int(IntSize::I32), info)?;
-        env.nodes.add_quotient(&name, ValQuot::Input(name.clone()));
+        env.nodes
+            .add_quotient(ClassName::new(&name), ValQuot::Input(name.clone()));
     }
     Ok(())
 }
@@ -503,8 +506,8 @@ fn collect_spec_returns(
             env.types
                 .add_dtype_constraint(name, ctx.sig.output[0].1.base.clone(), info)?;
             env.nodes.add_quotient(
-                &ctx.sig.output[0].0,
-                ValQuot::Output(MetaVar::new_class_name(name)),
+                ClassName::new(&ctx.sig.output[0].0),
+                ValQuot::Output(ClassName::new(name).into()),
             );
             Ok(())
         }
@@ -540,8 +543,10 @@ fn collect_spec_returns(
             }
             for (name, (class, typ)) in constraints {
                 env.types.add_dtype_constraint(name, typ.base, info)?;
-                env.nodes
-                    .add_quotient(&class, ValQuot::Output(MetaVar::new_class_name(name)));
+                env.nodes.add_quotient(
+                    ClassName::new(&class),
+                    ValQuot::Output(ClassName::new(name).into()),
+                );
             }
             Ok(())
         }
