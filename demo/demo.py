@@ -9,6 +9,10 @@ def main():
     if sys.argv[1] == "build":
         result = subprocess.run(["..\\target\\debug\\hlc.exe", "select_sum.cm"], capture_output=True, encoding="utf8")
         if len(result.stderr) > 0:
+            # with open('results.txt', 'w') as ofile:
+            #     ofile.write(result.stdout)
+            #     ofile.write('\n')
+            #     ofile.write(result.stderr)
             print(result.stderr)
         else:
             to_write = result.stdout

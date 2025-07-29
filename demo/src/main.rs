@@ -6,12 +6,7 @@ mod util;
 struct Callbacks;
 
 impl caiman_out::main::CpuFunctions for Callbacks {
-    fn sum1(&self, _: &mut dyn caiman_rt::State, x: [i64; 4]) -> caiman_out::main::outputs::sum1 {
-        println!("sum1 called");
-        (x.iter().sum(),)
-    }
-    fn sum2(&self, _: &mut dyn caiman_rt::State, x: [i64; 4]) -> caiman_out::main::outputs::sum2 {
-        println!("sum2 called");
+    fn sum(&self, _: &mut dyn caiman_rt::State, x: [i64; 4]) -> caiman_out::main::outputs::sum {
         (x.iter().sum(),)
     }
 
@@ -26,9 +21,11 @@ impl caiman_out::main::CpuFunctions for Callbacks {
 
 fn main() {
 
-    let v1 : [i64; 4] = [1, 2, 3, 4];
+    let v1 : [i64; 4] = [-1, 0, 0, 0];
     let v2 : [i64; 4] = [1, 2, 3, 4];
-    let v3 : [i64; 4] = [1, 2, 3, 4];
+    let v3 : [i64; 4] = [1, 1, 1, 1];
+
+    println!("\n");
 
     let callbacks = Callbacks;
     let mut wgpu_instance = util::INSTANCE.lock().unwrap();

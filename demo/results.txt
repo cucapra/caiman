@@ -1,0 +1,4528 @@
+
+[src\assembly\lowering_pass.rs:876:5] &original = Program {
+    path: "",
+    version: Version {
+        major: 0,
+        minor: 0,
+        detailed: 2,
+    },
+    declarations: [
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "BufferSpace",
+                    data: BufferSpace,
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "Event",
+                    data: Event,
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "Encoder",
+                    data: Encoder {
+                        queue_place: Gpu,
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "Fence",
+                    data: Fence {
+                        queue_place: Gpu,
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                I64,
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                Array {
+                    element_type: I32,
+                    length: 2,
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                Array {
+                    element_type: I32,
+                    length: 4,
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                Array {
+                    element_type: I32,
+                    length: 8,
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                Array {
+                    element_type: I64,
+                    length: 2,
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                Array {
+                    element_type: I64,
+                    length: 4,
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                Array {
+                    element_type: I64,
+                    length: 8,
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "array_i32_2",
+                    data: NativeValue {
+                        storage_type: Array {
+                            element_type: I32,
+                            length: 2,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "array_i32_4",
+                    data: NativeValue {
+                        storage_type: Array {
+                            element_type: I32,
+                            length: 4,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "array_i328",
+                    data: NativeValue {
+                        storage_type: Array {
+                            element_type: I32,
+                            length: 8,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "array_i64_2",
+                    data: NativeValue {
+                        storage_type: Array {
+                            element_type: I64,
+                            length: 2,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "array_i64_4",
+                    data: NativeValue {
+                        storage_type: Array {
+                            element_type: I64,
+                            length: 4,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "array_i64_8",
+                    data: NativeValue {
+                        storage_type: Array {
+                            element_type: I64,
+                            length: 8,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                I32,
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "bool",
+                    data: NativeValue {
+                        storage_type: I32,
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&bool",
+                    data: Ref {
+                        storage_type: I32,
+                        storage_place: Local,
+                        buffer_flags: BufferFlags {
+                            map_read: true,
+                            map_write: true,
+                            copy_src: true,
+                            copy_dst: true,
+                            storage: false,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i64",
+                    data: NativeValue {
+                        storage_type: I64,
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&i64",
+                    data: Ref {
+                        storage_type: I64,
+                        storage_place: Local,
+                        buffer_flags: BufferFlags {
+                            map_read: true,
+                            map_write: true,
+                            copy_src: true,
+                            copy_dst: true,
+                            storage: false,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i64::gs",
+                    data: Ref {
+                        storage_type: I64,
+                        storage_place: Gpu,
+                        buffer_flags: BufferFlags {
+                            map_read: false,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: true,
+                            storage: true,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i64::gd",
+                    data: Ref {
+                        storage_type: I64,
+                        storage_place: Gpu,
+                        buffer_flags: BufferFlags {
+                            map_read: true,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: false,
+                            storage: true,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i32",
+                    data: NativeValue {
+                        storage_type: I32,
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&i32",
+                    data: Ref {
+                        storage_type: I32,
+                        storage_place: Local,
+                        buffer_flags: BufferFlags {
+                            map_read: true,
+                            map_write: true,
+                            copy_src: true,
+                            copy_dst: true,
+                            storage: false,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&i32::gs",
+                    data: Ref {
+                        storage_type: I32,
+                        storage_place: Gpu,
+                        buffer_flags: BufferFlags {
+                            map_read: false,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: true,
+                            storage: true,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i32::gs",
+                    data: Ref {
+                        storage_type: I32,
+                        storage_place: Gpu,
+                        buffer_flags: BufferFlags {
+                            map_read: false,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: true,
+                            storage: true,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i32::gd",
+                    data: Ref {
+                        storage_type: I32,
+                        storage_place: Gpu,
+                        buffer_flags: BufferFlags {
+                            map_read: true,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: false,
+                            storage: true,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "_loop",
+                ),
+                input_types: [],
+                output_types: [],
+            },
+        ),
+        ExternalFunction(
+            ExternalFunction {
+                kind: CPUEffect,
+                value_function_binding: FunctionClassBinding {
+                    default: false,
+                    function_class: FunctionClassId(
+                        "_loop",
+                    ),
+                },
+                name: "_loop_impl",
+                input_args: [],
+                output_types: [],
+            },
+        ),
+        Effect(
+            EffectDeclaration {
+                name: EffectId(
+                    "_loop_eff",
+                ),
+                effect: FullyConnected {
+                    effectful_function_ids: [
+                        ExternalFunctionId(
+                            "_loop_impl",
+                        ),
+                    ],
+                },
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "_lt_i32_i32",
+                ),
+                input_types: [
+                    TypeId(
+                        "i32",
+                    ),
+                    TypeId(
+                        "i32",
+                    ),
+                ],
+                output_types: [
+                    TypeId(
+                        "bool",
+                    ),
+                ],
+            },
+        ),
+        ExternalFunction(
+            ExternalFunction {
+                kind: CPUPure,
+                value_function_binding: FunctionClassBinding {
+                    default: false,
+                    function_class: FunctionClassId(
+                        "_lt_i32_i32",
+                    ),
+                },
+                name: "_lt_i32_i32",
+                input_args: [
+                    ExternalArgument {
+                        name: None,
+                        ffi_type: I32,
+                    },
+                    ExternalArgument {
+                        name: None,
+                        ffi_type: I32,
+                    },
+                ],
+                output_types: [
+                    ExternalArgument {
+                        name: None,
+                        ffi_type: I32,
+                    },
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: Spatial,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "space",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_in_s",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "BufferSpace",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "BufferSpace",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    binding: SpecBinding(
+                        FunctionClassBinding {
+                            default: false,
+                            function_class: FunctionClassId(
+                                "space",
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "s",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Return {
+                                return_values: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "s",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "space",
+                ),
+                input_types: [
+                    TypeId(
+                        "BufferSpace",
+                    ),
+                ],
+                output_types: [
+                    TypeId(
+                        "BufferSpace",
+                    ),
+                ],
+            },
+        ),
+        ExternalFunction(
+            ExternalFunction {
+                kind: CPUPure,
+                value_function_binding: FunctionClassBinding {
+                    default: false,
+                    function_class: FunctionClassId(
+                        "sum",
+                    ),
+                },
+                name: "sum_cpu",
+                input_args: [
+                    ExternalArgument {
+                        name: Some(
+                            NodeId(
+                                "x",
+                            ),
+                        ),
+                        ffi_type: I32,
+                    },
+                ],
+                output_types: [
+                    ExternalArgument {
+                        name: Some(
+                            NodeId(
+                                "out",
+                            ),
+                        ),
+                        ffi_type: I32,
+                    },
+                ],
+            },
+        ),
+        ExternalFunction(
+            ExternalFunction {
+                kind: GPU(
+                    ExternalGPUInfo {
+                        shader_module: "gpu_sum.comp",
+                        entry_point: "main",
+                        dimensionality: 3,
+                        resource_bindings: [
+                            ExternalGpuFunctionResourceBinding {
+                                group: 0,
+                                binding: 0,
+                                input: Some(
+                                    NodeId(
+                                        "x",
+                                    ),
+                                ),
+                                output: None,
+                            },
+                            ExternalGpuFunctionResourceBinding {
+                                group: 0,
+                                binding: 1,
+                                input: None,
+                                output: Some(
+                                    NodeId(
+                                        "out",
+                                    ),
+                                ),
+                            },
+                        ],
+                    },
+                ),
+                value_function_binding: FunctionClassBinding {
+                    default: false,
+                    function_class: FunctionClassId(
+                        "sum",
+                    ),
+                },
+                name: "sum_gpu",
+                input_args: [
+                    ExternalArgument {
+                        name: Some(
+                            NodeId(
+                                "x",
+                            ),
+                        ),
+                        ffi_type: I32,
+                    },
+                ],
+                output_types: [
+                    ExternalArgument {
+                        name: Some(
+                            NodeId(
+                                "out",
+                            ),
+                        ),
+                        ffi_type: I32,
+                    },
+                ],
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "sum",
+                ),
+                input_types: [
+                    TypeId(
+                        "i32",
+                    ),
+                ],
+                output_types: [
+                    TypeId(
+                        "i32",
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: Value,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "select_sum",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_in_v1",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [],
+                        },
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_in_v2",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [],
+                        },
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_in_v3",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "out",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    binding: SpecBinding(
+                        FunctionClassBinding {
+                            default: false,
+                            function_class: FunctionClassId(
+                                "select_sum",
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v1",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v2",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        1,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v3",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        2,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_tsum1",
+                                    ),
+                                ),
+                                node: CallFunctionClass {
+                                    function_id: Filled(
+                                        FunctionClassId(
+                                            "sum",
+                                        ),
+                                    ),
+                                    arguments: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "v1",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "sum1",
+                                    ),
+                                ),
+                                node: ExtractResult {
+                                    node_id: Filled(
+                                        NodeId(
+                                            "_tsum1",
+                                        ),
+                                    ),
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f0",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "1",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f1",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "1",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f2",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "1",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_tsum2",
+                                    ),
+                                ),
+                                node: CallFunctionClass {
+                                    function_id: Filled(
+                                        FunctionClassId(
+                                            "sum",
+                                        ),
+                                    ),
+                                    arguments: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_f0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f1",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f2",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "v2",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "sum2",
+                                    ),
+                                ),
+                                node: ExtractResult {
+                                    node_id: Filled(
+                                        NodeId(
+                                            "_tsum2",
+                                        ),
+                                    ),
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f3",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "1",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f4",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "1",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f5",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "1",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_tsum3",
+                                    ),
+                                ),
+                                node: CallFunctionClass {
+                                    function_id: Filled(
+                                        FunctionClassId(
+                                            "sum",
+                                        ),
+                                    ),
+                                    arguments: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_f3",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f4",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f5",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "v3",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "sum3",
+                                    ),
+                                ),
+                                node: ExtractResult {
+                                    node_id: Filled(
+                                        NodeId(
+                                            "_tsum3",
+                                        ),
+                                    ),
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f6",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Filled(
+                                        "0",
+                                    ),
+                                    type_id: Filled(
+                                        TypeId(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_tcondition",
+                                    ),
+                                ),
+                                node: CallFunctionClass {
+                                    function_id: Filled(
+                                        FunctionClassId(
+                                            "_lt_i32_i32",
+                                        ),
+                                    ),
+                                    arguments: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "sum1",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f6",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "condition",
+                                    ),
+                                ),
+                                node: ExtractResult {
+                                    node_id: Filled(
+                                        NodeId(
+                                            "_tcondition",
+                                        ),
+                                    ),
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "result",
+                                    ),
+                                ),
+                                node: Select {
+                                    condition: Filled(
+                                        NodeId(
+                                            "condition",
+                                        ),
+                                    ),
+                                    true_case: Filled(
+                                        NodeId(
+                                            "sum2",
+                                        ),
+                                    ),
+                                    false_case: Filled(
+                                        NodeId(
+                                            "sum3",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Return {
+                                return_values: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "result",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "select_sum",
+                ),
+                input_types: [
+                    TypeId(
+                        "i32",
+                    ),
+                    TypeId(
+                        "i32",
+                    ),
+                    TypeId(
+                        "i32",
+                    ),
+                ],
+                output_types: [
+                    TypeId(
+                        "i32",
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: Timeline,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "single_sync",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_in_in",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "Event",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "out",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "Event",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    binding: SpecBinding(
+                        FunctionClassBinding {
+                            default: false,
+                            function_class: FunctionClassId(
+                                "single_sync",
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "in",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t_local_remote",
+                                    ),
+                                ),
+                                node: EncodingEvent {
+                                    local_past: Filled(
+                                        NodeId(
+                                            "in",
+                                        ),
+                                    ),
+                                    remote_local_pasts: Filled(
+                                        [],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "local",
+                                    ),
+                                ),
+                                node: ExtractResult {
+                                    node_id: Filled(
+                                        NodeId(
+                                            "_t_local_remote",
+                                        ),
+                                    ),
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "remote",
+                                    ),
+                                ),
+                                node: ExtractResult {
+                                    node_id: Filled(
+                                        NodeId(
+                                            "_t_local_remote",
+                                        ),
+                                    ),
+                                    index: Filled(
+                                        1,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "sub",
+                                    ),
+                                ),
+                                node: SubmissionEvent {
+                                    local_past: Filled(
+                                        NodeId(
+                                            "remote",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "sync",
+                                    ),
+                                ),
+                                node: SynchronizationEvent {
+                                    local_past: Filled(
+                                        NodeId(
+                                            "local",
+                                        ),
+                                    ),
+                                    remote_local_past: Filled(
+                                        NodeId(
+                                            "sub",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Return {
+                                return_values: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "sync",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "single_sync",
+                ),
+                input_types: [
+                    TypeId(
+                        "Event",
+                    ),
+                ],
+                output_types: [
+                    TypeId(
+                        "Event",
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_select_sum_impl0",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ),
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "select_sum",
+                                    ),
+                                ),
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "single_sync",
+                                    ),
+                                ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Return {
+                                return_values: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "_out0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "select_sum_impl",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v1_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v1",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v2_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v3_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ),
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "select_sum",
+                                    ),
+                                ),
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "single_sync",
+                                    ),
+                                ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        1,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        2,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoExternal {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_tsum1",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    external_function_id: Filled(
+                                        ExternalFunctionId(
+                                            "sum_cpu",
+                                        ),
+                                    ),
+                                    inputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "v1_0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "sum1_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f6",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t1",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f0_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t1",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoExternal {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_tcondition",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    external_function_id: Filled(
+                                        ExternalFunctionId(
+                                            "_lt_i32_i32",
+                                        ),
+                                    ),
+                                    inputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "sum1_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f0_0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t2",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "condition_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t2",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t3",
+                                    ),
+                                ),
+                                node: DefaultJoin,
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t4",
+                                    ),
+                                ),
+                                node: InlineJoin {
+                                    funclet: Filled(
+                                        FuncletId(
+                                            "_select_sum_impl2",
+                                        ),
+                                    ),
+                                    captures: Filled(
+                                        [],
+                                    ),
+                                    continuation: Filled(
+                                        NodeId(
+                                            "_t3",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            ScheduleSelect {
+                                operations: Filled(
+                                    [
+                                        Filled(
+                                            RemoteNodeId {
+                                                funclet: MetaId(
+                                                    "val",
+                                                ),
+                                                node: Some(
+                                                    Filled(
+                                                        NodeId(
+                                                            "result",
+                                                        ),
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                        Filled(
+                                            RemoteNodeId {
+                                                funclet: MetaId(
+                                                    "sptl",
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                        Filled(
+                                            RemoteNodeId {
+                                                funclet: MetaId(
+                                                    "tmln",
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ],
+                                ),
+                                condition: Filled(
+                                    NodeId(
+                                        "condition_0",
+                                    ),
+                                ),
+                                callee_funclet_ids: Filled(
+                                    [
+                                        Filled(
+                                            FuncletId(
+                                                "_select_sum_impl3",
+                                            ),
+                                        ),
+                                        Filled(
+                                            FuncletId(
+                                                "_select_sum_impl4",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                callee_arguments: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "v2_0",
+                                            ),
+                                        ),
+                                        Filled(
+                                            NodeId(
+                                                "v3_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                continuation_join: Filled(
+                                    NodeId(
+                                        "_t4",
+                                    ),
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_select_sum_impl2",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_r0_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "result",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ),
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "select_sum",
+                                    ),
+                                ),
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "single_sync",
+                                    ),
+                                ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: DefaultJoin,
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: InlineJoin {
+                                    funclet: Filled(
+                                        FuncletId(
+                                            "_select_sum_impl0",
+                                        ),
+                                    ),
+                                    captures: Filled(
+                                        [],
+                                    ),
+                                    continuation: Filled(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Jump {
+                                join: Filled(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                arguments: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "_r0_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_select_sum_impl3",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v2_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v3_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "sum2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ),
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "select_sum",
+                                    ),
+                                ),
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "single_sync",
+                                    ),
+                                ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        1,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v2_gpu",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Gpu,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: true,
+                                            storage: true,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v2_gpu_sum",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Gpu,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: true,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "encoder_0",
+                                    ),
+                                ),
+                                node: BeginEncoding {
+                                    place: Filled(
+                                        Gpu,
+                                    ),
+                                    event: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_t_local_remote",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    encoded: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "v2_gpu",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "v2_gpu_sum",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                    fences: Filled(
+                                        [],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: WriteRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    destination: Filled(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "v2_0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: EncodeCopy {
+                                    encoder: Filled(
+                                        NodeId(
+                                            "encoder_0",
+                                        ),
+                                    ),
+                                    input: Filled(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                    output: Filled(
+                                        NodeId(
+                                            "v2_gpu",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f0",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t1",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f1_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t1",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f1",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t2",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f2_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t2",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t3",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t3",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f3_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t3",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: EncodeDoExternal {
+                                    encoder: Filled(
+                                        NodeId(
+                                            "encoder_0",
+                                        ),
+                                    ),
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_tsum2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    external_function_id: Filled(
+                                        ExternalFunctionId(
+                                            "sum_gpu",
+                                        ),
+                                    ),
+                                    inputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_f1_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f2_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f3_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "v2_gpu",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "v2_gpu_sum",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "fence_0",
+                                    ),
+                                ),
+                                node: Submit {
+                                    encoder: Filled(
+                                        NodeId(
+                                            "encoder_0",
+                                        ),
+                                    ),
+                                    event: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "sub",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: SyncFence {
+                                    fence: Filled(
+                                        NodeId(
+                                            "fence_0",
+                                        ),
+                                    ),
+                                    event: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "sync",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t4",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalCopy {
+                                    input: Filled(
+                                        NodeId(
+                                            "v2_gpu_sum",
+                                        ),
+                                    ),
+                                    output: Filled(
+                                        NodeId(
+                                            "_t4",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v2_sum_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t4",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Return {
+                                return_values: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "v2_sum_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_select_sum_impl4",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v2_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v3_0",
+                                ),
+                            ),
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "v3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: TypeId(
+                                "i32",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "sum3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "sptl",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "in",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "out",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    flow: Filled(
+                                        Usable,
+                                    ),
+                                },
+                            ),
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "select_sum",
+                                    ),
+                                ),
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "single_sync",
+                                    ),
+                                ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
+                        },
+                    ),
+                },
+                commands: [
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        1,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v3_gpu",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Gpu,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: true,
+                                            storage: true,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v3_gpu_sum",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Gpu,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: true,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "encoder_1",
+                                    ),
+                                ),
+                                node: BeginEncoding {
+                                    place: Filled(
+                                        Gpu,
+                                    ),
+                                    event: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_t_local_remote",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    encoded: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "v3_gpu",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "v3_gpu_sum",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                    fences: Filled(
+                                        [],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: WriteRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    destination: Filled(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "v3_0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: EncodeCopy {
+                                    encoder: Filled(
+                                        NodeId(
+                                            "encoder_1",
+                                        ),
+                                    ),
+                                    input: Filled(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                    output: Filled(
+                                        NodeId(
+                                            "v3_gpu",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t1",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f4_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t1",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f4",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t2",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f5_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t2",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t3",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f5",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    inputs: Filled(
+                                        [],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_t3",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f6_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I64,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t3",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: EncodeDoExternal {
+                                    encoder: Filled(
+                                        NodeId(
+                                            "encoder_1",
+                                        ),
+                                    ),
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "val",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_tsum3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    external_function_id: Filled(
+                                        ExternalFunctionId(
+                                            "sum_gpu",
+                                        ),
+                                    ),
+                                    inputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "_f4_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f5_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "_f6_0",
+                                                ),
+                                            ),
+                                            Filled(
+                                                NodeId(
+                                                    "v3_gpu",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                    outputs: Filled(
+                                        [
+                                            Filled(
+                                                NodeId(
+                                                    "v3_gpu_sum",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "fence_1",
+                                    ),
+                                ),
+                                node: Submit {
+                                    encoder: Filled(
+                                        NodeId(
+                                            "encoder_1",
+                                        ),
+                                    ),
+                                    event: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "sub",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: SyncFence {
+                                    fence: Filled(
+                                        NodeId(
+                                            "fence_1",
+                                        ),
+                                    ),
+                                    event: Filled(
+                                        RemoteNodeId {
+                                            funclet: MetaId(
+                                                "tmln",
+                                            ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "sync",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t4",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Filled(
+                                        Local,
+                                    ),
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    buffer_flags: Filled(
+                                        BufferFlags {
+                                            map_read: true,
+                                            map_write: true,
+                                            copy_src: true,
+                                            copy_dst: true,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalCopy {
+                                    input: Filled(
+                                        NodeId(
+                                            "v3_gpu_sum",
+                                        ),
+                                    ),
+                                    output: Filled(
+                                        NodeId(
+                                            "_t4",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "v3_sum_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Filled(
+                                        I32,
+                                    ),
+                                    source: Filled(
+                                        NodeId(
+                                            "_t4",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
+                        TailEdge(
+                            Return {
+                                return_values: Filled(
+                                    [
+                                        Filled(
+                                            NodeId(
+                                                "v3_sum_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Pipeline(
+            Pipeline {
+                name: "main",
+                funclet: FuncletId(
+                    "select_sum_impl",
+                ),
+                effect: Some(
+                    EffectId(
+                        "_loop_eff",
+                    ),
+                ),
+            },
+        ),
+    ],
+}
+thread 'main' panicked at src\assembly\lowering_pass.rs:877:5:
+not yet implemented
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

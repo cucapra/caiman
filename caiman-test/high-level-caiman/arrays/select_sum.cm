@@ -2,9 +2,29 @@
 
 sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
-extern(cpu) pure sum(i64) -> i64
+extern(gpu) sum(x : i32) -> out: i32
+{
+    path : "gpu_sum.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        input : y
+    },
+    resource {
+        group : 0,
+        binding : 2,
+        output : out
+    }
+}
 
-val select_sum(v1: i64, v2: i64, v3: i64) -> out: i64 {
+val select_sum(v1: i32, v2: i32, v3: i32) -> out: i32 {
     sum1 :- sum(v1)
     sum2 :- sum(v2)
     sum3 :- sum(v3)
@@ -13,7 +33,7 @@ val select_sum(v1: i64, v2: i64, v3: i64) -> out: i64 {
     returns result
 }
 
-tmln time(in: Event) -> out: Event { 
+tmln single_sync(in: Event) -> out: Event { 
     local, remote :- encode_event(in)
     sub :- submit_event(remote)
     sync :- sync_event(local, sub)
@@ -21,21 +41,32 @@ tmln time(in: Event) -> out: Event {
 }
 
 fn select_sum_impl(
-    v1: i64 @ [node(val.v1)], 
-    v2: i64 @ [node(val.v2), input(tmln.in)], 
-    v3: i64 @ [node(val.v3), input(tmln.in)]
+    v1: i32, 
+    v2: i32, 
+    v3: i32
 ) 
--> i64 @ [node(val.out),  node(tmln.in)] impls select_sum,time,space {
-    let sum1 : i64 @ node(val.sum1) = sum(v1);
-    let condition : bool @ node(val.condition) = sum1 < 0;
-    if @ [node(val.result), input(tmln.in)] condition {
-        // let encoder : Encoder @ node(tmln.remote) = encode-begin gpu [v2];
-        let sum2 : i64 @ [node(val.sum2), input(tmln.in)] = sum(v2);
-        sum2
+-> i32 impls select_sum,single_sync,space {
+    let sum1= sum(v1);
+    let condition= sum1 < 0;
+    if condition {
+        let encoder = encode-begin @ node(tmln.(local, remote)) { v2 } gpu;
+        encode encoder.copy[v2_gpu <- v2];
+        encode encoder.call[v2_gpu_sum <- sum(v2_gpu)];
+        let fence = submit @ node(tmln.sub) encoder;
+        let result = await @ node(tmln.snc) fence;
+        @out { input: node(tmln.out), output: node(tmln.out) };
+        let v2_sum = result.v2_gpu_sum;
+        v2_sum
     }
     else {
-        let sum3 : i64 @ [node(val.sum3), input(tmln.in)] = sum(v3);
-        sum3
+        let encoder = encode-begin @ node(tmln.(local, remote)) { v3 } gpu;
+        encode encoder.copy[v3_gpu <- v3];
+        encode encoder.call[v3_gpu_sum <- sum(v3_gpu)];
+        let fence = submit @ node(tmln.sub) encoder;
+        let result = await @ node(tmln.snc) fence;
+        @out { input: node(tmln.out), output: node(tmln.out) };
+        let v3_sum = result.v3_gpu_sum;
+        v3_sum
     }
 }
 

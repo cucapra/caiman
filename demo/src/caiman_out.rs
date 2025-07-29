@@ -20,14 +20,12 @@ use caiman_rt::{LocalVars, GpuLocals, wgpu, bytemuck};
 use std::marker::PhantomData;
 #[allow(warnings)] pub mod outputs {
 pub type _lt_i64_i64 = (i32, );
-pub type sum1 = (i64, );
-pub type sum2 = (i64, );
+pub type sum = (i64, );
 }
 pub trait CpuFunctions
 {
 	fn _lt_i64_i64(&self, state : &mut caiman_rt::State, _ : i64, _ : i64) -> outputs::_lt_i64_i64;
-	fn sum1(&self, state : &mut caiman_rt::State, _ : [i64; 4]) -> outputs::sum1;
-	fn sum2(&self, state : &mut caiman_rt::State, _ : [i64; 4]) -> outputs::sum2;
+	fn sum(&self, state : &mut caiman_rt::State, _ : [i64; 4]) -> outputs::sum;
 }
 fn funclet4_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(mut instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>, var_0 : [i64; 4], var_1 : [i64; 4], var_2 : [i64; 4] ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, PipelineOutputTuple<'callee>>
 {
@@ -38,7 +36,7 @@ fn funclet4_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(mut
 //  node #3: AllocTemporary { place: Local, storage_type: TypeId(0), buffer_flags: BufferFlags { map_read: true, map_write: true, copy_src: true, copy_dst: true, storage: false, uniform: false } }
 instance.locals.malloc::<i64>(3);
 //  node #4: LocalDoExternal { operation: Node { node_id: 3 }, external_function_id: ExternalFunctionId(2), inputs: [0], outputs: [3] }
-let var_4 = instance.cpu_functions.sum1(instance.state, var_0);
+let var_4 = instance.cpu_functions.sum(instance.state, var_0);
 *instance.locals.calloc::<i64>(5, var_4.0);
 *instance.locals.get_mut::<i64>(3) = (*instance.locals.get::<i64>(5));
 //  node #5: ReadRef { storage_type: TypeId(0), source: 3 }
@@ -68,8 +66,8 @@ if var_13 !=0 { //  node #0: Phi { index: 0 }
 //  node #1: Phi { index: 1 }
 //  node #2: AllocTemporary { place: Local, storage_type: TypeId(0), buffer_flags: BufferFlags { map_read: true, map_write: true, copy_src: true, copy_dst: true, storage: false, uniform: false } }
 instance.locals.malloc::<i64>(15);
-//  node #3: LocalDoExternal { operation: Node { node_id: 5 }, external_function_id: ExternalFunctionId(3), inputs: [0], outputs: [2] }
-let var_16 = instance.cpu_functions.sum2(instance.state, var_1);
+//  node #3: LocalDoExternal { operation: Node { node_id: 5 }, external_function_id: ExternalFunctionId(2), inputs: [0], outputs: [2] }
+let var_16 = instance.cpu_functions.sum(instance.state, var_1);
 *instance.locals.calloc::<i64>(17, var_16.0);
 *instance.locals.get_mut::<i64>(15) = (*instance.locals.get::<i64>(17));
 //  node #4: ReadRef { storage_type: TypeId(0), source: 2 }
@@ -80,8 +78,8 @@ if join_stack.used_bytes().len() > 0 { return pop_join_and_dispatch_at_0::<Callb
 //  node #1: Phi { index: 1 }
 //  node #2: AllocTemporary { place: Local, storage_type: TypeId(0), buffer_flags: BufferFlags { map_read: true, map_write: true, copy_src: true, copy_dst: true, storage: false, uniform: false } }
 instance.locals.malloc::<i64>(19);
-//  node #3: LocalDoExternal { operation: Node { node_id: 7 }, external_function_id: ExternalFunctionId(3), inputs: [1], outputs: [2] }
-let var_20 = instance.cpu_functions.sum2(instance.state, var_2);
+//  node #3: LocalDoExternal { operation: Node { node_id: 7 }, external_function_id: ExternalFunctionId(2), inputs: [1], outputs: [2] }
+let var_20 = instance.cpu_functions.sum(instance.state, var_2);
 *instance.locals.calloc::<i64>(21, var_20.0);
 *instance.locals.get_mut::<i64>(19) = (*instance.locals.get::<i64>(21));
 //  node #4: ReadRef { storage_type: TypeId(0), source: 2 }
@@ -140,10 +138,10 @@ let r = funclet4_func(self, join_stack, arg_0, arg_1, arg_2);
 r }pub fn resume_at__loop_impl<'callee>(self, join_stack : &mut caiman_rt::JoinStack<'callee>) -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> { pop_join_and_dispatch_at_1::<F, PipelineOutputTuple<'callee>>(join_stack, self) }
 }
 #[derive(Debug)] enum ClosureHeader { Root, }
-fn pop_join_and_dispatch_at_1<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(join_stack : &mut caiman_rt::JoinStack<'callee>, mut instance : Instance<'state, 'cpu_functions, Callbacks> ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, (i64, )>
+fn pop_join_and_dispatch_at_0<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(join_stack : &mut caiman_rt::JoinStack<'callee>, arg_0 : i64, mut instance : Instance<'state, 'cpu_functions, Callbacks> ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, (i64, )>
 {
 let closure_header = unsafe { join_stack.pop_unsafe_unaligned::<ClosureHeader>().unwrap() }; match closure_header {
-_ => panic!("Dispatcher cannot dispatch given closure {:?}", closure_header), } }fn pop_join_and_dispatch_at_0<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(join_stack : &mut caiman_rt::JoinStack<'callee>, arg_0 : i64, mut instance : Instance<'state, 'cpu_functions, Callbacks> ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, (i64, )>
+_ => panic!("Dispatcher cannot dispatch given closure {:?}", closure_header), } }fn pop_join_and_dispatch_at_1<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(join_stack : &mut caiman_rt::JoinStack<'callee>, mut instance : Instance<'state, 'cpu_functions, Callbacks> ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, (i64, )>
 {
 let closure_header = unsafe { join_stack.pop_unsafe_unaligned::<ClosureHeader>().unwrap() }; match closure_header {
 _ => panic!("Dispatcher cannot dispatch given closure {:?}", closure_header), } }
