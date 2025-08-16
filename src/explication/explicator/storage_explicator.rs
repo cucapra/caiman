@@ -404,63 +404,78 @@ where
 
     let type_bounds = context.get_node_dependencies(&value_funclet_id, &value_node_id);
     for inputs in input_attempts.iter() {
-        for outputs in output_attempts.iter() {
-            let mut new_state = state.clone();
 
-            let mut nodes_to_fill = Vec::new();
-            // checks whether or not we have a storage requirement mismatch
-            let mut valid_fills = true;
-            for (offset, output_id) in outputs.iter().enumerate() {
-                // here is where we actually use the base_offset
-                // note that the off-by-one is for the extract operation
-                let value_location =
-                    Location::new(value_funclet_id, value_node_id + offset + base_offset);
-                let output_info = state.get_node_information(output_id, context);
-                let target_storage_type = state
-                    .expect_native_storage_type(&value_info.output_types.get(0).unwrap(), context);
-
-                new_state.set_instantiation(
-                    output_id.clone(),
-                    LocationTriple::new_value(value_location),
-                    context,
-                );
-
-                let valid_fills = match &output_info.typ {
-                    // if we already know the type, we're good
-                    Hole::Filled(output_type) => true,
-                    Hole::Empty => {
-                        match attempt_empty_allocation_fill(
-                            output_id.clone(),
-                            expir::Place::Local,
-                            target_storage_type.clone(),
-                            &mut new_state,
-                            context,
-                        ) {
-                            Some(to_fill) => {
-                                nodes_to_fill.push((output_id.clone(), to_fill));
-                                true
+        let timeline_spatial_info = LocationTriple::new();
+        let mut valid_inputs = true;
+        // for input in inputs.iter() {
+        //     let info = state.get_node_information(input, context);
+        //     match &info.instantiation {
+        //         None => {},
+        //         Some(triple) => {
+        //             //valid_inputs = timeline_spatial_info.intersection(other)
+        //             // TODO
+        //         },
+        //     }
+        // }
+        if valid_inputs {
+            for outputs in output_attempts.iter() {
+                let mut new_state = state.clone();
+    
+                let mut nodes_to_fill = Vec::new();
+                // checks whether or not we have a storage requirement mismatch
+                let mut valid_fills = true;
+                for (offset, output_id) in outputs.iter().enumerate() {
+                    // here is where we actually use the base_offset
+                    // note that the off-by-one is for the extract operation
+                    let value_location =
+                        Location::new(value_funclet_id, value_node_id + offset + base_offset);
+                    let output_info = state.get_node_information(output_id, context);
+                    let target_storage_type = state
+                        .expect_native_storage_type(&value_info.output_types.get(0).unwrap(), context);
+    
+                    new_state.set_instantiation(
+                        output_id.clone(),
+                        LocationTriple::new_value(value_location),
+                        context,
+                    );
+    
+                    let valid_fills = match &output_info.typ {
+                        // if we already know the type, we're good
+                        Hole::Filled(output_type) => true,
+                        Hole::Empty => {
+                            match attempt_empty_allocation_fill(
+                                output_id.clone(),
+                                expir::Place::Local,
+                                target_storage_type.clone(),
+                                &mut new_state,
+                                context,
+                            ) {
+                                Some(to_fill) => {
+                                    nodes_to_fill.push((output_id.clone(), to_fill));
+                                    true
+                                }
+                                // we fail if we have a mismatch while attempting to fill
+                                None => false,
                             }
-                            // we fail if we have a mismatch while attempting to fill
-                            None => false,
                         }
-                    }
-                };
-            }
-            if valid_fills {
-                let node = &node_builder(
-                    operation.clone(),
-                    inputs.clone().into_boxed_slice(),
-                    outputs.clone().into_boxed_slice(),
-                );
-                new_state.next_node();
-                match explicate_node(new_state, context) {
-                    None => {}
-                    Some(mut out) => {
-                        out.add_node(node.clone());
-                        for (output_id, node_to_fill) in nodes_to_fill.drain(..) {
-                            out.add_to_fill(output_id.clone(), node_to_fill);
+                    };
+                }
+                if valid_fills {
+                    let node = &node_builder(
+                        operation.clone(),
+                        inputs.clone().into_boxed_slice(),
+                        outputs.clone().into_boxed_slice(),
+                    );
+                    new_state.next_node();
+                    match explicate_node(new_state, context) {
+                        None => {}
+                        Some(mut out) => {
+                            out.add_node(node.clone());
+                            for (output_id, node_to_fill) in nodes_to_fill.drain(..) {
+                                out.add_to_fill(output_id.clone(), node_to_fill);
+                            }
+                            return Some(out);
                         }
-                        return Some(out);
                     }
                 }
             }
@@ -1258,6 +1273,7 @@ fn explicate_return(
         Hole::Filled(values) => values.clone(),
         Hole::Empty => funclet.output_types.iter().map(|_| Hole::Empty).collect(),
     };
+    // dbg!(&state);
     let mut return_values = Vec::new();
     let mut no_matching_type = false;
     for (index, ret) in return_values_todo.iter().enumerate() {
@@ -1275,6 +1291,7 @@ fn explicate_return(
                     .instantiation
                     .clone()
                     .unwrap_or(LocationTriple::new());
+                // dbg!((&expected_remote, &actual_remote));
                 if expected_remote.is_subset_of(&actual_remote, context) {
                     return_values.push(node_id.clone());
                 } else {

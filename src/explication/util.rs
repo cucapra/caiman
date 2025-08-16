@@ -48,14 +48,43 @@ impl Location {
     }
 
     // Converts a location with an `Input` or `Output` to just be `Node`
-    pub fn into_node_id(&self, context : &StaticContext) -> Location {
+    pub fn into_node_id(&self, context: &StaticContext) -> Location {
         Location {
             funclet_id: self.funclet_id.clone(),
             quot: match self.node_id(context) {
                 None => ir::Quotient::None,
-                Some(node_id) => ir::Quotient::Node { node_id }
+                Some(node_id) => ir::Quotient::Node { node_id },
+            },
+        }
+    }
+
+    // If either Location in a specification is None, returns the other spec
+    // If both locations match, returns that location
+    // otherwise, returns None
+    pub fn intersect(&self, other: &Location) -> Option<Location> {
+        if self.funclet_id == other.funclet_id {
+            let funclet_id = self.funclet_id.clone();
+            match (self.quot, other.quot) {
+                (ir::Quotient::None, quot) |
+                (quot, ir::Quotient::None) => Some(Location {
+                    funclet_id,
+                    quot: quot.clone()
+                }),
+                (ir::Quotient::Node { node_id: n1 }, ir::Quotient::Node { node_id: n2 }) |
+                (ir::Quotient::Input { index: n1 }, ir::Quotient::Input { index: n2 }) |
+                (ir::Quotient::Output { index: n1 }, ir::Quotient::Output { index: n2 }) => if n1 == n2 {
+                    Some(Location {
+                        funclet_id,
+                        quot: self.quot.clone()
+                    })
+                } else {
+                    None
+                },
+                _ => None
             }
-        }       
+        } else {
+            None
+        }
     }
 }
 
@@ -183,6 +212,38 @@ impl LocationTriple {
             value: self.value.clone().map(|loc| loc.into_node_id(context)),
             timeline: self.timeline.clone().map(|loc| loc.into_node_id(context)),
             spatial: self.spatial.clone().map(|loc| loc.into_node_id(context)),
+        }
+    }
+
+    // Returns an intersection if these triples can be intersected
+    //   with the given set of specifications
+    // If any of the specifications conflict, returns None
+    pub fn intersection(&self, other: &LocationTriple) -> Option<LocationTriple> {
+        let value = match (&self.value, &other.value) {
+            (Some(loc1), Some(loc2)) => loc1.intersect(loc2),
+            (None, None) => None,
+            (Some(loc), None) | (None, Some(loc)) => Some(loc.clone())
+        };
+        let timeline = match (&self.timeline, &other.timeline) {
+            (Some(loc1), Some(loc2)) => loc1.intersect(loc2),
+            (None, None) => None,
+            (Some(loc), None) | (None, Some(loc)) => Some(loc.clone())
+        };
+        let spatial = match (&self.spatial, &other.spatial) {
+            (Some(loc1), Some(loc2)) => loc1.intersect(loc2),
+            (None, None) => None,
+            (Some(loc), None) | (None, Some(loc)) => Some(loc.clone())
+        };
+
+        match (value, timeline, spatial) {
+            (Some(v), Some(t), Some(s)) => {
+                Some(LocationTriple{
+                    value: Some(v),
+                    timeline: Some(t),
+                    spatial: Some(s)
+                })
+            }
+            _ => { None }
         }
     }
 }

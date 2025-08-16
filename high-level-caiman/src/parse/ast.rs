@@ -63,7 +63,7 @@ impl PartialEq for DataType {
         match (self, other) {
             (Self::Int(l0), Self::Int(r0)) => l0 == r0,
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
-            (Self::Array(..), Self::Array(..)) => todo!(),
+            (Self::Array(..), Self::Array(..)) => true,
             (Self::Slice(l0), Self::Slice(r0)) | (Self::Ref(l0), Self::Ref(r0)) => l0 == r0,
             (Self::UserDefined(l0), Self::UserDefined(r0)) => l0 == r0,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),

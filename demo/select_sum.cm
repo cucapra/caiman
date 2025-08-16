@@ -1,0 +1,72 @@
+#version 0.1.0
+
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+feq sum {
+    extern(cpu) pure sum_cpu(x : [i32; 4]) -> out: i32
+    extern(gpu) sum_gpu(x : [i32; 4]) -> out: i32
+    {
+        path : "gpu_sum.comp",
+        entry : "main",
+        dimensions : 3,
+        resource {
+            group : 0,
+            binding : 0,
+            input : x
+        },
+        resource {
+            group : 0,
+            binding : 1,
+            output : out
+        }
+    }
+}
+
+val select_sum(v1: [i32; 4], v2: [i32; 4], v3: [i32; 4]) -> out: i32 {
+    sum1 :- sum(v1)
+    sum2 :- sum(v2)
+    sum3 :- sum(v3)
+    condition :- sum1 < 0
+    result :- sum2 if condition else sum3
+    returns result
+}
+
+tmln single_sync(in: Event) -> out: Event { 
+    local, remote :- encode_event(in)
+    sub :- submit_event(remote)
+    sync :- sync_event(local, sub)
+    returns sync
+}
+
+fn select_sum_impl(
+    v1: [i32; 4] @ [node(val.v1)], 
+    v2: [i32; 4] @ [node(val.v2), node(tmln.in)], 
+    v3: [i32; 4] @ [node(val.v3), node(tmln.in)]
+) 
+-> i32 impls select_sum,single_sync,space {
+    let sum1 @ node(val.sum1) = sum_cpu(v1);
+    let condition = sum1 < 0;
+    if condition {
+        let encoder = encode-begin @ node(tmln.(local, remote)) { v2_gpu, v2_gpu_sum } gpu;
+        encode encoder.copy[v2_gpu @ [node(val.v2), node(tmln.remote)] <- v2];
+        encode encoder.call[v2_gpu_sum <- sum_gpu'<1, 1, 1>(v2_gpu)];
+        let fence = submit @ node(tmln.sub) encoder;
+        let result = await @ node(tmln.sync) fence;
+        
+        let v2_sum = result.v2_gpu_sum;
+        v2_sum
+    }
+    else {
+        let encoder = encode-begin @ node(tmln.(local, remote)) { v3_gpu, v3_gpu_sum } gpu;
+        encode encoder.copy[v3_gpu @ [node(val.v3), node(tmln.remote)] <- v3];
+        encode encoder.call[v3_gpu_sum <- sum_gpu'<1, 1, 1>(v3_gpu)];
+        let fence = submit @ node(tmln.sub) encoder;
+        let result = await @ node(tmln.sync) fence;
+
+        let v3_sum = result.v3_gpu_sum;
+        @out { input: node(tmln.out), output: node(tmln.out) };
+        v3_sum
+    }
+}
+
+pipeline main { select_sum_impl }
