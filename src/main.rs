@@ -1,6 +1,6 @@
 extern crate clap;
 
-use clap::{App, Arg};
+use clap::Arg;
 
 use caiman::frontend;
 use caiman::frontend::{CompileData, CompileMode, CompileOptions};
@@ -24,45 +24,45 @@ struct Arguments {
 }
 impl Arguments {
     fn from_cmdline() -> Self {
-        let matches = App::new("Caiman Compiler")
+        let matches = clap::Command::new("Caiman Compiler")
             .version("0.0.1")
             .arg(
-                Arg::with_name("input")
+                Arg::new("input")
                     .short('i')
                     .long("input")
                     .value_name("path.cair")
                     .help("Path to input assembly (caimanir)")
-                    .takes_value(true),
+                    .num_args(1),
             )
             .arg(
-                Arg::with_name("output")
+                Arg::new("output")
                     .short('o')
                     .long("output")
                     .value_name("path.rs")
                     .help("Path to output code (rust)")
-                    .takes_value(true),
+                    .num_args(1),
             )
             .arg(
-                Arg::with_name("explicate_only")
+                Arg::new("explicate_only")
                     .short('x')
                     .long("explicate_only")
                     .help("Only run schedule explication")
-                    .takes_value(false),
+                    .num_args(0)
             )
             .arg(
-                Arg::with_name("print_codegen_debug_info")
+                Arg::new("print_codegen_debug_info")
                     .long("print_codegen_debug_info")
                     .help("Print Codegen Debug Info")
-                    .takes_value(false),
+                    .num_args(0),
             )
             .get_matches();
         let input = matches
-            .value_of("input")
+            .get_one::<String>("input")
             .expect("Must have input path")
             .into();
-        let output = matches.value_of("output").map(PathBuf::from);
-        let explicate_only = matches.is_present("explicate_only");
-        let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
+        let output = matches.get_one::<String>("output").map(PathBuf::from);
+        let explicate_only = matches.contains_id("explicate_only");
+        let print_codegen_debug_info = matches.contains_id("print_codegen_debug_info");
         Arguments {
             input,
             output,
