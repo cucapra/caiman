@@ -28,7 +28,7 @@ impl Arguments {
             .version("0.0.1")
             .arg(
                 Arg::with_name("input")
-                    .short("i")
+                    .short('i')
                     .long("input")
                     .value_name("path.cair")
                     .help("Path to input assembly (caimanir)")
@@ -36,7 +36,7 @@ impl Arguments {
             )
             .arg(
                 Arg::with_name("output")
-                    .short("o")
+                    .short('o')
                     .long("output")
                     .value_name("path.rs")
                     .help("Path to output code (rust)")
@@ -44,7 +44,7 @@ impl Arguments {
             )
             .arg(
                 Arg::with_name("explicate_only")
-                    .short("x")
+                    .short('x')
                     .long("explicate_only")
                     .help("Only run schedule explication")
                     .takes_value(false),
