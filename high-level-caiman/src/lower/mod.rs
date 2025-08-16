@@ -400,24 +400,13 @@ fn extern_to_asm(
                 ))
             }
         },
-<<<<<<< HEAD
         input_args: template_args.into_iter().chain(input
-=======
-        input_args: {
-            input
->>>>>>> dda0fa3f4fe18ef2fd2de6b466be3a704a758b85
             .into_iter()
             .map(|(n, t)| asm::ExternalArgument{
                 name: n.map(asm::NodeId),
                 ffi_type: t.ffi().unwrap(),
-<<<<<<< HEAD
             }))
             .collect(),
-=======
-            })
-            .collect()
-        },
->>>>>>> dda0fa3f4fe18ef2fd2de6b466be3a704a758b85
         output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
             name: n.map(asm::NodeId),
             ffi_type: t.ffi().unwrap(),
