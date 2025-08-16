@@ -1,0 +1,113 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> o: i64 {
+    returns 1 + 2
+}
+
+fn main_func() -> i64 impls main, time, space  {
+    let x, y = ???;
+    x + y
+    /* #CHECK:
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "[[temp1:[a-zA-Z0-9_%]+]]",
+                    ),
+                ),
+                node: AllocTemporary ...
+            },
+        ),
+    ),
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "[[temp2:[a-zA-Z0-9_%]+]]",
+                    ),
+                ),
+                node: AllocTemporary ...
+            },
+        ),
+    ),
+    Empty,
+    #END #CHECK:
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "x%0",
+                    ),
+                ),
+                node: ReadRef {
+                    storage_type: Filled(
+                        I64,
+                    ),
+                    source: Filled(
+                        NodeId(
+                            "[[temp1]]",
+                        ),
+                    ),
+                },
+            },
+        ),
+    ),
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "y%0",
+                    ),
+                ),
+                node: ReadRef {
+                    storage_type: Filled(
+                        I64,
+                    ),
+                    source: Filled(
+                        NodeId(
+                            "[[temp2]]",
+                        ),
+                    ),
+                },
+            },
+        ),
+    ),
+    #END #CHECK:
+    operation: Filled(
+        RemoteNodeId {
+            funclet: MetaId(
+                "val",
+            ),
+            node: Some...
+        },
+    ),
+    external_function_id: Filled(
+        ExternalFunctionId(
+            "_add_i64_i64",
+        ),
+    ),
+    inputs: Filled(
+        [
+            Filled(
+                NodeId(
+                    "x%0",
+                ),
+            ),
+            Filled(
+                NodeId(
+                    "y%0",
+                ),
+            ),
+        ],
+    ),
+    #END */
+}
+
+pipeline main { main_func }

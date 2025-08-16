@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     enum_cast,
-    lower::IN_STEM,
+    lower::{binop_name, sched_hir::op_to_str, IN_STEM},
     parse::ast::{
         Binop, ClassMembers, DataType, IntSize, NestedExpr, SpecExpr, SpecFunclet, SpecLiteral,
         SpecStmt, SpecTerm, TemplateArgs,
@@ -15,7 +15,7 @@ use caiman::{
     ir,
 };
 
-use super::{binop_to_str, tuple_id};
+use super::tuple_id;
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm, dtype: &DataType) -> asm::Node {
@@ -210,10 +210,13 @@ fn lower_binop(
         Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp.clone())),
             node: asm::Node::CallFunctionClass {
-                function_id: Hole::Filled(asm::FunctionClassId(binop_to_str(
-                    op,
-                    &format!("{:#}", type_ctx.types.get(&op_lhs).unwrap()),
-                    &format!("{:#}", type_ctx.types.get(&op_rhs).unwrap()),
+                function_id: Hole::Filled(asm::FunctionClassId(op_to_str(
+                    binop_name(op),
+                    [
+                        format!("{:#}", type_ctx.types.get(&op_lhs).unwrap()),
+                        format!("{:#}", type_ctx.types.get(&op_rhs).unwrap()),
+                    ]
+                    .iter(),
                 ))),
                 arguments: Hole::Filled(vec![
                     Hole::Filled(asm::NodeId(op_lhs)),

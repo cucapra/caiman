@@ -37,15 +37,15 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::Info,
+    error::{Info, LocalError},
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
-        Hir, HirBody, HirInstr, HirOp, Terminator, TripleTag, UseType,
+        FillIn, Hir, HirBody, HirInstr, HirOp, HirTerm, Terminator, TripleTag, UseType,
     },
-    parse::ast::{DataType, SchedTerm, Uop},
+    parse::ast::{DataType, Uop},
 };
 
-use super::{analyze, Fact, Forwards, InOutFacts, LiveVars};
+use super::{analyze, Fact, Forwards, InOutFacts, LiveVars, TransferData};
 
 /// Transforms uses of references into uses of values by inserting
 /// deref instructions (loads). A loaded value is reused within a block
@@ -69,7 +69,7 @@ pub fn deref_transform_pass(
     // replaces uses of references with the use of the original variable
 
     // we must do the derefernce of variable uses first
-    let _ = analyze(cfg, &RefPropagation::default());
+    let _ = analyze(cfg, RefPropagation::default());
     for bb in cfg.blocks.values_mut() {
         remove_refs_ops(bb);
     }
@@ -104,7 +104,7 @@ fn insert_capture_copies(
     data_types: &mut HashMap<String, DataType>,
     variables: &HashSet<String>,
 ) {
-    let live_vars = analyze(cfg, &LiveVars::top());
+    let live_vars = analyze(cfg, LiveVars::top()).unwrap();
     let mut preceded_by_call = HashSet::new();
     let mut terminated_by_call = HashSet::new();
     for bb in cfg.blocks.values() {
@@ -158,10 +158,10 @@ fn block_capture_vars(
                     HirBody::VarDecl {
                         lhs: name.to_string(),
                         lhs_tag: TripleTag::new_unspecified(),
-                        rhs: Some(SchedTerm::Var {
+                        rhs: Some(HirTerm::Var {
                             name: format!("_cap_{name}"),
                             info: last_in_annotation_info,
-                            tag: None,
+                            tag: TripleTag::new_unspecified(),
                         }),
                         info: last_in_annotation_info,
                     },
@@ -176,10 +176,10 @@ fn block_capture_vars(
                 bb.stmts.push(HirBody::ConstDecl {
                     lhs: format!("_cap_{name}"),
                     lhs_tag: TripleTag::new_unspecified(),
-                    rhs: SchedTerm::Var {
+                    rhs: HirTerm::Var {
                         name: name.clone(),
                         info,
-                        tag: None,
+                        tag: TripleTag::new_unspecified(),
                     },
                     info,
                 });
@@ -205,15 +205,19 @@ struct RefPropagation {
 }
 
 impl Fact for RefPropagation {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         for (k, v) in &other.aliases {
             assert!(!self.aliases.contains_key(k) || self.aliases[k] == *v);
             self.aliases.insert(k.clone(), v.clone());
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(
+        &mut self,
+        mut stmt: HirInstr<'_>,
+        _: TransferData,
+    ) -> Result<(), LocalError> {
         // assume single assignment
         stmt.rename_uses(&mut |name, _| {
             self.aliases
@@ -222,7 +226,7 @@ impl Fact for RefPropagation {
                 .unwrap_or_else(|| name.to_string())
         });
         if let HirInstr::Stmt(HirBody::Op {
-            op: HirOp::Unary(Uop::Ref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Ref)),
             dests,
             args,
             ..
@@ -230,9 +234,10 @@ impl Fact for RefPropagation {
         {
             assert!(args.len() == 1);
             assert_eq!(dests.len(), 1);
-            let src = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
+            let src = enum_cast!(HirTerm::Var { name, .. }, name, &args[0]);
             self.aliases.insert(dests[0].0.clone(), src.clone());
         }
+        Ok(())
     }
 
     type Dir = Forwards;
@@ -245,7 +250,7 @@ fn remove_refs_ops(bb: &mut BasicBlock) {
     let mut to_remove = Vec::new();
     for (idx, instr) in bb.stmts.iter().enumerate() {
         if let HirBody::Op {
-            op: HirOp::Unary(Uop::Ref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Ref)),
             ..
         } = instr
         {
@@ -317,8 +322,8 @@ fn unref_type(typ: &DataType) -> DataType {
 /// * `names` - the current name versions for each variable
 /// * `types` - the types of each variable
 /// * `insertions` - a list of insertions to make to the basic block. A list of
-/// tuples of the insertion index (wrt the unmodified list of instructions)
-/// and the instruction to insert.
+///     tuples of the insertion index (wrt the unmodified list of instructions)
+///     and the instruction to insert.
 /// * `id` - the basic block id
 /// * `name` - the name of the variable to insert a deref instruction for
 fn insert_deref_if_needed(
@@ -355,8 +360,8 @@ fn insert_deref_if_needed(
 /// * `names` - the current name versions for each variable
 /// * `types` - the types of each variable
 /// * `insertions` - a list of insertions to make to the basic block. A list of
-/// tuples of the insertion index (wrt the unmodified list of instructions)
-/// and the instruction to insert.
+///     tuples of the insertion index (wrt the unmodified list of instructions)
+///     and the instruction to insert.
 /// * `last_deref` - the last derefed version for each variable
 #[allow(clippy::too_many_arguments)]
 fn deref_transform_instr(
@@ -396,12 +401,12 @@ fn deref_transform_instr(
             }
         }
         HirInstr::Stmt(HirBody::Op {
-            op: HirOp::Unary(Uop::Ref),
+            op: HirOp::Unary(FillIn::Initial(Uop::Ref)),
             args,
             ..
         }) => {
             for arg in args {
-                if let SchedTerm::Var { name, .. } = arg {
+                if let HirTerm::Var { name, .. } = arg {
                     if variables.contains(name) {
                         *name = format!("_{name}_ref");
                     }
@@ -420,15 +425,30 @@ fn deref_transform_instr(
                     name.to_string()
                 }
             });
-            if let HirBody::VarDecl { lhs, .. } | HirBody::RefStore { lhs, .. } = stmt {
-                match names.entry(lhs.clone()) {
-                    Entry::Occupied(mut entry) => {
-                        *entry.get_mut() += 1;
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(0);
+            match stmt {
+                HirBody::VarDecl { lhs, .. } | HirBody::RefStore { lhs, .. } => {
+                    match names.entry(lhs.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            *entry.get_mut() += 1;
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(0);
+                        }
                     }
                 }
+                HirBody::Hole { dests, .. } => {
+                    for (d, _) in dests {
+                        match names.entry(d.clone()) {
+                            Entry::Occupied(mut entry) => {
+                                *entry.get_mut() += 1;
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(0);
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
             match stmt {
                 HirBody::VarDecl { lhs, .. } => {
@@ -440,6 +460,13 @@ fn deref_transform_instr(
                 HirBody::RefStore { lhs, .. } => {
                     if variables.contains(lhs) {
                         *lhs = format!("_{lhs}_ref");
+                    }
+                }
+                HirBody::Hole { dests, .. } => {
+                    for (d, _) in dests {
+                        if variables.contains(d) {
+                            *d = format!("_{d}_ref");
+                        }
                     }
                 }
                 _ => (),

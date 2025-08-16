@@ -1,0 +1,91 @@
+val bar(a: i64) -> i64 {
+    b :- 10
+    h :- 0 - a if a < 0 else a
+    k :- 1 if h < 0 else 0
+    returns b + k
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn main(a: i64) -> i64 impls bar, time, space {
+    var b;
+    let h = if a < 0 {
+        @in { b: none(tmln) };
+        /* #CHECK:
+        name: FuncletId(
+            "_main4",
+        ),
+        args: [
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_b%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i64",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+        #END */
+        0 - a
+    } else {
+        a
+    };
+    ???;
+    let k = if h < 0 {
+        1
+    } else {
+        0
+    };
+    /* #CHECK-LABEL:
+    name: FuncletId(
+        "_main3",
+    ),
+    args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "_b%0_ref",
+                ),
+            ),
+            typ: TypeId(
+                "&i64",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "b",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+    #END */
+    b + k
+}
+

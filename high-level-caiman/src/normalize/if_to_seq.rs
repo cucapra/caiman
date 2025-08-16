@@ -1,6 +1,7 @@
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     parse::ast::{NestedExpr, SchedExpr, SchedLiteral, SchedStmt, SchedTerm, Tag},
+    type_error,
 };
 
 /// Converts a single if statement to become a sequence followed by a return.
@@ -30,9 +31,9 @@ fn convert_if_to_seq(
     let mut ret = vec![];
     let mut ret_count = 0;
     if true_count != false_count {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            "if branches return different numbers of values",
+            "if branches return different numbers of values"
         ));
     }
     if true_count == 0 {
@@ -45,9 +46,9 @@ fn convert_if_to_seq(
         });
     } else {
         if idx != num_stmts - 1 {
-            return Err(type_error(
+            return Err(type_error!(
                 info,
-                "Return from if statement is not the last statement in the block",
+                "Return from if statement is not the last statement in the block"
             ));
         }
         let rets: Vec<_> = (0..true_count).map(|i| format!("_r{i}")).collect();
@@ -210,17 +211,15 @@ fn seq_final_if_to_seq_helper(
                 let (true_block, true_count) = final_if_to_seq_helper(true_block)?;
                 let (false_block, false_count) = final_if_to_seq_helper(false_block)?;
                 if true_count != false_count {
-                    return Err(type_error(
+                    return Err(type_error!(
                         info,
-                        "if branches return different numbers of values",
+                        "if branches return different numbers of values"
                     ));
                 }
                 if true_count != seq_dests {
-                    return Err(type_error(
+                    return Err(type_error!(
                         seq_info,
-                        &format!(
-                            "Cannot assign {true_count} returns into {seq_dests} destinations"
-                        ),
+                        "Cannot assign {true_count} returns into {seq_dests} destinations"
                     ));
                 }
                 return Ok(vec![SchedStmt::If {

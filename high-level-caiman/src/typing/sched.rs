@@ -1,31 +1,35 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::{type_error, Info, LocalError},
+    error::{hir_to_source_name, Info, LocalError},
     parse::ast::{
-        Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType, FullType, IntSize, SchedExpr,
-        SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecTerm, TemplateArgs,
-        TimelineOperation, Uop, WGPUFlags,
+        expect_var, hole_or_var, Binop, DataType, EncodedCommand, EncodedStmt, FlaggedType,
+        FullType, IntSize, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr,
+        SpecTerm, TemplateArgs, TimelineOperation, Uop, WGPUFlags,
     },
+    type_error,
 };
+use caiman::explication::Hole;
 use std::iter::once;
 
 use super::{
     binop_to_contraints,
-    types::{DTypeConstraint, RecordConstraint},
+    types::{DTypeConstraint, RecordConstraint, VarName},
     unification::SubtypeConstraint,
     uop_to_contraints, Context, DTypeEnv, Mutability,
 };
 
-/// Collects all defined names in a spec and errors if any constants
+/// Collects all defined and used names in a spec and errors if any constants
 /// are redefined.
 /// # Arguments
 /// * `stmts` - The statements to collect names from.
 /// * `names` - Mapping of defined names from names to whether they are constant.
+/// * `defs` - Set of names that are explicitly user defined
 pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
     stmts: T,
-    names: &mut HashMap<String, Mutability>,
+    names: &mut HashMap<String, (Mutability, Info)>,
+    defs: &mut HashSet<String>,
 ) -> Result<(), LocalError> {
     let is_const_to_mut = |is_const| {
         if is_const {
@@ -40,56 +44,136 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 dests,
                 block,
                 is_const,
+                info,
                 ..
             } => {
                 for (d, _) in dests {
-                    names.insert(d.clone(), is_const_to_mut(*is_const));
+                    names.insert(d.clone(), (is_const_to_mut(*is_const), *info));
+                    defs.insert(d.clone());
                 }
-                collect_sched_names(once(&**block), names)?;
+                collect_sched_names(once(&**block), names, defs)?;
             }
             SchedStmt::Decl {
                 lhs,
                 is_const,
+                expr,
                 info,
                 ..
             } => {
                 for (d, _) in lhs {
-                    if names.contains_key(d) {
-                        return Err(type_error(*info, &format!("Variable {d} already defined")));
-                    }
-                    names.insert(d.clone(), is_const_to_mut(*is_const));
+                    names.insert(d.clone(), (is_const_to_mut(*is_const), *info));
+                    defs.insert(d.clone());
+                }
+                if let Some(expr) = expr {
+                    collect_sched_expr_names(expr, names, defs);
                 }
             }
             SchedStmt::If {
                 true_block,
                 false_block,
+                guard,
                 ..
             } => {
-                collect_sched_names(true_block.iter(), names)?;
-                collect_sched_names(false_block.iter(), names)?;
+                collect_sched_names(true_block.iter(), names, defs)?;
+                collect_sched_names(false_block.iter(), names, defs)?;
+                collect_sched_expr_names(guard, names, defs);
             }
-            SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names)?,
-            SchedStmt::Assign { lhs, .. } => {
-                let lhs = enum_cast!(
-                    SchedTerm::Var { name, .. },
-                    name,
-                    enum_cast!(SchedExpr::Term, lhs)
-                );
-                assert!(names.contains_key(lhs));
-            }
-            SchedStmt::Encode { stmt, .. } => {
-                for (s, _) in &stmt.lhs {
-                    names.insert(s.clone(), Mutability::Const);
+            SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names, defs)?,
+            SchedStmt::Assign {
+                lhs,
+                lhs_is_ref,
+                info,
+                ..
+            } => {
+                let lhs = expect_var(lhs);
+                if !defs.contains(lhs) {
+                    // only adjust mutability if the variable is not explicitly user defined
+                    names.insert(
+                        lhs.clone(),
+                        (
+                            if *lhs_is_ref {
+                                Mutability::Const
+                            } else {
+                                Mutability::Mut
+                            },
+                            *info,
+                        ),
+                    );
                 }
             }
-            SchedStmt::Call(..)
-            | SchedStmt::Return(..)
-            | SchedStmt::InEdgeAnnotation { .. }
+            SchedStmt::Encode {
+                stmt,
+                encoder,
+                info,
+                cmd,
+                ..
+            } => {
+                // don't collect encoder member names, this is handled by the record type
+                if *cmd == EncodedCommand::Copy {
+                    collect_sched_expr_names(&stmt.rhs, names, defs);
+                }
+                names.insert(encoder.clone(), (Mutability::Const, *info));
+            }
+            SchedStmt::Call(_, call) => {
+                for arg in &call.args {
+                    collect_sched_expr_names(arg, names, defs);
+                }
+            }
+            SchedStmt::Return(_, e) => {
+                collect_sched_expr_names(e, names, defs);
+            }
+            SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
         }
     }
     Ok(())
+}
+
+/// Collects all used names in an expression. If they are not already in `names`,
+/// adds them with mutability `const`
+fn collect_sched_expr_names(
+    expr: &SchedExpr,
+    names: &mut HashMap<String, (Mutability, Info)>,
+    defs: &HashSet<String>,
+) {
+    match expr {
+        SchedExpr::Binop { lhs, rhs, op, .. } => {
+            collect_sched_expr_names(lhs, names, defs);
+            if *op != Binop::Dot {
+                // don't collect record member names, this is handed by record types
+                collect_sched_expr_names(rhs, names, defs);
+            }
+        }
+        SchedExpr::Uop { expr, op, info, .. } => {
+            if *op == Uop::Ref {
+                if let SchedExpr::Term(SchedTerm::Var { name, .. }) = &**expr {
+                    if !defs.contains(name) {
+                        names.insert(name.clone(), (Mutability::Mut, *info));
+                        return;
+                    }
+                }
+            }
+            collect_sched_expr_names(expr, names, defs);
+        }
+        SchedExpr::Term(SchedTerm::Var { name, info, .. }) => {
+            if !names.contains_key(name) {
+                names.insert(name.clone(), (Mutability::Const, *info));
+            }
+        }
+        SchedExpr::Term(SchedTerm::Call(_, call)) => {
+            for arg in &call.args {
+                collect_sched_expr_names(arg, names, defs);
+            }
+        }
+        SchedExpr::Term(SchedTerm::TimelineOperation { arg, .. }) => {
+            collect_sched_expr_names(arg, names, defs);
+        }
+        SchedExpr::Term(
+            SchedTerm::Lit { .. } | SchedTerm::EncodeBegin { .. } | SchedTerm::Hole { .. },
+        ) => {}
+        SchedExpr::Conditional { .. } => panic!("Conditionals not allowed in schedules"),
+    }
 }
 
 /// Collects contraints for a binop.
@@ -101,24 +185,14 @@ fn collect_bop(
     env: &mut DTypeEnv,
     info: Info,
 ) -> Result<(), LocalError> {
-    let lhs_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, lhs)
-    );
-    let rhs_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, rhs)
-    );
+    let lhs_name = hole_or_var(lhs).unwrap();
+    let rhs_name = hole_or_var(rhs).unwrap();
     let (left_c, right_c, ret_c) = binop_to_contraints(op, &mut env.env);
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Operator {op:?} has 1 destination, found {}",
-                dest.len()
-            ),
+            "Operator {op:?} has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -129,8 +203,13 @@ fn collect_bop(
         env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
     }
     env.add_raw_constraint(dest_name, &ret_c, info)?;
-    env.add_raw_constraint(lhs_name, &left_c, info)?;
-    env.add_raw_constraint(rhs_name, &right_c, info)
+    if let Hole::Filled(lhs_name) = lhs_name {
+        env.add_raw_constraint(lhs_name, &left_c, info)?;
+    }
+    if let Hole::Filled(rhs_name) = rhs_name {
+        env.add_raw_constraint(rhs_name, &right_c, info)?;
+    }
+    Ok(())
 }
 
 fn collect_assign_uop(
@@ -141,22 +220,18 @@ fn collect_assign_uop(
     info: Info,
     mutables: &mut HashMap<String, Info>,
 ) -> Result<(), LocalError> {
-    let expr_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, expr)
-    );
-    if op == Uop::Ref {
-        mutables.insert(expr_name.clone(), info);
+    let expr_name = hole_or_var(expr).unwrap().opt();
+    if let Some(expr_name) = expr_name {
+        if op == Uop::Ref {
+            mutables.insert(expr_name.clone(), info);
+        }
     }
     let (expr_c, ret_c) = uop_to_contraints(op, &mut env.env);
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Operator {op:?} has 1 destination, found {}",
-                dest.len()
-            ),
+            "Operator {op:?} has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -167,7 +242,10 @@ fn collect_assign_uop(
         env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
     }
     env.add_raw_constraint(dest_name, &ret_c, info)?;
-    env.add_raw_constraint(expr_name, &expr_c, info)
+    if let Some(expr_name) = expr_name {
+        env.add_raw_constraint(expr_name, &expr_c, info)?;
+    }
+    Ok(())
 }
 
 /// Collects constraints for a literal assignment.
@@ -178,9 +256,10 @@ fn collect_assign_lit(
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!("{info}: Literal has 1 destination, found {}", dest.len()),
+            "Literal has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -206,9 +285,10 @@ fn collect_assign_var(
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!("{info}: Variable has 1 destination, found {}", dest.len()),
+            "Variable has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -220,6 +300,9 @@ fn collect_assign_var(
     }
     env.add_var_equiv(dest_name, var, info)
 }
+/// The return values of the true branch of an `if` followed by the return values
+/// of the false branch of the `if`.
+type IfRets = (Vec<Hole<String>>, Vec<Hole<String>>);
 
 /// Collects constraints for the body of a sequence.
 /// The body of the sequence must be an `if` statement or a block which
@@ -234,13 +317,20 @@ fn collect_seq_body(
     env: &mut DTypeEnv,
     stmt: &SchedStmt,
     mutables: &mut HashMap<String, Info>,
-) -> Result<(Vec<String>, Vec<String>), LocalError> {
+) -> Result<IfRets, LocalError> {
     match stmt {
         SchedStmt::If {
             true_block,
             false_block,
+            guard,
+            info,
             ..
         } => {
+            if let Hole::Filled(guard_name) =
+                enum_cast!(SchedExpr::Term, guard).hole_or_var().unwrap()
+            {
+                env.add_dtype_constraint(guard_name, DataType::Bool, *info)?;
+            }
             let true_rets =
                 collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
             let false_rets =
@@ -251,20 +341,6 @@ fn collect_seq_body(
             collect_sched_helper(ctx, env, std::iter::once(x), 1, mutables).map(|x| (x.clone(), x))
         }
     }
-    // if let SchedStmt::If {
-    //     true_block,
-    //     false_block,
-    //     ..
-    // } = stmt
-    // {
-    //     let true_rets =
-    //         collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
-    //     let false_rets =
-    //         collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
-    //     Ok((true_rets, false_rets))
-    // } else {
-    //     unreachable!()
-    // }
 }
 
 /// Collects constraints for a sequence of statements.
@@ -278,14 +354,12 @@ fn collect_seq(
 ) -> Result<(), LocalError> {
     let (rets_a, rets_b) = collect_seq_body(ctx, env, block, mutables)?;
     if dests.len() != rets_a.len() || dests.len() != rets_b.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} return values from both branches of if, found {} and {}",
-                dests.len(),
-                rets_a.len(),
-                rets_b.len()
-            ),
+            "Expected {} return values from both branches of if, found {} and {}",
+            dests.len(),
+            rets_a.len(),
+            rets_b.len()
         ));
     }
     for ((d, r_a), r_b) in dests.iter().zip(rets_a.iter()).zip(rets_b.iter()) {
@@ -295,8 +369,12 @@ fn collect_seq(
         {
             env.add_dtype_constraint(&d.0, anot.base.clone(), info)?;
         }
-        env.add_var_equiv(&d.0, r_a, info)?;
-        env.add_var_equiv(&d.0, r_b, info)?;
+        if let Hole::Filled(r_a) = r_a {
+            env.add_var_equiv(&d.0, r_a, info)?;
+        }
+        if let Hole::Filled(r_b) = r_b {
+            env.add_var_equiv(&d.0, r_b, info)?;
+        }
     }
     Ok(())
 }
@@ -311,12 +389,10 @@ fn collect_if(
     info: Info,
     mutables: &mut HashMap<String, Info>,
 ) -> Result<(), LocalError> {
-    let guard_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, guard)
-    );
-    env.add_constraint(guard_name, DTypeConstraint::Bool, info)?;
+    let guard_name = hole_or_var(guard).unwrap();
+    if let Hole::Filled(guard_name) = guard_name {
+        env.add_constraint(guard_name, DTypeConstraint::Bool, info)?;
+    }
     let true_rets = collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
     let false_rets =
         collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
@@ -333,7 +409,7 @@ fn collect_if(
 /// * `call_info` - The information about the call.
 /// * `info` - The source info of the call.
 /// * `arg_dest_prefix` - The prefix to add to the destination variables and arguments
-/// of the call. None if the call is not an encoded call.
+///     of the call. None if the call is not an encoded call.
 fn collect_assign_call(
     ctx: &Context,
     env: &mut DTypeEnv,
@@ -344,59 +420,50 @@ fn collect_assign_call(
 ) -> Result<(), LocalError> {
     let mut arg_names = Vec::new();
     for arg in &call_info.args {
-        let arg_name = enum_cast!(
-            SchedTerm::Var { name, .. },
-            name,
-            enum_cast!(SchedExpr::Term, arg)
-        );
-        if let Some(pre) = arg_dest_prefix {
-            arg_names.push(format!("{pre}::{arg_name}"));
+        let arg_name = hole_or_var(arg).unwrap();
+        if let Hole::Filled(arg_name) = arg_name {
+            if let Some(pre) = arg_dest_prefix {
+                arg_names.push(Hole::Filled(format!("{pre}::{arg_name}")));
+            } else {
+                arg_names.push(Hole::Filled(arg_name.clone()));
+            }
         } else {
-            arg_names.push(arg_name.clone());
+            arg_names.push(Hole::Empty);
         }
     }
-    let fn_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, &*call_info.target)
-    );
+    let fn_name = expect_var(&call_info.target);
     let func = ctx
         .scheds
         .get(fn_name)
-        .ok_or_else(|| type_error(info, &format!("{info}: Function {fn_name} not found")))?;
+        .ok_or_else(|| type_error!(info, "Function {fn_name} not found"))?;
     let sig = func.sig();
     if arg_names.len() != sig.input.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} arguments, found {}",
-                sig.input.len(),
-                arg_names.len()
-            ),
+            "Expected {} arguments, found {}",
+            sig.input.len(),
+            arg_names.len()
         ));
     }
     if dest.len() != sig.output.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} return values, found {}",
-                sig.output.len(),
-                dest.len()
-            ),
+            "Expected {} return values, found {}",
+            sig.output.len(),
+            dest.len()
         ));
     }
     if let Some(TemplateArgs::Vals(ts)) = &call_info.templates {
         if ts.len() != sig.num_dims {
-            return Err(type_error(
+            return Err(type_error!(
                 info,
-                &format!(
-                    "{info}: Expected {} template arguments, found {}",
-                    sig.num_dims,
-                    ts.len()
-                ),
+                "Expected {} template arguments, found {}",
+                sig.num_dims,
+                ts.len()
             ));
         }
         for t_arg in ts {
+            // templates cannot be holes for now
             let t_name = enum_cast!(
                 SpecTerm::Var { name, .. },
                 name,
@@ -405,17 +472,17 @@ fn collect_assign_call(
             env.add_dtype_constraint(t_name, DataType::Int(IntSize::I32), info)?;
         }
     } else if sig.num_dims != 0 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} template arguments, found 0",
-                sig.num_dims
-            ),
+            "Expected {} template arguments, found 0",
+            sig.num_dims
         ));
     }
     for (arg, arg_type) in arg_names.iter().zip(sig.input.iter()) {
-        let dc: DTypeConstraint = arg_type.base.clone().into();
-        env.add_constraint(arg, dc.into_subtypeable(), info)?;
+        if let Hole::Filled(arg) = arg {
+            let dc: DTypeConstraint = arg_type.base.clone().into();
+            env.add_constraint(arg, dc.into_subtypeable(), info)?;
+        }
     }
     for ((dest_name, dest_annot), typ) in dest.iter().zip(sig.output.iter()) {
         if let Some(FullType {
@@ -423,11 +490,10 @@ fn collect_assign_call(
         }) = &dest_annot
         {
             if anot.base != typ.base {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "{info}: Annotation for {dest_name} is incompatible with return type of {fn_name}",
-                    ),
+                    "Annotation for '{}' is incompatible with return type of '{fn_name}'",
+                    hir_to_source_name(dest_name)
                 ));
             }
         }
@@ -463,23 +529,13 @@ fn collect_dot(
     rhs: &SchedExpr,
     info: Info,
 ) -> Result<(), LocalError> {
-    let rhs_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, rhs)
-    );
-    let lhs_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, lhs)
-    );
+    let rhs_name = hole_or_var(rhs).unwrap();
+    let lhs_name = hole_or_var(lhs).unwrap();
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Dot operator has 1 destination, found {}",
-                dest.len()
-            ),
+            "Dot operator has 1 destination, found {}",
+            dest.len()
         ));
     }
     let (dest_name, dest_annot) = &dest[0];
@@ -489,15 +545,17 @@ fn collect_dot(
     {
         env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
     }
-    let lhs_constraint = DTypeConstraint::Record(RecordConstraint::Record {
-        fields: {
-            let mut fields = BTreeMap::new();
-            fields.insert(rhs_name.clone(), DTypeConstraint::Var(dest_name.clone()));
-            fields
-        },
-        constraint_kind: SubtypeConstraint::Any,
-    });
-    env.add_constraint(lhs_name, lhs_constraint, info)?;
+    if let (Hole::Filled(lhs_name), Hole::Filled(rhs_name)) = (lhs_name, rhs_name) {
+        let lhs_constraint = DTypeConstraint::Record(RecordConstraint::Record {
+            fields: {
+                let mut fields = BTreeMap::new();
+                fields.insert(rhs_name.clone(), DTypeConstraint::Var(dest_name.clone()));
+                fields
+            },
+            constraint_kind: SubtypeConstraint::Any,
+        });
+        env.add_constraint(lhs_name, lhs_constraint, info)?;
+    }
     Ok(())
 }
 
@@ -509,18 +567,12 @@ fn collect_timeline_op(
     arg: &SchedExpr,
     info: Info,
 ) -> Result<(), LocalError> {
-    let arg_name = enum_cast!(
-        SchedTerm::Var { name, .. },
-        name,
-        enum_cast!(SchedExpr::Term, arg)
-    );
+    let arg_name = hole_or_var(arg).unwrap();
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Timeline operation has 1 destination, found {}",
-                dest.len()
-            ),
+            "Timeline operation has 1 destination, found {}",
+            dest.len()
         ));
     }
     let dest_name = &dest[0].0;
@@ -533,24 +585,32 @@ fn collect_timeline_op(
                 DTypeConstraint::Fence(Box::new(DTypeConstraint::Var(inner.clone()))),
                 info,
             )?;
-            env.add_constraint(
-                arg_name,
-                DTypeConstraint::Encoder(Box::new(DTypeConstraint::Var(inner))),
-                info,
-            )
+            if let Hole::Filled(arg_name) = arg_name {
+                env.add_constraint(
+                    arg_name,
+                    DTypeConstraint::Encoder(Box::new(DTypeConstraint::Var(inner))),
+                    info,
+                )?;
+            }
+            Ok(())
         }
         TimelineOperation::Await => {
-            env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
-            env.add_var_side_cond(&format!("{dest_name}-defined_fields"), dest_name);
-            env.add_constraint(
-                arg_name,
-                DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
-                    all: RecordConstraint::Var(format!("{dest_name}-defined_fields")),
-                    read: RecordConstraint::Var(dest_name.clone()),
-                    write: RecordConstraint::Any,
-                })),
-                info,
-            )
+            // env.add_constraint(dest_name, DTypeConstraint::Any, info)?;
+            if let Hole::Filled(arg_name) = arg_name {
+                env.add_var_side_cond(
+                    VarName::new(format!("{dest_name}-defined_fields")),
+                    VarName::new(dest_name.clone()),
+                );
+                env.add_constraint(
+                    arg_name,
+                    DTypeConstraint::Fence(Box::new(DTypeConstraint::RemoteObj {
+                        all: RecordConstraint::Var(format!("{dest_name}-defined_fields")),
+                        read: RecordConstraint::Var(dest_name.clone()),
+                    })),
+                    info,
+                )?;
+            }
+            Ok(())
         }
     }
 }
@@ -563,12 +623,10 @@ fn collect_begin_encode(
     info: Info,
 ) -> Result<(), LocalError> {
     if dest.len() != 1 {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: EncodeBegin has 1 destination, found {}",
-                dest.len()
-            ),
+            "EncodeBegin has 1 destination, found {}",
+            dest.len()
         ));
     }
     let dest_name = &dest[0].0;
@@ -596,16 +654,23 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
     stmts: T,
     mut num_stmts: usize,
     mutables: &mut HashMap<String, Info>,
-) -> Result<Vec<String>, LocalError> {
+) -> Result<Vec<Hole<String>>, LocalError> {
     for stmt in stmts {
         num_stmts -= 1;
         match stmt {
             SchedStmt::Decl {
                 lhs: dest,
-                expr: None,
+                expr: None | Some(SchedExpr::Term(SchedTerm::Hole { .. })),
                 info,
                 ..
             } => collect_null_decl(env, dest, *info)?,
+            SchedStmt::Assign {
+                rhs: SchedExpr::Term(SchedTerm::Hole { .. }),
+                ..
+            }
+            | SchedStmt::InEdgeAnnotation { .. }
+            | SchedStmt::OutEdgeAnnotation { .. }
+            | SchedStmt::Hole(_) => (),
             SchedStmt::Decl {
                 lhs: dest,
                 expr:
@@ -656,7 +721,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => {
                 mutables.insert(dest.clone(), *info);
                 if *lhs_is_ref {
-                    let x = env.env.get_type(name).unwrap();
+                    let x = env.env.get_type(&VarName::new(name.clone())).unwrap();
                     env.add_constraint(dest, DTypeConstraint::Ref(x), *info)?;
                 } else {
                     env.add_var_equiv(dest, name, *info)?;
@@ -690,9 +755,6 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => {
                 collect_begin_encode(env, lhs, defs, *info)?;
             }
-            SchedStmt::InEdgeAnnotation { .. }
-            | SchedStmt::OutEdgeAnnotation { .. }
-            | SchedStmt::Hole(_) => (),
             SchedStmt::Call(info, call_info) => {
                 collect_assign_call(ctx, env, &[], call_info, *info, None)?;
             }
@@ -700,7 +762,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 assert_eq!(num_stmts, 0);
                 match e {
                     SchedExpr::Term(SchedTerm::Var { name, .. }) => {
-                        return Ok(vec![name.clone()]);
+                        return Ok(vec![Hole::Filled(name.clone())]);
                     }
                     SchedExpr::Term(SchedTerm::Lit {
                         lit: SchedLiteral::Tuple(rets),
@@ -708,14 +770,12 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                     }) => {
                         let mut ret_names = Vec::new();
                         for ret in rets {
-                            let ret_name = enum_cast!(
-                                SchedTerm::Var { name, .. },
-                                name,
-                                enum_cast!(SchedExpr::Term, ret)
-                            );
-                            ret_names.push(ret_name.clone());
+                            ret_names.push(hole_or_var(ret).unwrap().cloned());
                         }
                         return Ok(ret_names);
+                    }
+                    SchedExpr::Term(SchedTerm::Hole { .. }) => {
+                        return Ok(vec![Hole::Empty]);
                     }
                     _ => unreachable!(),
                 }
@@ -727,7 +787,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 encoder,
                 ..
             } => collect_encode(ctx, env, encoder, stmt, *cmd, *info)?,
-            _ => unreachable!("{:#?}", stmt),
+            x => unreachable!("{x:?}"),
         }
     }
     Ok(vec![])
@@ -754,13 +814,13 @@ fn get_singleton_remote_obj_constraint(
         fields: BTreeMap::new(),
         constraint_kind: SubtypeConstraint::Any,
     };
-    let (read, write) = if flag == WGPUFlags::MapRead {
-        (populated_record, empty_record)
+    let read = if flag == WGPUFlags::MapRead {
+        populated_record
     } else if flag == WGPUFlags::CopyDst {
-        (empty_record, populated_record)
+        empty_record
     } else {
         assert_eq!(flag, WGPUFlags::Storage, "TODO: Unimplemented flag");
-        (empty_record.clone(), empty_record)
+        empty_record
     };
     DTypeConstraint::RemoteObj {
         all: RecordConstraint::Record {
@@ -772,7 +832,6 @@ fn get_singleton_remote_obj_constraint(
             constraint_kind: SubtypeConstraint::Any,
         },
         read,
-        write,
     }
 }
 
@@ -812,25 +871,26 @@ fn collect_encode(
 ) -> Result<(), LocalError> {
     match cmd {
         EncodedCommand::Copy => {
-            let src = enum_cast!(
-                SchedTerm::Var { name, .. },
-                name,
-                enum_cast!(SchedExpr::Term, &stmt.rhs)
-            );
-            let inner = format!("!{src}!");
-            // force copy from ref
-            env.add_constraint(&inner, DTypeConstraint::Any, info)?;
-            env.add_constraint(
-                src,
-                DTypeConstraint::RefN(Box::new(DTypeConstraint::Var(inner.clone()))),
-                info,
-            )?;
+            let src = hole_or_var(&stmt.rhs).unwrap();
+            let constraint = if let Hole::Filled(src) = src {
+                let inner = format!("!{src}!");
+                // force copy from ref
+                env.add_constraint(&inner, DTypeConstraint::Any, info)?;
+                env.add_constraint(
+                    src,
+                    DTypeConstraint::RefN(Box::new(DTypeConstraint::Var(inner.clone()))),
+                    info,
+                )?;
+                DTypeConstraint::Var(inner)
+            } else {
+                DTypeConstraint::Any
+            };
             let dest = stmt.lhs[0].0.clone();
             add_singleton_encoder_contraint(
                 env,
                 encoder,
                 &dest,
-                DTypeConstraint::Var(inner),
+                constraint,
                 WGPUFlags::CopyDst,
                 info,
             )
@@ -849,7 +909,7 @@ fn collect_encode(
                     *info,
                     Some(encoder),
                 )?;
-                // we now have constraints on all of the arguments and destinations,
+                // we now have constraints on all of the non-hole arguments and destinations,
                 // which we can use
                 for (dest, _) in &stmt.lhs {
                     add_singleton_encoder_contraint(
@@ -862,22 +922,20 @@ fn collect_encode(
                     )?;
                 }
                 for arg in &call.args {
-                    let arg_name = enum_cast!(
-                        SchedTerm::Var { name, .. },
-                        name,
-                        enum_cast!(SchedExpr::Term, arg)
-                    );
+                    let arg_name = hole_or_var(arg).unwrap();
                     // TODO: have another category of variables in a remote obj
                     // so we can check if someone uses an argument in a call that
                     // isn't defined
-                    add_singleton_encoder_contraint(
-                        env,
-                        encoder,
-                        arg_name,
-                        DTypeConstraint::Var(format!("{encoder}::{arg_name}")),
-                        WGPUFlags::Storage,
-                        *info,
-                    )?;
+                    if let Hole::Filled(arg_name) = arg_name {
+                        add_singleton_encoder_contraint(
+                            env,
+                            encoder,
+                            arg_name,
+                            DTypeConstraint::Var(format!("{encoder}::{arg_name}")),
+                            WGPUFlags::Storage,
+                            *info,
+                        )?;
+                    }
                 }
             } else {
                 unreachable!();
@@ -911,13 +969,11 @@ pub fn collect_schedule(
     let mut mutables = HashMap::new();
     let rets = collect_sched_helper(ctx, env, stmts.iter(), stmts.len(), &mut mutables)?;
     if rets.len() != fn_out.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "{info}: Expected {} return values, found {}",
-                fn_out.len(),
-                rets.len()
-            ),
+            "Expected {} return values, found {}",
+            fn_out.len(),
+            rets.len()
         ));
     }
     for (ret_name, fn_t) in rets.iter().zip(fn_out.iter()) {
@@ -926,10 +982,12 @@ pub fn collect_schedule(
             ..
         } = fn_t
         {
-            let dtc = DTypeConstraint::from(base.clone());
-            env.add_constraint(ret_name, dtc.into_subtypeable(), info)?;
-            for flag in flags {
-                env.add_usage(ret_name, *flag);
+            if let Hole::Filled(ret_name) = ret_name {
+                let dtc = DTypeConstraint::from(base.clone());
+                env.add_constraint(ret_name, dtc.into_subtypeable(), info)?;
+                for flag in flags {
+                    env.add_usage(ret_name, *flag);
+                }
             }
         } else {
             panic!("Function return type has no base type");

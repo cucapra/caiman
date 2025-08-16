@@ -14,7 +14,7 @@ use crate::{
 /// * `e` - The expression to flatten
 /// * `mk_var` - A function that creates a variable from a string
 /// * `mk_decl` - A function that creates a declaration from a string and an
-/// expression
+///     expression
 /// * `temp_num` - The current number of temporary variables
 /// * `flatten_term` - A function that flattens a term
 /// # Returns
@@ -104,7 +104,7 @@ fn flatten_top_level<
 /// * `e` - The expression to flatten
 /// * `mk_var` - A function that creates a variable from a string
 /// * `mk_decl` - A function that creates a declaration from a string and an
-/// expression
+///     expression
 /// * `temp_num` - The current number of temporary variables
 /// * `flatten_term` - A function that flattens a term
 /// # Returns
@@ -217,7 +217,7 @@ fn build_spec_decl_factory(info: Info) -> impl Fn(&str, NestedExpr<SpecTerm>) ->
 /// * `args` - The arguments to flatten
 /// * `mk_var` - A function that creates a variable from a string
 /// * `mk_decl` - A function that creates a declaration from a string and an
-/// expression
+///     expression
 /// * `temp_num` - The current number of temporary variables
 /// * `flatten_term` - A function that flattens a term
 /// # Returns
@@ -599,7 +599,30 @@ fn flatten_sched_term(
                 }),
             )
         }
-        x @ SchedTerm::Hole(_) => (vec![], temp_num, NestedExpr::Term(x)),
+        x @ SchedTerm::Hole {
+            can_generate_code: false,
+            ..
+        } => (vec![], temp_num, NestedExpr::Term(x)),
+        SchedTerm::Hole {
+            info,
+            can_generate_code: true,
+        } => (
+            vec![SchedStmt::Decl {
+                info,
+                lhs: vec![(format!("_h{temp_num}"), None)],
+                is_const: true,
+                expr: Some(NestedExpr::Term(SchedTerm::Hole {
+                    info,
+                    can_generate_code: true,
+                })),
+            }],
+            temp_num + 1,
+            NestedExpr::Term(SchedTerm::Var {
+                info,
+                name: format!("_h{temp_num}"),
+                tag: None,
+            }),
+        ),
     }
 }
 
@@ -691,7 +714,7 @@ fn flatten_sched_call(
 ///   * A list of statements that need to be added to the spec
 ///   * The new number of temporary variables
 ///   * The old schedule term with all of its children flattened so that the
-///    term's children are all variables
+///         term's children are all variables
 fn flatten_sched_term_children(
     term: NestedExpr<SchedTerm>,
     mut temp_num: usize,
@@ -754,6 +777,25 @@ fn flatten_sched_term_children(
                         info: fn_info,
                     },
                 )),
+            )
+        }
+        NestedExpr::Term(SchedTerm::TimelineOperation { arg, info, op, tag }) => {
+            let (instrs, new_temp, t) = flatten_rec(
+                *arg,
+                &build_sched_var_factory(info),
+                &build_sched_decl_factory(info, true),
+                temp_num,
+                &flatten_sched_term,
+            );
+            (
+                instrs,
+                new_temp,
+                NestedExpr::Term(SchedTerm::TimelineOperation {
+                    info,
+                    op,
+                    tag,
+                    arg: Box::new(t),
+                }),
             )
         }
         _ => (vec![], temp_num, term),

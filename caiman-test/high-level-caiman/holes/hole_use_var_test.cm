@@ -1,0 +1,19 @@
+val bar() -> i64 {
+    b :- 10
+    h :- 20
+    k :- 30
+    returns b + h * k
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn main() -> i64 impls bar, time, space {
+    var left = 20;
+    var right = 30;
+    let res = ? * ?;
+    left = 10;
+    ? + ?
+}
+
+pipeline main { main }

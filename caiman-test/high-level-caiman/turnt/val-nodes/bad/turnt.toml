@@ -1,6 +1,11 @@
-[envs.val-nodes]	
+[envs.val-nodes]
 # Put output in a separate file to look at it, but don't use the output	
-# for determining success or failure.	
+# for determining success or failure if its a unification failure
+# bc it's non-deterministic where it will fail	
 command = """	
-    ../../../../../target/debug/hlc --lower {filename} 2>&1 > /dev/null \	
-    | sed -n '/Error/,$p' | grep . > {base}.debug"""
+    (../../../../../target/debug/hlc --lower {filename} 2>&1 > /dev/null \	
+    | sed -n '/Error/,$p' | grep . > {base}.debug) && \
+    (x=`cat {base}.debug`; case $x in *"Failed to unify"*) echo "Failed to unify" ;; \
+    *) echo "$x" ;; esac)"""
+
+output.out = "-"

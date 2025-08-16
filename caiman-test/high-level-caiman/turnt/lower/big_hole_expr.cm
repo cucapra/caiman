@@ -1,0 +1,130 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main(a: i64) -> o: i64 {
+    h :- a * (a + a)
+    d :- foo(a + 20)
+    c :- h - 2 if a < 0 else d + 2
+    returns c
+}
+
+fn main_func(a: i64) -> i64 impls main, time, space  {
+    let h = a * ???;
+    /* #CHECK:
+    Filled(
+        Node(
+            NamedNode {
+                name: Some(
+                    NodeId(
+                        "[[temp:[a-zA-Z0-9_%]+]]",
+                    ),
+                ),
+                node: AllocTemporary ...
+            },
+        ),
+    ),
+    Empty,
+    #END #CHECK:
+    NamedNode {
+        name: Some(
+            NodeId(
+                "[[val:[a-zA-Z0-9_%]+]]",
+            ),
+        ),
+        node: ReadRef {
+            storage_type: Filled(
+                I64,
+            ),
+            source: Filled(
+                NodeId(
+                    "[[temp]]",
+                ),
+            ),
+        },
+    },
+    #END #CHECK:
+    external_function_id: Filled(
+        ExternalFunctionId(
+            "_mul_i64_i64",
+        ),
+    ),
+    inputs: Filled(
+        [
+            Filled(
+                NodeId(
+                    "a%0",
+                ),
+            ),
+            Filled(
+                NodeId(
+                    "[[val]]",
+                ),
+            ),
+        ],
+    ),
+    #END */
+    let d = foo_impl(???);
+    /* #CHECK:
+    NamedNode {
+        name: Some(
+            NodeId(
+                "[[temp2:[a-zA-Z0-9_%]+]]",
+            ),
+        ),
+        node: AllocTemporary ...
+    }, ), ),
+    Empty,
+    #END #CHECK:
+    NamedNode {
+        name: Some(
+            NodeId(
+                "[[val2:[a-zA-Z0-9_%]+]]",
+            ),
+        ),
+        node: ReadRef {
+            storage_type: Filled(
+                I64,
+            ),
+            source: Filled(
+                NodeId(
+                    "[[temp2]]",
+                ),
+            ),
+        },
+    },
+    #END #CHECK:
+    ScheduleCall {
+        ...
+        callee_funclet_id: Filled(
+            FuncletId(
+                "foo_impl",
+            ),
+        ),
+        callee_arguments: Filled(
+            [
+                Filled(
+                    NodeId(
+                        "[[val2]]",
+                    ),
+                ),
+            ],
+        ),
+    #END */
+    if ??? {
+        ???
+    } else {
+        ??? + 2
+    }
+}
+
+val foo(a: i64) -> i64 {
+    returns a + 10
+}
+
+fn foo_impl(a: i64) -> i64 impls foo, time, space {
+    ? + 10
+}
+
+pipeline main { main_func }

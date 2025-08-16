@@ -1,0 +1,26 @@
+
+val bar(a: i64) -> i64 {
+    b :- foo(a)
+    h :- 20
+    returns b + h
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn main(a: i64) -> i64 impls bar, time, space {
+    var k = 20;
+    let b = foo_impl(a);
+    ? + ?
+}
+
+val foo(a: i64) -> i64 {
+    returns a + 10
+}
+
+fn foo_impl(a: i64) -> i64 impls foo, time, space {
+    let x = 10;
+    ? + ?
+}
+
+pipeline main { main }

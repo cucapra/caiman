@@ -22,10 +22,7 @@ use crate::lower::sched_hir::{
     Hir, HirBody, UseType,
 };
 
-use super::{
-    dominators::{compute_dominators, DomTree},
-    InOutFacts, LiveVars,
-};
+use super::{dominators::DomTree, InOutFacts, LiveVars};
 
 /// Inserts a phi node as the first instruction of a block if one with the
 /// same destination does not already exist. If one does exist, nothing
@@ -65,7 +62,7 @@ fn add_phi_to_block(
     bb.stmts.insert(
         0,
         HirBody::Phi {
-            info: bb.stmts.get(0).map_or(bb.src_loc, Hir::get_info),
+            info: bb.stmts.first().map_or(bb.src_loc, Hir::get_info),
             dest: var.to_string(),
             inputs,
             original: var.to_string(),
@@ -263,15 +260,14 @@ fn ssa_rename_vars(
 /// v.3 = phi(v.1, v.2);
 /// ```
 #[must_use]
-pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>) -> Cfg {
-    let doms = compute_dominators(&cfg);
-    add_phi_nodes(&mut cfg, &doms, live_vars);
+pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>, doms: &DomTree) -> Cfg {
+    add_phi_nodes(&mut cfg, doms, live_vars);
     ssa_rename_vars(
         &mut cfg,
         START_BLOCK_ID,
         HashMap::new(),
         &mut HashMap::new(),
-        &doms,
+        doms,
     );
     cfg
 }
@@ -279,7 +275,7 @@ pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>) -> Cfg {
 /// Returns the original name of a variable. For example, `x.0` would become
 /// `x`. If the variable name is not fromatted correctly, this function will return the
 /// passed in name.
-pub fn original_name(name: &str) -> String {
+pub fn ssa_original_name(name: &str) -> String {
     Regex::new(r"\.\d+$").unwrap().replace(name, "").to_string()
 }
 
@@ -326,13 +322,21 @@ pub fn original_name(name: &str) -> String {
 pub fn transform_out_ssa(mut cfg: Cfg) -> Cfg {
     for bb in cfg.blocks.values_mut() {
         bb.stmts.retain(|stmt| !matches!(stmt, HirBody::Phi { .. }));
-        for stmt in &mut bb.stmts {
-            stmt.rename_uses(&mut |name, _| original_name(name));
-            stmt.rename_defs(&mut original_name);
+        for mut stmt in &mut bb.stmts {
+            stmt.rename_uses(&mut |name, _| ssa_original_name(name));
+            stmt.rename_defs(&mut ssa_original_name);
+            if let HirBody::Hole { initialized, .. } = &mut stmt {
+                initialized.clone_from(
+                    &initialized
+                        .iter()
+                        .map(|(x, y)| (ssa_original_name(x), y.clone()))
+                        .collect(),
+                );
+            }
         }
         bb.terminator
-            .rename_uses(&mut |name, _| original_name(name));
-        bb.terminator.rename_defs(&mut original_name);
+            .rename_uses(&mut |name, _| ssa_original_name(name));
+        bb.terminator.rename_defs(&mut ssa_original_name);
     }
     cfg
 }

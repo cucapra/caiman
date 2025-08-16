@@ -10,15 +10,19 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use caiman::explication::Hole;
 use caiman::ir;
 
+use crate::error::{hir_to_source_name, Info, LocalError};
 use crate::lower::sched_hir::cfg::FINAL_BLOCK_ID;
+use crate::lower::sched_hir::HirTerm;
 use crate::lower::sched_hir::{
     cfg::START_BLOCK_ID, HirBody, HirFuncCall, HirInstr, Terminator, TripleTag,
 };
-use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SpecType, Tag};
+use crate::parse::ast::{DataType, Flow, Quotient, QuotientReference, SpecType, Tag};
+use crate::type_error;
 
-use super::{Fact, Forwards, RET_VAR};
+use super::{Fact, Forwards, TransferData, RET_VAR};
 
 /// Creates a `none()` tag with the given flow
 const fn none_tag(spec_type: SpecType, flow: Flow) -> Tag {
@@ -55,8 +59,20 @@ fn override_none_usable(
     tag
 }
 
+/// Overrides the unknown information in `tag` with `none()-usable`
+/// and overrrides the spatial information with `none()-save`
+fn override_none_usable_ref(mut tag: TripleTag) -> TripleTag {
+    tag.spatial
+        .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
+    tag.timeline
+        .override_unknown_info(none_tag(SpecType::Timeline, Flow::Usable));
+    tag.value
+        .override_unknown_info(none_tag(SpecType::Value, Flow::Usable));
+    tag
+}
+
 /// Overrrides unknown info in `tag` with `none()-save` for spatial,
-/// `none()-usable` for timeline, and `none()-dead` for value
+/// `none()-usable` for timeline, and `none()-dead` for value if `override_dead` is true
 fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
     tag.spatial
         .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
@@ -72,7 +88,7 @@ fn override_defaults_ref(mut tag: TripleTag) -> TripleTag {
 /// Meet: union
 #[derive(Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub struct TagAnalysis {
+pub struct FlowAnalysis {
     tags: HashMap<String, TripleTag>,
     /// For an output fact, thse are the input tags to be overridden.
     /// Input overrides are not carried over between blocks
@@ -86,13 +102,14 @@ pub struct TagAnalysis {
     block: Option<usize>,
 }
 
-impl PartialEq for TagAnalysis {
+impl PartialEq for FlowAnalysis {
     fn eq(&self, other: &Self) -> bool {
         self.tags == other.tags && self.input_overrides == other.input_overrides
     }
 }
 
-impl std::fmt::Debug for TagAnalysis {
+#[allow(clippy::missing_fields_in_debug)]
+impl std::fmt::Debug for FlowAnalysis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TagAnalysis")
             .field("tags", &self.tags)
@@ -101,9 +118,9 @@ impl std::fmt::Debug for TagAnalysis {
     }
 }
 
-impl Eq for TagAnalysis {}
+impl Eq for FlowAnalysis {}
 
-impl TagAnalysis {
+impl FlowAnalysis {
     /// Constructs tags for special input arguments
     /// # Arguments
     /// * `tags` - The tags to insert into
@@ -182,7 +199,7 @@ impl TagAnalysis {
     }
 }
 
-impl TagAnalysis {
+impl FlowAnalysis {
     /// Special processing for the final blocks
     fn special_process_block(&mut self, block_id: usize) {
         use std::collections::hash_map::Entry;
@@ -211,15 +228,15 @@ impl TagAnalysis {
         }
     }
     /// Transfer function for an HIR body statement
-    #[allow(clippy::too_many_lines)]
-    fn transfer_stmt(&mut self, stmt: &mut HirBody) {
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
+    fn transfer_stmt(&mut self, stmt: &mut HirBody) -> Result<(), LocalError> {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl {
                 lhs, lhs_tag, rhs, ..
             } => {
                 let mut info = lhs_tag.clone();
-                if let SchedTerm::Var { name, .. } = rhs {
+                if let HirTerm::Var { name, .. } = rhs {
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         info.value = rhs_typ.value;
                     }
@@ -230,15 +247,42 @@ impl TagAnalysis {
                 );
             }
             HirBody::VarDecl {
-                lhs, lhs_tag, rhs, ..
+                lhs,
+                lhs_tag,
+                rhs,
+                info: src_info,
+                ..
             } => {
                 let mut info = lhs_tag.clone();
+                // We could accpet the user's annotation here, and that would probably work for most cases.
+                // I believe these errors are true of the language now, but are not necessarily true
+                // in the general type system.
                 if rhs.is_none() {
+                    if info.value.flow.is_some() && info.value.flow != Some(Flow::Dead) {
+                        return Err(type_error!(
+                            *src_info,
+                            "Illegal value flow {:?}. An unitialized value is dead.",
+                            info.value.flow
+                        ));
+                    }
+                    if info.value.quot.is_some() && info.value.quot != Some(Quotient::None)
+                        || info.value.quot_var.spec_var.is_some()
+                    {
+                        return Err(type_error!(
+                            *src_info,
+                            "Illegal value quotient {:?}({:?}). An unitialized variable is None",
+                            info.value.quot,
+                            info.value.quot_var.spec_var
+                        ));
+                    }
                     info.value = none_tag(SpecType::Value, Flow::Dead);
-                } else if let Some(SchedTerm::Var { name, .. }) = rhs {
+                } else if let Some(HirTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
-                        info.value = rhs_typ.value;
+                        if rhs_typ.value.flow.is_none() {
+                            info.value.flow = Some(Flow::Usable);
+                        }
+                        info.value.set_specified_info(rhs_typ.value);
                     }
                 }
                 if info.spatial.flow.is_none() {
@@ -255,11 +299,14 @@ impl TagAnalysis {
             } => {
                 let t = self.tags.get_mut(lhs).unwrap();
                 t.set_specified_info(lhs_tags.clone());
-                if let SchedTerm::Var { name, .. } = rhs {
+                if let HirTerm::Var { name, .. } = rhs {
                     // TODO: check this
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         let t = self.tags.get_mut(lhs).unwrap();
-                        t.value = rhs_typ.value;
+                        if rhs_typ.value.flow.is_none() {
+                            t.value.flow = Some(Flow::Usable);
+                        }
+                        t.value.set_specified_info(rhs_typ.value);
                     }
                 }
             }
@@ -271,9 +318,17 @@ impl TagAnalysis {
             } => {
                 let t = self.tags.get_mut(dest).unwrap();
                 t.set_specified_info(dest_tag.clone());
-                if let Some(rhs_typ) = self.tags.get(src).cloned() {
+                if let HirTerm::Var { name: src, .. } = src {
+                    if let Some(rhs_typ) = self.tags.get(src).cloned() {
+                        let t = self.tags.get_mut(dest).unwrap();
+                        if rhs_typ.value.flow.is_none() {
+                            t.value.flow = Some(Flow::Usable);
+                        }
+                        t.value.set_specified_info(rhs_typ.value);
+                    }
+                } else {
                     let t = self.tags.get_mut(dest).unwrap();
-                    t.value = rhs_typ.value;
+                    t.value.flow = Some(Flow::Usable);
                 }
             }
             HirBody::RefLoad { dest, src, .. } => {
@@ -291,7 +346,92 @@ impl TagAnalysis {
                     override_none_usable(tag, &self.data_types[dest], self.flags.get(dest)),
                 );
             }
-            HirBody::Hole(_) => todo!(),
+            HirBody::Hole {
+                dests, initialized, ..
+            } => {
+                for (dest, tag) in dests.iter() {
+                    match self.tags.entry(dest.clone()) {
+                        Entry::Occupied(mut e) => {
+                            e.get_mut().set_specified_info(tag.clone());
+                        }
+                        Entry::Vacant(e) => {
+                            e.insert(tag.clone());
+                        }
+                    }
+                    let dest_tag = self.tags[dest].clone().retain(&[SpecType::Timeline]);
+                    match self.data_types.get(dest) {
+                        Some(DataType::Encoder(Some(ro))) => {
+                            if let DataType::RemoteObj { all, .. } = &**ro {
+                                for (e, _) in all {
+                                    let full_name = format!("{dest}::{e}");
+                                    match self.tags.entry(full_name.clone()) {
+                                        Entry::Occupied(mut e) => {
+                                            e.get_mut().override_unknown_info(
+                                                override_defaults_ref(dest_tag.clone()),
+                                            );
+                                        }
+                                        Entry::Vacant(e) => {
+                                            e.insert(override_defaults_ref(dest_tag.clone()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Some(DataType::Fence(Some(ro))) => {
+                            if let DataType::RemoteObj { all, .. } = &**ro {
+                                for (e, _) in all {
+                                    match self.tags.entry(format!("{dest}::{e}")) {
+                                        Entry::Occupied(mut e) => {
+                                            e.get_mut().override_unknown_info(
+                                                override_none_usable_ref(dest_tag.clone()),
+                                            );
+                                        }
+                                        Entry::Vacant(e) => {
+                                            e.insert(override_none_usable_ref(dest_tag.clone()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Some(DataType::Record(all)) => {
+                            for (e, t) in all {
+                                match self.tags.entry(format!("{dest}::{e}")) {
+                                    Entry::Occupied(mut e) => e.get_mut().override_unknown_info(
+                                        override_none_usable(dest_tag.clone(), t, None),
+                                    ),
+                                    Entry::Vacant(e) => {
+                                        e.insert(override_none_usable(dest_tag.clone(), t, None));
+                                    }
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                for (dest, _) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(
+                            self.tags[dest].clone(),
+                            self.data_types.get(dest).unwrap(),
+                            self.flags.get(dest),
+                        ),
+                    );
+                }
+                for (init_name, init_val_node) in initialized.iter() {
+                    let tag = self
+                        .tags
+                        .entry(init_name.clone())
+                        .or_insert_with(TripleTag::new_none_usable);
+                    tag.value.flow = Some(Flow::Usable);
+                    if let Some(node) = init_val_node {
+                        let new_node = Some(node.clone());
+                        tag.value.quot_var.spec_var = new_node.map(|x| x.get_name().to_owned());
+                        // can't be input bc we're initializing it
+                        tag.value.quot = Some(Quotient::Node);
+                    }
+                }
+            }
             HirBody::Op { dests, .. } => {
                 for (dest, dest_tag) in dests {
                     self.tags.insert(
@@ -390,10 +530,11 @@ impl TagAnalysis {
                 }
             }
         }
+        Ok(())
     }
 
     /// Performs tag analysis on the block terminator
-    fn transfer_tail(&mut self, tail: &mut Terminator, block_id: usize) {
+    fn transfer_tail(&mut self, tail: &mut Terminator, block_id: usize) -> Result<(), LocalError> {
         match tail {
             Terminator::Select { dests, tag, .. } => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
@@ -411,7 +552,7 @@ impl TagAnalysis {
             Terminator::CaptureCall {
                 dests,
                 captures,
-                call: HirFuncCall { tag, .. },
+                call: HirFuncCall { tag, info, .. },
                 ..
             } => {
                 tag.override_unknown_info(TripleTag::new_none_usable());
@@ -426,20 +567,38 @@ impl TagAnalysis {
                     );
                 }
                 for cap in captures.iter() {
-                    assert!(
-                        self.tags.contains_key(cap),
-                        "Capture {cap} is missing a tag",
-                    );
+                    if !self.tags.contains_key(cap) {
+                        return Err(type_error!(
+                            *info,
+                            "Captured variable '{}' requires a tag annotation",
+                            hir_to_source_name(cap)
+                        ));
+                    }
                 }
             }
             Terminator::Return { dests, rets, .. } => {
                 assert_eq!(dests.len(), rets.len());
-                for ((idx, _), out) in dests.iter().zip(rets.iter()) {
-                    let tag = self.tags.get(out).cloned().unwrap();
-                    self.tags.insert(
-                        idx.clone(),
-                        override_none_usable(tag, &self.data_types[idx], self.flags.get(out)),
-                    );
+                for ((dest_name, dest_tag), out) in dests.iter().zip(rets.iter()) {
+                    if let Hole::Filled(out) = out {
+                        let tag = self.tags.get(out).cloned().unwrap();
+                        self.tags.insert(
+                            dest_name.clone(),
+                            override_none_usable(
+                                tag,
+                                &self.data_types[dest_name],
+                                self.flags.get(out),
+                            ),
+                        );
+                    } else {
+                        self.tags.insert(
+                            dest_name.clone(),
+                            override_none_usable(
+                                dest_tag.clone(),
+                                &self.data_types[dest_name],
+                                self.flags.get(dest_name),
+                            ),
+                        );
+                    }
                 }
             }
 
@@ -456,6 +615,7 @@ impl TagAnalysis {
                 *t = input_to_node(t.clone());
             }
         }
+        Ok(())
     }
 }
 
@@ -488,19 +648,22 @@ fn input_to_node(mut t: TripleTag) -> TripleTag {
     t
 }
 
-impl Fact for TagAnalysis {
-    fn meet(mut self, other: &Self) -> Self {
+impl Fact for FlowAnalysis {
+    fn meet(mut self, other: &Self, info: Info) -> Result<Self, LocalError> {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
             match self.tags.entry(k.to_string()) {
                 Entry::Occupied(mut old_v) => {
                     if old_v.get() != v {
                         old_v.get_mut().override_unknown_info(v.clone());
-                        assert!(
-                            !tag_conflict(old_v.get(), v),
-                            "Unexpected tag conflict with {k}\n{:#?} != {v:#?}",
-                            old_v.get(),
-                        );
+                        if tag_conflict(old_v.get(), v) {
+                            return Err(type_error!(
+                                info,
+                                "Flow mismatch when merging control flow paths for '{}'\n{:#?} != {v:#?}",
+                                hir_to_source_name(k),
+                                old_v.get()
+                            ));
+                        }
                     }
                 }
                 Entry::Vacant(entry) => {
@@ -508,13 +671,13 @@ impl Fact for TagAnalysis {
                 }
             }
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize) {
-        self.special_process_block(block_id);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError> {
+        self.special_process_block(data.block_id);
         match stmt {
-            HirInstr::Tail(t) => self.transfer_tail(t, block_id),
+            HirInstr::Tail(t) => self.transfer_tail(t, data.block_id),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }

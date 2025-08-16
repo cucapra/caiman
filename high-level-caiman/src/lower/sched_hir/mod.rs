@@ -7,15 +7,18 @@ use std::{
     rc::Rc,
 };
 
-use analysis::{bft_transform, deduce_tmln_quots};
+use analysis::{
+    analyze, compute_dominators, deduce_tmln_quots, fill_fn_input_overrides, fill_val_quots,
+    set_hole_defs, set_hole_initializations, ReachingDefs,
+};
 pub use hir::*;
 
 use crate::{
-    error::LocalError,
+    error::{hir_to_source_name, LocalError},
     parse::ast::{DataType, FlaggedType, FullType, IntSize, SchedulingFunc},
     typing::{
-        Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS, ENCODE_SRC_FLAGS,
-        ENCODE_STORAGE_FLAGS,
+        ClassName, Context, Mutability, SchedInfo, ENCODE_DST_FLAGS, ENCODE_IO_FLAGS,
+        ENCODE_SRC_FLAGS, ENCODE_STORAGE_FLAGS,
     },
 };
 use caiman::assembly::ast::{self as asm};
@@ -24,8 +27,8 @@ use caiman::ir;
 
 use self::{
     analysis::{
-        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
-        transform_out_ssa, transform_to_ssa, ActiveFences, InOutFacts, LiveVars, TagAnalysis,
+        deduce_val_quots, deref_transform_pass, op_transform_pass, transform_encode_pass,
+        transform_out_ssa, transform_to_ssa, ActiveFences, FlowAnalysis, InOutFacts, LiveVars,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
@@ -34,6 +37,7 @@ mod analysis;
 mod test;
 
 pub use analysis::RET_VAR;
+pub use hir::TripleTag;
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,11 +59,9 @@ struct FuncInfo {
 pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
-    type_info: analysis::InOutFacts<TagAnalysis>,
-    /// Mapping from variable names to their local type. The local type of a variable
-    /// is a reference
-    // types: HashMap<String, asm::TypeId>,
-    /// Mapping from variable names to their data type
+    flow_info: analysis::InOutFacts<FlowAnalysis>,
+    /// Mapping from variable names to their data type. Note that a mutable
+    /// will be stored as a reference type
     data_types: HashMap<String, DataType>,
     finfo: FuncInfo,
     specs: Rc<Specs>,
@@ -67,9 +69,12 @@ pub struct Funclets {
     /// function call
     captured_out: HashMap<usize, BTreeSet<String>>,
     /// Set of value quotients which are literals in the value specification
-    literal_value_classes: HashSet<String>,
-    /// Set of variables used in the schedule
+    literal_value_classes: HashSet<ClassName>,
+    /// Set of mutables used in the schedule. This does not include the `_ref`
+    /// backing refs
     variables: HashSet<String>,
+    /// Set of references that back a mutable
+    backing_refs: HashSet<String>,
     /// Mapping from device variable to its buffer flags
     flags: HashMap<String, ir::BufferFlags>,
     /// Number of dimensional template arguments
@@ -82,6 +87,8 @@ pub struct Funclet<'a> {
     parent: &'a Funclets,
     block: &'a BasicBlock,
 }
+
+type BuiltCfg = (Cfg, HashMap<usize, BTreeSet<String>>, InOutFacts<LiveVars>);
 
 impl<'a> Funclet<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
@@ -199,7 +206,7 @@ impl<'a> Funclet<'a> {
                     (
                         v.clone(),
                         self.parent
-                            .type_info
+                            .flow_info
                             .get_out_fact(self.id())
                             .get_tag(&v)
                             .unwrap_or_else(|| {
@@ -256,7 +263,8 @@ impl<'a> Funclet<'a> {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
                         typ: self.get_asm_type(&name).unwrap(),
-                        tags: self.get_input_tag(&name).unwrap().tags_vec(),
+                        // using the out tag here since it's never a hole
+                        tags: self.get_out_tag(&name).unwrap().tags_vec(),
                         name: Some(asm::NodeId(name)),
                     }
                 })
@@ -286,13 +294,13 @@ impl<'a> Funclet<'a> {
     pub fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
-            .type_info
+            .flow_info
             .get_out_fact(self.id())
             .get_input_override(var)
             .cloned();
         match (
             self.parent
-                .type_info
+                .flow_info
                 .get_in_fact(self.id())
                 .get_tag(var)
                 .cloned(),
@@ -411,56 +419,83 @@ impl<'a> Funclet<'a> {
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
     pub fn get_out_tag(&self, var: &str) -> Option<&TripleTag> {
-        self.parent.type_info.get_out_fact(self.id()).get_tag(var)
+        self.parent.flow_info.get_out_fact(self.id()).get_tag(var)
     }
 
-    /// Gets the data type of the specified variable. Note that
-    /// the data type of a variable will be the data type of the value,
-    /// not a reference data type
+    /// Gets the data type of the specified variable or constant. Note that
+    /// the data type of a mutable will be a reference type.
     #[inline]
-    fn get_dtype(&self, var: &str) -> Option<&DataType> {
+    pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
     }
 
+    /// Gets the data type of the specified variable or constant. If the specified
+    /// name is the name of a mutable variable, then this function will "unwrap",
+    /// the reference type of the variable and return the type of the mutable data.
+    pub fn get_var_dtype(&self, var: &str) -> Option<&DataType> {
+        if self.parent.variables.contains(var) {
+            match self.get_dtype(var) {
+                Some(DataType::Ref(r)) => Some(r),
+                None => None,
+                _ => panic!("Variable does not have reference type"),
+            }
+        } else {
+            self.get_dtype(var)
+        }
+    }
+
+    /// Gets the storage type of the variable. Reference types are unwrapped, to
+    /// get the actual type stored in memory. Returns `None` if `var` does not have
+    /// a data type or if its data type cannot be converted to a storage type
     #[inline]
     pub fn get_storage_type(&self, var: &str) -> Option<asm::FFIType> {
-        self.get_dtype(var).map(DataType::storage_type)
+        let t = self.get_dtype(var);
+        t.and_then(DataType::storage_type)
     }
 
     /// Gets the assembly type for a variable, considering the place of the
     /// variable
     fn get_asm_type(&self, var: &str) -> Result<asm::TypeId, String> {
         if let Some(flags) = self.parent.flags.get(var) {
-            let suffix = if *flags == ENCODE_SRC_FLAGS {
-                "::gs"
-            } else if *flags == ENCODE_DST_FLAGS {
-                "::gd"
-            } else if *flags == ENCODE_STORAGE_FLAGS {
-                "::g"
-            } else if *flags == ENCODE_IO_FLAGS {
+            // TODO: don't give everything all the flags if we don't need to
+            // we do this to support holes.
+            let suffix = if *flags == ENCODE_DST_FLAGS
+                || *flags == ENCODE_SRC_FLAGS
+                || *flags == ENCODE_IO_FLAGS
+                || *flags == ENCODE_STORAGE_FLAGS
+            {
                 "::gds"
             } else {
-                return Err(format!("{}: Invalid flags for {var}", self.block.src_loc));
+                return Err(format!(
+                    "{}: Invalid flags for '{}'",
+                    self.block.src_loc,
+                    hir_to_source_name(var)
+                ));
             };
             Ok(asm::TypeId(format!(
                 "{}{}",
                 self.get_dtype(var).unwrap().asm_type().0,
                 suffix
             )))
-        } else if let Some(dt) = self.get_dtype(var) {
-            Ok(dt.asm_type())
         } else {
-            Err(format!("{}: Missing type for {var}", self.block.src_loc))
+            Ok(self.get_dtype(var).unwrap().asm_type())
         }
     }
 
     /// Returns true if the specified tag is a literal node in the value specification
     pub fn is_literal_value(&self, t: &asm::RemoteNodeId) -> bool {
         t.node.as_ref().map_or(false, |n| {
-            n.as_ref()
-                .opt()
-                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
+            n.as_ref().opt().map_or(false, |r| {
+                self.parent
+                    .literal_value_classes
+                    .contains(&ClassName::new(&r.0))
+            })
         })
+    }
+
+    /// Returns `true` if the specified variable is a reference that backs a mutable variable.
+    pub fn is_backing_ref(&self, v: &str) -> bool {
+        self.parent.backing_refs.contains(v)
     }
 
     /// Returns true if the specified variable is a mutable reference or a mutable variable
@@ -468,10 +503,27 @@ impl<'a> Funclet<'a> {
         self.parent.variables.contains(v) || matches!(self.get_dtype(v), Some(DataType::Ref(_)))
     }
 
-    /// Gets a map of device variables to their buffer flags
-    pub const fn get_flags(&self) -> &'a HashMap<String, ir::BufferFlags> {
-        self.parent.get_flags()
+    /// Gets the buffer flags for the given variable, or `None` if `var` is not a GPU variable
+    pub fn get_flag(&self, var: &str) -> Option<ir::BufferFlags> {
+        // TODO: don't give everything all the flags if we don't have to,
+        // we do this as an easy way to support holes
+        if self.parent.get_flags().contains_key(var) {
+            Some(ENCODE_IO_FLAGS)
+        } else {
+            None
+        }
+        // self.parent.get_flags().get(var)
     }
+}
+
+struct FuncletTypeInfo {
+    data_types: HashMap<String, DataType>,
+    /// the mutable variables in the funclet. This does not include the references backing each reference
+    variables: HashSet<String>,
+    /// the references that hold the data for a mutable
+    backing_refs: HashSet<String>,
+    flags: HashMap<String, ir::BufferFlags>,
+    output_dtypes: Vec<DataType>,
 }
 
 impl Funclets {
@@ -557,106 +609,168 @@ impl Funclets {
         ctx: &Context,
         no_inference: bool,
     ) -> Result<Self, LocalError> {
-        let mut cfg = Cfg::new(f.statements, &f.output, ctx);
-        let (mut data_types, variables, flags) =
+        let fname = f.name.clone();
+        let mut type_info =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched(), &f.output);
 
-        bft_transform(
-            &mut cfg,
-            &ActiveFences::top(f.input.iter().filter_map(|(n, t)| {
-                if let Some(FullType {
-                    base:
-                        Some(FlaggedType {
-                            base: DataType::Fence(_),
-                            ..
-                        }),
-                    ..
-                }) = t
-                {
-                    Some(n)
-                } else {
-                    None
-                }
-            })),
-        );
         let mut hir_inputs: Vec<_> = f
             .input
             .iter()
             .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
             .collect();
         let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
-        let output_dtypes: Vec<_> = f
-            .output
-            .iter()
-            .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
-            .collect();
+        let (mut cfg, captured_out, live_vars) = Self::build_cfg(
+            &mut type_info,
+            ctx,
+            f,
+            &mut hir_inputs,
+            &mut hir_outputs,
+            specs,
+            no_inference,
+        )?;
         let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
 
+        let flow_info = analyze(
+            &mut cfg,
+            FlowAnalysis::top(
+                &hir_inputs,
+                &hir_outputs,
+                &type_info.data_types,
+                &type_info.flags,
+                num_dims,
+            ),
+        )?;
+
+        let finfo = FuncInfo {
+            name: fname,
+            input: hir_inputs,
+            output: hir_outputs,
+        };
+        let specs_rc = Rc::new(specs.clone());
+        Ok(Self {
+            cfg,
+            live_vars,
+            flow_info,
+            data_types: type_info.data_types,
+            finfo,
+            specs: specs_rc,
+            captured_out,
+            literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
+            variables: type_info.variables,
+            flags: type_info.flags,
+            num_dims,
+            backing_refs: type_info.backing_refs,
+        })
+    }
+
+    fn build_cfg(
+        type_info: &mut FuncletTypeInfo,
+        ctx: &Context,
+        f: SchedulingFunc,
+        hir_inputs: &mut [(String, TripleTag)],
+        hir_outputs: &mut [TripleTag],
+        specs: &Specs,
+        no_inference: bool,
+    ) -> Result<BuiltCfg, LocalError> {
+        let mut cfg = Cfg::new(f.statements, &f.output, ctx);
         transform_encode_pass(
             &mut cfg,
-            &data_types,
+            &type_info.data_types,
             ctx,
             // the unexpanded output types
             &ctx.scheds[&f.name].unwrap_sched().dtype_sig.output,
         );
-        deref_transform_pass(&mut cfg, &mut data_types, &variables);
-        op_transform_pass(&mut cfg, &data_types);
-        let live_vars = analyze(&mut cfg, &LiveVars::top());
+        let doms = compute_dominators(&cfg);
+        set_hole_defs(&mut cfg, &f.input, &doms)?;
+        deref_transform_pass(&mut cfg, &mut type_info.data_types, &type_info.variables);
+        analyze(
+            &mut cfg,
+            ActiveFences::top(
+                f.input.iter().filter_map(|(n, t)| {
+                    if let Some(FullType {
+                        base:
+                            Some(FlaggedType {
+                                base: DataType::Fence(_),
+                                ..
+                            }),
+                        ..
+                    }) = t
+                    {
+                        Some(n)
+                    } else {
+                        None
+                    }
+                }),
+                &type_info.data_types,
+            ),
+        )?;
+        analyze(
+            &mut cfg,
+            ReachingDefs::top(
+                f.input.iter().map(|(x, _)| x),
+                ctx.class_dimensions[&ctx.specs[&ctx.scheds[&f.name].unwrap_sched().value].feq],
+                &type_info.data_types,
+                &type_info.variables,
+            ),
+        )?;
+        op_transform_pass(&mut cfg, &type_info.data_types);
+        let live_vars = analyze(&mut cfg, LiveVars::top())?;
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        let specs_rc = Rc::new(specs.clone());
-
+        let num_dims = ctx.specs[&specs.value.0].sig.num_dims;
         if !no_inference {
+            fill_fn_input_overrides(hir_inputs, &cfg);
             deduce_tmln_quots(
-                &mut hir_inputs,
-                &mut hir_outputs,
-                &output_dtypes,
+                hir_inputs,
+                hir_outputs,
+                &type_info.output_dtypes,
                 &mut cfg,
                 &ctx.specs[&specs.timeline.0],
                 ctx,
-                &data_types,
+                &type_info.data_types,
                 f.info,
                 num_dims,
                 &specs.timeline.0,
                 &live_vars,
             )?;
-            cfg = transform_to_ssa(cfg, &live_vars);
-
-            deduce_val_quots(
-                &mut hir_inputs,
-                &mut hir_outputs,
-                &output_dtypes,
-                &mut cfg,
+            cfg = transform_to_ssa(cfg, &live_vars, &doms);
+            let (val_env, _) = deduce_val_quots(
+                hir_inputs,
+                hir_outputs,
+                &type_info.output_dtypes,
+                &cfg,
                 &ctx.specs[&specs.value.0],
                 ctx,
-                &data_types,
+                &type_info.data_types,
                 f.info,
             )?;
+            set_hole_initializations(&mut cfg, &val_env, type_info, hir_inputs, &f.output)?;
+            cfg = transform_out_ssa(cfg);
 
+            // Performing initializations alters the SSA representation of the graph and
+            // can change the quotients deduced, repeat this pass for a second time to
+            // deduce the final quotients.
+            cfg = transform_to_ssa(cfg, &live_vars, &doms);
+            let (val_env, selects) = deduce_val_quots(
+                hir_inputs,
+                hir_outputs,
+                &type_info.output_dtypes,
+                &cfg,
+                &ctx.specs[&specs.value.0],
+                ctx,
+                &type_info.data_types,
+                f.info,
+            )?;
+            fill_val_quots(
+                hir_inputs,
+                hir_outputs,
+                &type_info.output_dtypes,
+                &mut cfg,
+                &val_env,
+                &selects,
+            );
             cfg = transform_out_ssa(cfg);
         }
-        let type_info = bft_transform(
-            &mut cfg,
-            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types, &flags, num_dims),
-        );
-
-        let finfo = FuncInfo {
-            name: f.name,
-            input: hir_inputs,
-            output: hir_outputs,
-        };
-        Ok(Self {
-            cfg,
-            live_vars,
-            type_info,
-            data_types,
-            finfo,
-            specs: specs_rc,
-            captured_out,
-            literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
-            variables,
-            flags,
-            num_dims,
-        })
+        Ok((cfg, captured_out, live_vars))
     }
 
     /// Collects a map of variable names to their base types as local types,
@@ -666,23 +780,21 @@ impl Funclets {
     /// * `f` - The scheduling function information to collect types from
     /// # Returns
     /// A tuple of the map of variable names to their local types and the map of
-    /// variable names to their data types, and a set of mutable variables
+    /// variable names to their data types, and a set of mutable variables, including
+    /// the `_ref` suffixed versions which are the actual reference storing the variable's
+    /// data
     #[allow(clippy::type_complexity)]
-    fn collect_types(
-        f: &SchedInfo,
-        cur_outputs: &[FullType],
-    ) -> (
-        HashMap<String, DataType>,
-        HashSet<String>,
-        HashMap<String, ir::BufferFlags>,
-    ) {
+    fn collect_types(f: &SchedInfo, cur_outputs: &[FullType]) -> FuncletTypeInfo {
         let mut data_types = f.types.clone();
         let mut variables = HashSet::new();
+        let mut backing_refs = HashSet::new();
         let mut flags = f.flags.clone();
         for (var, typ) in &f.types {
-            if f.defined_names.get(var) == Some(&Mutability::Mut) {
+            if matches!(f.defined_names.get(var), Some((Mutability::Mut, _))) {
                 data_types.insert(var.to_string(), DataType::Ref(Box::new(typ.clone())));
+                data_types.insert(format!("_{var}_ref"), DataType::Ref(Box::new(typ.clone())));
                 variables.insert(var.to_string());
+                backing_refs.insert(format!("_{var}_ref"));
             }
         }
         for (id, out_ty) in cur_outputs.iter().enumerate() {
@@ -697,7 +809,16 @@ impl Funclets {
                 flags.insert(out_name, flag);
             }
         }
-        (data_types, variables, flags)
+        FuncletTypeInfo {
+            data_types,
+            variables,
+            flags,
+            backing_refs,
+            output_dtypes: cur_outputs
+                .iter()
+                .map(|t| t.base.as_ref().map(|f| f.base.clone()).unwrap())
+                .collect(),
+        }
     }
 
     /// Gets the funclet with the given id
@@ -772,7 +893,7 @@ impl Funclets {
             .collect();
         captures
             .into_iter()
-            .chain(term_dests.into_iter())
+            .chain(term_dests)
             .chain(returns)
             .collect()
     }

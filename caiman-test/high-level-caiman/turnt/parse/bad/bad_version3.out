@@ -1,0 +1,2 @@
+Error: At "bad_version3.cm" 0:0, 
+  Parsing Error: Version mismatch: compiler version 0.2.0 cannot support 0.1000.99

@@ -1,6 +1,7 @@
+#![allow(unused)]
 use std::{collections::BTreeSet, fmt::Display};
 
-use caiman::ir;
+use caiman::{explication::Hole, ir};
 
 use crate::error::{HasInfo, Info};
 
@@ -51,10 +52,8 @@ pub enum DataType {
     RemoteObj {
         /// set of all remote variables in the remote object
         all: Vec<(String, DataType)>,
-        /// set of all remote variables readable by the public interface
+        /// set of all remote variables readable by the CPU
         read: BTreeSet<String>,
-        /// set of all remote variables writable by encoded copies
-        write: BTreeSet<String>,
     },
 }
 
@@ -132,11 +131,8 @@ impl Display for DataType {
             }
             Self::Encoder(Some(typ)) => write!(f, "Encoder'{typ}"),
             Self::Fence(Some(typ)) => write!(f, "Fence'{typ}"),
-            Self::RemoteObj { all, write, read } => {
-                write!(
-                    f,
-                    "Class{{all: {all:#?}, write: {write:#?}, read: {read:#?}}}",
-                )
+            Self::RemoteObj { all, read } => {
+                write!(f, "Class{{all: {all:#?}, read: {read:#?}}}",)
             }
         }
     }
@@ -460,6 +456,10 @@ impl TryFrom<&str> for WGPUFlags {
 impl WGPUFlags {
     /// Applies the flag to a buffer flags struct
     pub fn apply_flag(self, flags: &mut ir::BufferFlags) {
+        // TODO: don't always give these flags regardless. We do this for holes
+        flags.storage = true;
+        flags.map_read = true;
+        flags.copy_dst = true;
         match self {
             Self::Storage => flags.storage = true,
             Self::MapWrite => flags.map_write = true,
@@ -602,7 +602,10 @@ pub enum SchedTerm {
         tag: Option<Tags>,
     },
     Call(Info, SchedFuncCall),
-    Hole(Info),
+    Hole {
+        info: Info,
+        can_generate_code: bool,
+    },
     TimelineOperation {
         info: Info,
         op: TimelineOperation,
@@ -625,7 +628,7 @@ impl HasInfo for SchedTerm {
             | Self::Var { info, .. }
             | Self::TimelineOperation { info, .. }
             | Self::EncodeBegin { info, .. }
-            | Self::Hole(info) => *info,
+            | Self::Hole { info, .. } => *info,
         }
     }
 }
@@ -639,8 +642,41 @@ impl SchedTerm {
             | Self::TimelineOperation { tag, .. }
             | Self::EncodeBegin { tag, .. } => tag.as_ref(),
             Self::Call(_, call) => call.tag.as_ref(),
-            Self::Hole(_) => None,
+            Self::Hole { .. } => None,
         }
+    }
+
+    /// If this term is a hole or variable, returns a hole that is either empty or
+    /// filled with the variable name. Otherwise returns `None`.
+    #[must_use]
+    pub const fn hole_or_var(&self) -> Option<Hole<&String>> {
+        match self {
+            Self::Hole { .. } => Some(Hole::Empty),
+            Self::Var { name, .. } => Some(Hole::Filled(name)),
+            _ => None,
+        }
+    }
+}
+
+/// If the expr is a hole or a variable, returns a hole to a string
+/// Otherwise returns `None`
+#[must_use]
+pub const fn hole_or_var(e: &SchedExpr) -> Option<Hole<&String>> {
+    if let SchedExpr::Term(t) = e {
+        t.hole_or_var()
+    } else {
+        None
+    }
+}
+
+/// Gets the variable name of `e` if one exists, otherwise panics.
+/// # Panics
+/// Panics if the expression is not a variable
+#[must_use]
+pub fn expect_var(e: &SchedExpr) -> &String {
+    match e {
+        SchedExpr::Term(SchedTerm::Var { name, .. }) => name,
+        x => panic!("Expected variable, got {x:?}"),
     }
 }
 
@@ -887,12 +923,6 @@ impl ClassMembers {
             ),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct ImplicitTags {
-    pub input: Option<Tag>,
-    pub output: Option<Tag>,
 }
 
 /// A top level statement in the source language

@@ -17,8 +17,13 @@
 
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
+};
+
+use super::{
+    types::{ClassName, UTypeName, VarName},
+    MetaVar,
 };
 
 type NodePtr<T, A> = Rc<RefCell<Node<T, A>>>;
@@ -75,6 +80,16 @@ where
     /// A term that, when unifying with another term, may opt to drop some
     /// unconstrained children.
     DropTerm {
+        parent: Option<NodePtr<T, A>>,
+        op: T,
+        args: Vec<NodePtr<T, A>>,
+        /// The unique id of the equivalence class the term is a member of.
+        class_id: Option<String>,
+    },
+    /// A term that, when unifying with another term, may opt to splice itself
+    /// out of the tree and replace it with its unified children, excluding the first child,
+    /// which would be ignored in this case.
+    SpliceTerm {
         parent: Option<NodePtr<T, A>>,
         op: T,
         args: Vec<NodePtr<T, A>>,
@@ -138,6 +153,9 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
             }
             | Self::DropTerm {
                 op, args, class_id, ..
+            }
+            | Self::SpliceTerm {
+                op, args, class_id, ..
             } => {
                 let id = class_id.as_ref().map_or_else(
                     || format!("{op:?}"),
@@ -157,7 +175,7 @@ impl<T: Kind, A: Kind> std::fmt::Display for Node<T, A> {
                     |class_id| format!("{op:?}:{class_id}"),
                 );
                 let mut t = f.debug_struct(&id);
-                for (k, v) in args.iter() {
+                for (k, v) in args {
                     t.field(k, &v.borrow());
                 }
                 t.finish()
@@ -171,13 +189,26 @@ impl<T: Kind, A: Kind> Node<T, A> {
     /// Gets the parent of a node.
     /// # Panics
     /// Panics if the node is an atom.
-    fn parent(&mut self) -> &mut Option<NodePtr<T, A>> {
+    fn parent_mut(&mut self) -> &mut Option<NodePtr<T, A>> {
         match self {
             Self::Var { ref mut parent, .. }
             | Self::Term { ref mut parent, .. }
             | Self::DynamicTerm { ref mut parent, .. }
-            | Self::DropTerm { ref mut parent, .. } => parent,
+            | Self::DropTerm { ref mut parent, .. }
+            | Self::SpliceTerm { ref mut parent, .. } => parent,
             Self::Atom(_) => panic!("Atoms have no parent"),
+        }
+    }
+
+    /// Gets the parent of a node or None
+    const fn parent(&self) -> Option<&NodePtr<T, A>> {
+        match self {
+            Self::Var { ref parent, .. }
+            | Self::Term { ref parent, .. }
+            | Self::DynamicTerm { ref parent, .. }
+            | Self::DropTerm { ref parent, .. }
+            | Self::SpliceTerm { ref parent, .. } => parent.as_ref(),
+            Self::Atom(_) => None,
         }
     }
 
@@ -200,6 +231,9 @@ impl<T: Kind, A: Kind> Node<T, A> {
             }
             | Self::DynamicTerm {
                 ref mut class_id, ..
+            }
+            | Self::SpliceTerm {
+                ref mut class_id, ..
             } => class_id,
             Self::Atom(_) => panic!("Atoms have no class"),
         }
@@ -211,8 +245,62 @@ impl<T: Kind, A: Kind> Node<T, A> {
             Self::Var { class_id, .. }
             | Self::Term { class_id, .. }
             | Self::DynamicTerm { class_id, .. }
-            | Self::DropTerm { class_id, .. } => class_id.as_ref(),
+            | Self::DropTerm { class_id, .. }
+            | Self::SpliceTerm { class_id, .. } => class_id.as_ref(),
             Self::Atom(_) => None,
+        }
+    }
+
+    /// Gets the name of all classes which this node depends on, including the node itself
+    /// # Args
+    /// * `deps` - the set of dependencies to add nodes to
+    /// * `ignored_subtrees` - the set of class names (with leading $)
+    ///     that we ignore depending on and all of the things they depend on.
+    pub fn dependencies(&self, deps: &mut HashSet<String>, ignored_subtrees: &HashSet<String>) {
+        match self {
+            Self::Var {
+                class_id, parent, ..
+            } => {
+                if let Some(class) = class_id {
+                    if ignored_subtrees.contains(class) {
+                        return;
+                    }
+                    deps.insert(class.clone());
+                }
+                if let Some(parent) = parent {
+                    parent.borrow().dependencies(deps, ignored_subtrees);
+                }
+            }
+            Self::Atom(_) => {}
+            Self::Term {
+                // parent,
+                args,
+                class_id,
+                ..
+            }
+            | Self::SpliceTerm { args, class_id, .. }
+            | Self::DropTerm { args, class_id, .. } => {
+                if let Some(class) = class_id {
+                    if ignored_subtrees.contains(class) {
+                        return;
+                    }
+                    deps.insert(class.clone());
+                }
+                for arg in args {
+                    arg.borrow().dependencies(deps, ignored_subtrees);
+                }
+            }
+            Self::DynamicTerm { args, class_id, .. } => {
+                if let Some(class) = class_id {
+                    if ignored_subtrees.contains(class) {
+                        return;
+                    }
+                    deps.insert(class.clone());
+                }
+                for arg in args.values() {
+                    arg.borrow().dependencies(deps, ignored_subtrees);
+                }
+            }
         }
     }
 }
@@ -221,12 +309,12 @@ impl<T: Kind, A: Kind> Node<T, A> {
 /// # Arguments
 /// - `ptr`: The node to clone.
 /// - `cloned_ptrs`: A map of pointers to cloned pointers. This is used to
-///  avoid cloning the same node multiple times.
+///     avoid cloning the same node multiple times.
 fn deep_clone<T: Kind, A: Kind>(
     ptr: &NodePtr<T, A>,
     cloned_ptrs: &mut HashMap<*const Node<T, A>, NodePtr<T, A>>,
 ) -> NodePtr<T, A> {
-    let key = ptr.as_ptr() as *const _;
+    let key = ptr.as_ptr().cast_const();
     if cloned_ptrs.contains_key(&key) {
         return cloned_ptrs[&key].clone();
     }
@@ -280,6 +368,21 @@ fn deep_clone<T: Kind, A: Kind>(
             cloned_ptrs.insert(key, r.clone());
             r
         }
+        Node::SpliceTerm {
+            op,
+            args,
+            parent,
+            class_id,
+        } => {
+            let r = Rc::new(RefCell::new(Node::SpliceTerm {
+                parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
+                op: op.clone(),
+                args: args.iter().map(|x| deep_clone(x, cloned_ptrs)).collect(),
+                class_id: class_id.clone(),
+            }));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
         Node::DynamicTerm {
             parent,
             op,
@@ -315,7 +418,9 @@ fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
             next_id.clone()
         }
         Node::Var { parent: None, .. } | Node::Atom(_) => n.clone(),
-        Node::Term { parent, args, .. } | Node::DropTerm { parent, args, .. } => {
+        Node::Term { parent, args, .. }
+        | Node::DropTerm { parent, args, .. }
+        | Node::SpliceTerm { parent, args, .. } => {
             for a in args {
                 *a = representative(a);
             }
@@ -369,12 +474,12 @@ fn union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
     }
 
     if a.borrow().is_var() {
-        *a.borrow_mut().parent() = Some(b);
+        *a.borrow_mut().parent_mut() = Some(b);
     } else if !matches!(
         (&*a.borrow(), &*b.borrow()),
         (Node::DynamicTerm { .. }, Node::DynamicTerm { .. })
     ) {
-        *b.borrow_mut().parent() = Some(a);
+        *b.borrow_mut().parent_mut() = Some(a);
     }
 }
 
@@ -390,10 +495,27 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
                 op: op_a,
                 args: args_a,
                 ..
+            }
+            | Node::SpliceTerm {
+                op: op_a,
+                args: args_a,
+                ..
             },
             Node::Term {
                 op: op_b,
                 args: args_b,
+                ..
+            },
+        )
+        | (
+            Node::Term {
+                op: op_a,
+                args: args_a,
+                ..
+            },
+            Node::SpliceTerm {
+                args: args_b,
+                op: op_b,
                 ..
             },
         ) => op_a == op_b && args_a.len() == args_b.len(),
@@ -447,12 +569,28 @@ fn can_union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
 }
 
 /// Unifies two nodes of a type expression.
+/// # Arguments
+/// * `ignore_contravaint` - allow contravariant constraints to meet to a lower type in the lattice
 /// # Returns
 /// Returns `true` if the two nodes can be unified, `false` otherwise.
 #[must_use]
-#[allow(clippy::too_many_lines)]
-fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
+fn unify<T: Kind, A: Kind>(
+    a: &NodePtr<T, A>,
+    b: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) -> bool {
+    if a.try_borrow_mut().is_err() {
+        // we might have already borrowed the node if we're in the middle
+        // of creating a cycle. For example, unifying `Return(e)` with `e`.
+        return false;
+    }
     let a = representative(a);
+    if is_already_unified(&a, b) {
+        return true;
+    }
+    if b.try_borrow_mut().is_err() {
+        return false;
+    }
     let b = representative(b);
     if a == b {
         return true;
@@ -461,124 +599,220 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
         && b.borrow().get_class().is_some()
         && a.borrow().get_class() != b.borrow().get_class()
     {
+        eprintln!(
+            "Failing to unify {:?} and {:?}",
+            a.borrow().get_class(),
+            b.borrow().get_class()
+        );
         return false;
     }
     if can_union(&a, &b) {
         union(&a, &b);
-    }
-    {
-        let borrow_a = a.borrow();
-        let borrow_b = b.borrow();
-        match (&*borrow_a, &*borrow_b) {
-            (Node::Atom(a), Node::Atom(b)) => return a == b,
-            (
-                Node::Term {
-                    op: op_a,
-                    args: a_args,
-                    ..
-                },
-                Node::Term {
-                    op: op_b,
-                    args: b_args,
-                    ..
-                },
-            ) => {
-                if op_a != op_b || a_args.len() != b_args.len() {
-                    return false;
-                }
-                for (a, b) in a_args.iter().zip(b_args.iter()) {
-                    if !unify(a, b) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            (
-                Node::Term {
-                    op: op_a,
-                    args: short_args,
-                    ..
-                },
-                Node::DropTerm {
-                    op: op_b,
-                    args: long_args,
-                    ..
-                },
-            )
-            | (
-                Node::DropTerm {
-                    op: op_a,
-                    args: long_args,
-                    ..
-                },
-                Node::Term {
-                    op: op_b,
-                    args: short_args,
-                    ..
-                },
-            ) => {
-                if op_a != op_b || short_args.len() > long_args.len() {
-                    return false;
-                }
-                let mut diff = long_args.len() - short_args.len();
-                for (a, b) in short_args.iter().zip(long_args.iter().filter(|node| {
-                    if diff > 0 && node.borrow().is_var() {
-                        diff -= 1;
-                        false
-                    } else {
-                        true
-                    }
-                })) {
-                    if !unify(a, b) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            (
-                Node::DynamicTerm {
-                    op: op_a,
-                    args: args_a,
-                    constraint_kind: const_kind_a,
-                    ..
-                },
-                Node::DynamicTerm {
-                    op: op_b,
-                    args: args_b,
-                    constraint_kind: const_kind_b,
-                    ..
-                },
-            ) => {
-                if op_a != op_b
-                    || (*const_kind_a == SubtypeConstraint::Contravariant
-                        && (args_b.len() > args_a.len()
-                            || args_b.iter().any(|(k, _)| !args_a.contains_key(k))))
-                    || (*const_kind_b == SubtypeConstraint::Contravariant
-                        && (args_a.len() > args_b.len()
-                            || args_a.iter().any(|(k, _)| !args_b.contains_key(k))))
-                {
-                    return false;
-                }
-                for (k, a) in args_a.iter() {
-                    if let Some(b) = args_b.get(k) {
-                        if !unify(a, b) {
-                            return false;
-                        }
-                    }
-                }
-            }
-            (Node::Var { .. }, _) | (_, Node::Var { .. }) => return true,
-            _ => return false,
+    } else if let Some((splice_term, term)) = can_splice(&a, &b) {
+        if !splice(splice_term, term, ignore_contravariant) {
+            return false;
         }
     }
-    union_dynamic_terms(&a, &b);
+    if let Some(ret) = unify_children(&a, &b, ignore_contravariant) {
+        return ret;
+    }
+    union_dynamic_terms(&a, &b, ignore_contravariant);
     true
+}
+
+/// Returns a tuple of the splice term and the other term if one of `a` or `b`
+/// (exclusively) is a splice term and the other is a potential splice target.
+#[allow(clippy::type_complexity)]
+fn can_splice<'a, T: Kind, A: Kind>(
+    a: &'a NodePtr<T, A>,
+    b: &'a NodePtr<T, A>,
+) -> Option<(&'a NodePtr<T, A>, &'a NodePtr<T, A>)> {
+    let borrow_a = a.borrow();
+    let borrow_b = b.borrow();
+    match (&*borrow_a, &*borrow_b) {
+        (Node::SpliceTerm { .. }, Node::Atom(..) | Node::Term { .. }) => Some((a, b)),
+        (Node::Atom(..) | Node::Term { .. }, Node::SpliceTerm { .. }) => Some((b, a)),
+        _ => None,
+    }
+}
+
+fn splice<T: Kind, A: Kind>(
+    splice: &NodePtr<T, A>,
+    target: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) -> bool {
+    let new_node;
+    if let Node::SpliceTerm { args, .. } = &*splice.borrow() {
+        assert!(args.len() >= 2);
+        let replacement = &args[1];
+        for child in args.iter().skip(2) {
+            if !unify(replacement, child, ignore_contravariant) {
+                return false;
+            }
+        }
+        if !unify(replacement, target, ignore_contravariant) {
+            return false;
+        }
+        new_node = replacement.borrow().clone();
+    } else {
+        unreachable!("Splice argument is not a splice term");
+    }
+    *splice.borrow_mut() = new_node;
+    true
+}
+
+/// Determines if `a` is a parent of `b`
+fn is_already_unified<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
+    if a.as_ptr() == b.as_ptr() {
+        return true;
+    }
+    b.borrow()
+        .parent()
+        .map_or(false, |parent| is_already_unified(a, parent))
+}
+
+/// Unifies the children of each node. Returns `true` if unification succeeded,
+/// `false` if it failed, and `None` if unification should continue with unioning
+/// dynamic terms.
+#[allow(clippy::too_many_lines)]
+fn unify_children<T: Kind, A: Kind>(
+    a: &NodePtr<T, A>,
+    b: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) -> Option<bool> {
+    let borrow_a = a.borrow();
+    let borrow_b = b.borrow();
+    match (&*borrow_a, &*borrow_b) {
+        (Node::Atom(a), Node::Atom(b)) => return Some(a == b),
+        (
+            Node::Term {
+                op: op_a,
+                args: a_args,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: b_args,
+                ..
+            }
+            | Node::SpliceTerm {
+                op: op_b,
+                args: b_args,
+                ..
+            },
+        )
+        | (
+            Node::SpliceTerm {
+                op: op_a,
+                args: a_args,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: b_args,
+                ..
+            },
+        ) => {
+            if op_a != op_b || a_args.len() != b_args.len() {
+                return Some(false);
+            }
+            for (a, b) in a_args.iter().zip(b_args.iter()) {
+                if !unify(a, b, ignore_contravariant) {
+                    return Some(false);
+                }
+            }
+            return Some(true);
+        }
+        (
+            Node::Term {
+                op: op_a,
+                args: short_args,
+                ..
+            },
+            Node::DropTerm {
+                op: op_b,
+                args: long_args,
+                ..
+            },
+        )
+        | (
+            Node::DropTerm {
+                op: op_a,
+                args: long_args,
+                ..
+            },
+            Node::Term {
+                op: op_b,
+                args: short_args,
+                ..
+            },
+        ) => {
+            if op_a != op_b || short_args.len() > long_args.len() {
+                return Some(false);
+            }
+            let mut diff = long_args.len() - short_args.len();
+            for (a, b) in short_args.iter().zip(long_args.iter().filter(|node| {
+                if diff > 0 && node.borrow().is_var() {
+                    diff -= 1;
+                    false
+                } else {
+                    true
+                }
+            })) {
+                if !unify(a, b, ignore_contravariant) {
+                    return Some(false);
+                }
+            }
+            return Some(true);
+        }
+        (
+            Node::DynamicTerm {
+                op: op_a,
+                args: args_a,
+                constraint_kind: const_kind_a,
+                ..
+            },
+            Node::DynamicTerm {
+                op: op_b,
+                args: args_b,
+                constraint_kind: const_kind_b,
+                ..
+            },
+        ) => {
+            if op_a != op_b
+                || (!ignore_contravariant
+                    && *const_kind_a == SubtypeConstraint::Contravariant
+                    && (args_b.len() > args_a.len()
+                        || args_b.iter().any(|(k, _)| !args_a.contains_key(k))))
+                || (!ignore_contravariant
+                    && *const_kind_b == SubtypeConstraint::Contravariant
+                    && (args_a.len() > args_b.len()
+                        || args_a.iter().any(|(k, _)| !args_b.contains_key(k))))
+            {
+                return Some(false);
+            }
+            for (k, a) in args_a {
+                if let Some(b) = args_b.get(k) {
+                    if !unify(a, b, ignore_contravariant) {
+                        return Some(false);
+                    }
+                }
+            }
+        }
+        (Node::Var { .. }, _) | (_, Node::Var { .. }) => return Some(true),
+        _ => return Some(false),
+    }
+    None
 }
 
 /// Meets two dynamic terms by reparenting them. If one term is a subtype of the other,
 /// the subtype will become the parent. If neither is a subtype of the other, a new
 /// parent will be created which is the greatest lower bound of the two terms.
-fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
+fn union_dynamic_terms<T: Kind, A: Kind>(
+    a: &NodePtr<T, A>,
+    b: &NodePtr<T, A>,
+    ignore_contravariant: bool,
+) {
     match (&mut *a.borrow_mut(), &mut *b.borrow_mut()) {
         (
             Node::DynamicTerm {
@@ -586,7 +820,7 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
                 ..
             },
             Node::DynamicTerm { parent, .. },
-        ) => {
+        ) if !ignore_contravariant => {
             parent.replace(a.clone());
         }
         (
@@ -595,7 +829,7 @@ fn union_dynamic_terms<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
                 constraint_kind: SubtypeConstraint::Contravariant,
                 ..
             },
-        ) => {
+        ) if !ignore_contravariant => {
             parent.replace(b.clone());
         }
         (
@@ -673,6 +907,7 @@ pub enum Constraint<T: Kind, A: Kind> {
     DynamicTerm(T, BTreeMap<String, Constraint<T, A>>, SubtypeConstraint),
     Var(String),
     DropTerm(T, Vec<Constraint<T, A>>),
+    SpliceTerm(T, Vec<Constraint<T, A>>),
 }
 
 impl<T: Kind, A: Kind> Constraint<T, A> {
@@ -700,7 +935,16 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
         }
     }
 
-    /// Returns true if the constraints are equal, modulo unconstrained variables
+    /// Returns true if the constraints are equal, modulo unconstrained variables.
+    ///
+    /// If two constraints could be unified, then the result of calling `matches`
+    /// on them must be `true`.
+    ///
+    /// This function is conservative in the sense that it can return `true` if two
+    /// constraints can be unified, but doing so would fail to find a solution to
+    /// an otherwise solvable set of equations.
+    /// # Panics
+    /// Panics if dynamic terms are passed
     pub fn matches(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Var(_), _) | (_, Self::Var(_)) => true,
@@ -709,6 +953,29 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
                 if op_a == op_b && args_a.len() == args_b.len() =>
             {
                 args_a.iter().zip(args_b.iter()).all(|(a, b)| a.matches(b))
+            }
+            (Self::SpliceTerm(splice_op, splice_args), other @ Self::Term(term_op, term_args))
+            | (other @ Self::Term(term_op, term_args), Self::SpliceTerm(splice_op, splice_args)) => {
+                let case_one = splice_op == term_op
+                    && splice_args.len() == term_args.len()
+                    && splice_args
+                        .iter()
+                        .zip(term_args.iter())
+                        .all(|(a, b)| a.matches(b));
+                if case_one {
+                    return true;
+                } else if splice_args.len() > 2 {
+                    let replacement = &splice_args[1];
+                    if replacement.matches(other) {
+                        for arg in splice_args.iter().skip(2) {
+                            if !arg.matches(other) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                false
             }
             (Self::DynamicTerm(..), _) | (_, Self::DynamicTerm(..)) => {
                 panic!("Unexpected constraint type in matches")
@@ -743,7 +1010,7 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
 #[derive(Debug)]
 pub struct Env<T: Kind, A: Kind> {
     temp_id: usize,
-    nodes: HashMap<String, NodePtr<T, A>>,
+    nodes: HashMap<MetaVar, NodePtr<T, A>>,
 }
 
 impl<T: Kind, A: Kind> Clone for Env<T, A> {
@@ -772,51 +1039,80 @@ impl<T: Kind, A: Kind> Env<T, A> {
         }))
     }
 
+    pub fn node_names(&self) -> impl Iterator<Item = &MetaVar> {
+        self.nodes.keys()
+    }
     /// Creates a fresh type variable that represents a named class if one
     /// does not already exist. If a type variable already exists with the
     /// given name, it will be reused and made into a class node.
     /// Any new nodes will be inserted into the environment.
-    fn new_class_type(&mut self, class_name: &str) -> NodePtr<T, A> {
-        if self.nodes.contains_key(class_name) {
-            self.nodes
-                .get_mut(class_name)
-                .unwrap()
+    fn new_class_type(&mut self, class_name: ClassName) -> NodePtr<T, A> {
+        if self.nodes.contains_key(class_name.as_metavar()) {
+            let class = self.nodes.get_mut(class_name.as_metavar()).unwrap();
+            class
                 .borrow_mut()
                 .get_class_mut()
-                .replace(class_name.to_string());
-            return self.nodes.get(class_name).unwrap().clone();
+                .replace(class_name.into_raw());
+            return class.clone();
         }
         let id = self.temp_id;
         self.temp_id += 1;
         let r = Rc::new(RefCell::new(Node::Var {
             parent: None,
             id,
-            class_id: Some(class_name.to_string()),
+            class_id: Some(class_name.clone().into_raw()),
         }));
-        self.nodes.insert(class_name.to_string(), r.clone());
+        self.nodes.insert(class_name.into(), r.clone());
         r
     }
 
     /// Creates a fresh type variable for a name. This will overwrite any existing
     /// type variable for that name.
-    fn new_type(&mut self, name: &str) {
+    fn new_type(&mut self, name: &dyn UTypeName) -> NodePtr<T, A> {
         let node = self.new_var();
-        self.nodes.insert(name.to_string(), node);
+        self.nodes.insert(name.as_metavar().clone(), node.clone());
+        node
     }
 
     /// Creates a fresh type variable, returning its name to refer to it
-    pub fn new_temp_type(&mut self) -> String {
-        let name = format!("%{}", self.temp_id);
+    pub fn new_temp_type(&mut self) -> VarName {
+        let name = VarName::new(format!("%{}", self.temp_id));
         let v = self.new_var();
-        self.nodes.insert(name.clone(), v);
+        self.nodes.insert(name.clone().into(), v);
         name
     }
 
     /// Creates a fresh type variable if one is not already associated with a given name.
-    pub fn new_type_if_absent(&mut self, name: &str) {
-        if !self.nodes.contains_key(name) {
+    pub fn new_type_if_absent(&mut self, name: &dyn UTypeName) {
+        if !self.nodes.contains_key(name.as_metavar()) {
             self.new_type(name);
         }
+    }
+
+    /// Gets the name of all classes which a node depends upon. Ie. the children of
+    /// `node_name`'s type tree.
+    /// # Args
+    /// * `node_name` - the name of the node to get dependencies for
+    /// * `ignored_subtrees` - the set of class names that we ignore depending upon and all
+    ///     of the nodes they depend upon.
+    pub fn dependencies(
+        &self,
+        node_name: &ClassName,
+        ignored_subtrees: &HashSet<ClassName>,
+    ) -> HashSet<ClassName> {
+        let mut set = HashSet::new();
+        if let Some(node) = self.nodes.get(node_name.as_metavar()) {
+            node.borrow().dependencies(
+                &mut set,
+                &ignored_subtrees
+                    .iter()
+                    .map(|x| x.get_raw().to_string())
+                    .collect(),
+            );
+            // we do not depend on ourself
+            node.borrow().get_class().map(|class| set.remove(class));
+        }
+        set.into_iter().map(ClassName::from_raw).collect()
     }
 
     /// Adds a constraint to the environment.
@@ -827,11 +1123,27 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// Returns `Err` if the constraint cannot be added (unification fails)
     pub fn add_constraint(
         &mut self,
-        var: &str,
+        var: &VarName,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let var = self.get_or_make_node(var);
-        self.add_constraint_helper(&var, constraint)
+        self.add_constraint_helper(&var, constraint, false)
+    }
+
+    /// Adds a constraint to the environment. Ignores contravariance of the constraints
+    /// so that a constravariant constraint can meet to a lower type.
+    /// # Arguments
+    /// - `var`: The name of the type variable to add the constraint to.
+    /// - `constraint`: The constraint to add.
+    /// # Errors
+    /// Returns `Err` if the constraint cannot be added (unification fails)
+    pub fn add_constraint_ignore_contravariance(
+        &mut self,
+        var: &VarName,
+        constraint: &Constraint<T, A>,
+    ) -> Result<(), String> {
+        let var = self.get_or_make_node(var);
+        self.add_constraint_helper(&var, constraint, true)
     }
 
     /// Unifies the node `var` with the constraint.
@@ -839,10 +1151,11 @@ impl<T: Kind, A: Kind> Env<T, A> {
         &mut self,
         var: &NodePtr<T, A>,
         constraint: &Constraint<T, A>,
+        ignore_contravariant: bool,
     ) -> Result<(), String> {
         #![allow(clippy::similar_names)]
         let c = self.contraint_to_node(constraint);
-        if unify(var, &c) {
+        if unify(var, &c, ignore_contravariant) {
             Ok(())
         } else {
             Err(format!(
@@ -859,20 +1172,20 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// - `constraint`: The constraint to add.
     pub fn add_class_constraint(
         &mut self,
-        class_name: &str,
+        class_name: ClassName,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
         let class = self.new_class_type(class_name);
-        self.add_constraint_helper(&class, constraint)
+        self.add_constraint_helper(&class, constraint, false)
     }
 
     /// Gets the node for a variable, creating it if it does not exist.
     /// If the variable is a polymorphic constraint, it will be instantiated.
-    fn get_or_make_node(&mut self, name: &str) -> NodePtr<T, A> {
-        if !self.nodes.contains_key(name) {
-            self.new_type(name);
+    fn get_or_make_node(&mut self, name: &dyn UTypeName) -> NodePtr<T, A> {
+        if !self.nodes.contains_key(name.as_metavar()) {
+            return self.new_type(name);
         }
-        self.nodes.get(name).unwrap().clone()
+        self.nodes.get(name.as_metavar()).unwrap().clone()
     }
 
     /// Converts a constraint to a node.
@@ -897,7 +1210,16 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
                 class_id: None,
             })),
-            Constraint::Var(name) => self.get_or_make_node(name),
+            Constraint::SpliceTerm(op, args) => Rc::new(RefCell::new(Node::SpliceTerm {
+                parent: None,
+                op: op.clone(),
+                args: args
+                    .iter()
+                    .map(|c| self.contraint_to_node(c))
+                    .collect::<Vec<_>>(),
+                class_id: None,
+            })),
+            Constraint::Var(name) => self.get_or_make_node(&MetaVar::from_raw(name)),
             Constraint::DynamicTerm(op, args, constraint_kind) => {
                 Rc::new(RefCell::new(Node::DynamicTerm {
                     parent: None,
@@ -926,6 +1248,12 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .collect::<Vec<_>>(),
             ),
             Node::DropTerm { op, args, .. } => Constraint::DropTerm(
+                op.clone(),
+                args.iter()
+                    .map(|a| Self::node_to_constraint(a))
+                    .collect::<Vec<_>>(),
+            ),
+            Node::SpliceTerm { op, args, .. } => Constraint::SpliceTerm(
                 op.clone(),
                 args.iter()
                     .map(|a| Self::node_to_constraint(a))
@@ -964,8 +1292,10 @@ impl<T: Kind, A: Kind> Env<T, A> {
     }
 
     /// Gets the type of a variable.
-    pub fn get_type(&self, name: &str) -> Option<Constraint<T, A>> {
-        self.nodes.get(name).map(|n| Self::node_to_constraint(n))
+    pub fn get_type(&self, name: &dyn UTypeName) -> Option<Constraint<T, A>> {
+        self.nodes
+            .get(name.as_metavar())
+            .map(|n| Self::node_to_constraint(n))
     }
 
     /// Gets a unique identifier for the equivalence class the type variable
@@ -974,9 +1304,13 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// # Returns
     /// Returns `None` if the type variable is not a member of an equivalence class
     /// or if the equivalence class does not have an identifier.
-    pub fn get_class_id(&self, name: &str) -> Option<String> {
-        self.nodes
-            .get(name)
-            .and_then(|n| representative(n).borrow().get_class().cloned())
+    pub fn get_class_id(&self, name: &dyn UTypeName) -> Option<ClassName> {
+        self.nodes.get(name.as_metavar()).and_then(|n| {
+            representative(n)
+                .borrow()
+                .get_class()
+                .cloned()
+                .map(ClassName::from_raw)
+        })
     }
 }

@@ -1,0 +1,13 @@
+val bar(a: i64, t: i64) -> i64 {
+    returns a + t + 10
+}
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+fn main(a: i64, t: i64) -> i64 impls bar, time, space {
+    let ten = 10;
+    ? + ? + ?
+}
+
+pipeline main { main }

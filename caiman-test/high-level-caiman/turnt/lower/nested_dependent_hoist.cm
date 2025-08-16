@@ -1,0 +1,281 @@
+val value(a: i32) -> i32 {
+    t :- a * 2
+    x :- t + t
+    z :- t + x
+    left :- x if 0 > a else x * 2
+    right :- x if 0 < a else x * 2
+    y :- left if 0 > a else right
+    returns y + z + t
+
+}
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(b: BufferSpace) -> BufferSpace {
+    returns b
+}
+
+fn main(a: i32) -> i32 impls value, time, space {
+    var z;
+    var t;
+    ???;
+    let y = if 0 > a {
+        /* #CHECK-LABEL:
+        name: FuncletId(
+            "_main3",
+        ),
+        args: [...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_t%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },...
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_z%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+        #END */
+        if 0 > a {
+            ???
+        } else {
+            ???
+        }
+        /* #CHECK-LABEL:
+        name: FuncletId(
+            "_main4",
+        ),
+        args: [...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_t%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "t",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },...
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_z%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: Some(
+                                    Filled(
+                                        NodeId(
+                                            "z",
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                        flow: Filled(
+                            Usable,
+                        ),
+                    },
+        #END */
+    } else {
+        /* #CHECK-LABEL:
+        name: FuncletId(
+            "_main7",
+        ),
+        args: [...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_t%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },...
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_z%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+        #END */
+        let x = ???;
+        if 0 < a {
+            /* #CHECK-LABEL:
+            name: FuncletId(
+                "_main9",
+            ),
+            args: [...
+                FuncletArgument {
+                    name: Some(
+                        NodeId(
+                            "_t%0_ref",
+                        ),
+                    ),
+                    typ: TypeId(
+                        "&i32",
+                    ),
+                    tags: [
+                        Tag {
+                            quot: Filled(
+                                RemoteNodeId {
+                                    funclet: MetaId(
+                                        "val",
+                                    ),
+                                    node: Some(
+                                        Filled(
+                                            NodeId(
+                                                "t",
+                                            ),
+                                        ),
+                                    ),
+                                },
+                            ),
+                            flow: Filled(
+                                Usable,
+                            ),
+                        },...
+                    ],
+                },
+                FuncletArgument {
+                    name: Some(
+                        NodeId(
+                            "_z%0_ref",
+                        ),
+                    ),
+                    typ: TypeId(
+                        "&i32",
+                    ),
+                    tags: [
+                        Tag {
+                            quot: Filled(
+                                RemoteNodeId {
+                                    funclet: MetaId(
+                                        "val",
+                                    ),
+                                    node: Some(
+                                        Filled(
+                                            NodeId(
+                                                "z",
+                                            ),
+                                        ),
+                                    ),
+                                },
+                            ),
+                            flow: Filled(
+                                Usable,
+                            ),
+                        },
+
+            #END */
+            x
+        } else {
+            ???
+        }
+    };
+    ???;
+    y + z + t
+}

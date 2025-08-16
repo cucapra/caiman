@@ -1,0 +1,52 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> o: i64 {
+    c :- 1
+    r :- id(c)
+    returns r
+}
+
+val id(a: i64) -> b: i64 {
+    returns a
+}
+
+fn main_func() -> i64 impls main, time, space  {
+    let c = 1;
+    id_func(?)
+    /* #CHECK:
+    ScheduleCall {
+    ...
+    callee_funclet_id: Filled(
+        FuncletId(
+            "id_func",
+        ),
+    ),
+    callee_arguments: Filled(
+        [
+            Empty,
+        ],
+    ),
+    #END */
+    // #CHECK-NOT: ScheduleCall #END
+}
+
+fn id_func(a: i64 @ input(val.a)-usable) -> i64
+    impls id, time, space
+{
+    ?
+    /* #CHECK:
+    Jump {
+        ...
+        arguments: Filled(
+            [
+                Empty,
+            ],
+        ),
+    },
+    #END */
+}
+
+pipeline main { main_func }

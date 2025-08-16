@@ -1,0 +1,3 @@
+Error: At "capture_ref.cm" 17:18 - 17:20, 
+  Type Error: No definition of 'h' reaches this use.
+Note that references cannot be captured across function calls and function arguments are consumed.

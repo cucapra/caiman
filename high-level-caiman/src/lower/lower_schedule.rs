@@ -7,15 +7,17 @@ use std::collections::BTreeSet;
 use caiman::assembly::ast::{self as asm, MetaMapping};
 use caiman::explication::Hole;
 
+use crate::error::Info;
+use crate::type_error;
 use crate::{
-    enum_cast,
-    error::{type_error, LocalError},
+    error::LocalError,
     lower::IN_STEM,
-    parse::ast::{self, DataType, Flow, SchedTerm, SchedulingFunc, SpecType, Tag},
+    parse::ast::{self, DataType, Flow, SchedulingFunc, SpecType, Tag},
     typing::{Context, LOCAL_TEMP_FLAGS},
 };
 use caiman::ir;
 
+use super::sched_hir::HirTerm;
 use super::{
     sched_hir::{
         DataMovement, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag,
@@ -33,25 +35,28 @@ fn temp_var_name(temp_id: usize) -> String {
     format!("_t{temp_id}")
 }
 
-/// Constructs a copy from `src` to `dest` using either a local copy or a local
-/// do builtin, depending on whether `src` is atomic in the value spec.
+/// Constructs a copy from `src` to `dest` using either a local copy, local
+/// do builtin or write ref, depending on whether `src` is atomic in the value spec
+/// and whether `dest` is a value or reference type
 fn build_copy_cmd(
     dest: &str,
-    src: &SchedTerm,
+    dest_type: Option<&DataType>,
+    src: &HirTerm,
     f: &Funclet,
-    backup_tag: Option<&TripleTag>,
+    backup_tag: &TripleTag,
 ) -> asm::Command {
+    // returns a remote id if the value remote id has been specified, else `None`
+    let get_tag_opt = |t: &TripleTag| {
+        if t.value.quot_var.spec_var.is_some() || t.value.quot.is_some() {
+            Some(tag_to_remote_id(&t.value))
+        } else {
+            None
+        }
+    };
     let val_quot = src
         .get_tags()
-        .map(|t| tag_to_remote_id(&TripleTag::from_tags(t).value))
-        .or_else(|| backup_tag.map(|t| tag_to_remote_id(&t.value)))
-        .or_else(|| {
-            if let SchedTerm::Var { name, .. } = src {
-                f.get_out_tag(name).map(|t| tag_to_remote_id(&t.value))
-            } else {
-                None
-            }
-        });
+        .and_then(get_tag_opt)
+        .or_else(|| get_tag_opt(backup_tag));
     if let Some(quot) = &val_quot {
         if f.is_literal_value(quot) {
             return asm::Command::Node(asm::NamedNode {
@@ -64,32 +69,55 @@ fn build_copy_cmd(
             });
         }
     }
-    if let SchedTerm::Lit { info, lit, .. } = src {
-        panic!(
-            "{info}: Missing or mismatched tags for literal value {lit:#?}\nQuotient: {val_quot:#?}",
-        );
-    }
-    let src = enum_cast!(SchedTerm::Var { name, .. }, name, src);
-    if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
-        asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::LocalCopy {
-                input: Hole::Filled(asm::NodeId(src.clone())),
-                output: Hole::Filled(asm::NodeId(dest.to_string())),
-            },
-        })
-    } else {
-        asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::WriteRef {
-                source: Hole::Filled(asm::NodeId(src.clone())),
-                destination: Hole::Filled(asm::NodeId(dest.to_string())),
-                storage_type: Hole::Filled(
-                    f.get_storage_type(dest)
-                        .unwrap_or_else(|| f.get_storage_type(src).unwrap()),
-                ),
-            },
-        })
+    match src {
+        HirTerm::Lit { info, lit, .. } => {
+            panic!(
+                "{info}: Missing or mismatched tags for literal value {lit:#?}\nQuotient: {val_quot:#?}",
+            );
+        }
+        HirTerm::Var { name: src, .. } => {
+            if f.is_var_or_ref(src) || f.get_flag(src).is_some() {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::LocalCopy {
+                        input: Hole::Filled(asm::NodeId(src.clone())),
+                        output: Hole::Filled(asm::NodeId(dest.to_string())),
+                    },
+                })
+            } else {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::WriteRef {
+                        source: Hole::Filled(asm::NodeId(src.clone())),
+                        destination: Hole::Filled(asm::NodeId(dest.to_string())),
+                        storage_type: Hole::Filled(
+                            f.get_storage_type(dest)
+                                .unwrap_or_else(|| f.get_storage_type(src).unwrap()),
+                        ),
+                    },
+                })
+            }
+        }
+        HirTerm::Hole { .. } => {
+            if matches!(dest_type.unwrap(), DataType::Ref(_)) && !f.is_backing_ref(dest) {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::LocalCopy {
+                        input: Hole::Empty,
+                        output: Hole::Filled(asm::NodeId(dest.to_string())),
+                    },
+                })
+            } else {
+                asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::WriteRef {
+                        source: Hole::Empty,
+                        destination: Hole::Filled(asm::NodeId(dest.to_string())),
+                        storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
+                    },
+                })
+            }
+        }
     }
 }
 
@@ -100,7 +128,7 @@ fn build_copy_cmd(
 fn lower_flat_decl(
     dest: &str,
     dest_tag: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -113,7 +141,7 @@ fn lower_flat_decl(
             storage_type: Hole::Filled(f.get_storage_type(dest).unwrap()),
         },
     });
-    let mv = build_copy_cmd(&temp_node_name, rhs, f, Some(dest_tag));
+    let mv = build_copy_cmd(&temp_node_name, f.get_var_dtype(dest), rhs, f, dest_tag);
     let rd_ref = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
@@ -131,7 +159,7 @@ fn lower_flat_decl(
 fn lower_var_decl(
     dest: &str,
     dest_tag: &TripleTag,
-    rhs: &Option<SchedTerm>,
+    rhs: Option<&HirTerm>,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -144,7 +172,13 @@ fn lower_var_decl(
         },
     }))];
     if let Some(rhs) = rhs {
-        result.push(Hole::Filled(build_copy_cmd(dest, rhs, f, Some(dest_tag))));
+        result.push(Hole::Filled(build_copy_cmd(
+            dest,
+            f.get_var_dtype(dest),
+            rhs,
+            f,
+            dest_tag,
+        )));
     }
     (result, temp_id)
 }
@@ -153,12 +187,18 @@ fn lower_var_decl(
 fn lower_store(
     lhs: &str,
     lhs_tags: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
     (
-        vec![Hole::Filled(build_copy_cmd(lhs, rhs, f, Some(lhs_tags)))],
+        vec![Hole::Filled(build_copy_cmd(
+            lhs,
+            f.get_var_dtype(lhs),
+            rhs,
+            f,
+            lhs_tags,
+        ))],
         temp_id,
     )
 }
@@ -166,8 +206,8 @@ fn lower_store(
 /// Lowers an operation into a local-do-external and read-ref
 fn lower_op(
     dests: &[(String, TripleTag)],
-    op: &str,
-    args: &[SchedTerm],
+    op: &Hole<String>,
+    args: &[HirTerm],
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
@@ -192,19 +232,24 @@ fn lower_op(
         .collect();
     let called_vars = dests
         .iter()
-        .map(|(_, t)| t.value.quot_var.spec_var.as_ref().unwrap().clone())
+        .filter_map(|(_, t)| t.value.quot_var.spec_var.clone())
         .collect::<Vec<_>>();
     let mut inputs = vec![];
     for arg in args {
-        let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
-        inputs.push(Hole::Filled(asm::NodeId(arg.clone())));
+        let arg = arg.hole_or_var().unwrap();
+        inputs.push(arg.cloned().map(asm::NodeId));
     }
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
             operation: Hole::Filled(asm::RemoteNodeId {
                 funclet: SpecType::Value.get_meta_id(),
-                node: Some(Hole::Filled(asm::NodeId(tuple_id(&called_vars)))),
+                node: Some(if called_vars.len() == dests.len() {
+                    Hole::Filled(asm::NodeId(tuple_id(&called_vars)))
+                } else {
+                    // at least one of the vars were none
+                    Hole::Empty
+                }),
             }),
             inputs: Hole::Filled(inputs),
             outputs: Hole::Filled(
@@ -213,7 +258,7 @@ fn lower_op(
                     .map(|(n, _)| Hole::Filled(asm::NodeId(n.clone())))
                     .collect(),
             ),
-            external_function_id: Hole::Filled(asm::ExternalFunctionId(op.to_string())),
+            external_function_id: op.clone().map(asm::ExternalFunctionId),
         },
     });
     // read ref for each destination
@@ -247,7 +292,10 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
                 source: Hole::Filled(asm::NodeId(src.to_string())),
-                storage_type: Hole::Filled(typ.storage_type()),
+                storage_type: Hole::Filled(
+                    typ.storage_type()
+                        .unwrap_or_else(|| panic!("{src} missing storage type")),
+                ),
             },
         }))],
         temp_id,
@@ -284,7 +332,10 @@ fn lower_begin_encode(
             name: Some(asm::NodeId(var.clone())),
             node: asm::Node::AllocTemporary {
                 place: Hole::Filled(place),
-                buffer_flags: Hole::Filled(f.get_flags()[var]),
+                buffer_flags: Hole::Filled(
+                    f.get_flag(var)
+                        .unwrap_or_else(|| panic!("{var} is not a GPU variable")),
+                ),
                 storage_type: Hole::Filled(f.get_storage_type(var).unwrap()),
             },
         })));
@@ -321,13 +372,28 @@ fn lower_begin_encode(
 /// * `temp_id` - the next available temporary id
 fn lower_device_copy(
     dest: &str,
-    src: &str,
+    src: &HirTerm,
     dir: DataMovement,
     encoder: &str,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
     assert_eq!(dir, DataMovement::HostToDevice);
+    let src = src.hole_or_var().unwrap();
+    if src.is_empty() {
+        return (
+            vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: None,
+                node: asm::Node::EncodeCopy {
+                    encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+                    input: Hole::Empty,
+                    output: Hole::Filled(asm::NodeId(dest.to_string())),
+                },
+            }))],
+            temp_id,
+        );
+    }
+    let src = src.opt().unwrap();
     if f.is_var_or_ref(src) {
         (
             vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
@@ -394,7 +460,7 @@ fn lower_encode_do(
             inputs: Hole::Filled(
                 func.args
                     .iter()
-                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .map(|x| x.clone().map(asm::NodeId))
                     .collect(),
             ),
             outputs: Hole::Filled(
@@ -425,14 +491,6 @@ fn lower_submit(dest: &str, src: &str, tags: &TripleTag, temp_id: usize) -> (Com
             event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
         },
     });
-    //     FenceOp::Sync => asm::Command::Node(asm::NamedNode {
-    //         name: None,
-    //         node: asm::Node::SyncFence {
-    //             fence: Hole::Filled(asm::NodeId(src)),
-    //             event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
-    //         },
-    //     }),
-    // };
     (vec![Hole::Filled(local_do)], temp_id)
 }
 
@@ -481,6 +539,56 @@ fn lower_sync(
     (v, temp_id)
 }
 
+fn lower_hole(
+    dests: &[(String, TripleTag)],
+    _info: Info,
+    mut temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    let mut allocations = vec![];
+    let mut reads = vec![];
+    for (d, _) in dests {
+        let is_ref = matches!(f.get_dtype(d), Some(DataType::Ref(_)));
+        let place = if f.get_flag(d).is_some() {
+            ir::Place::Gpu
+        } else {
+            ir::Place::Local
+        };
+        let name = if is_ref || place == ir::Place::Gpu {
+            d.clone()
+        } else {
+            let n = temp_var_name(temp_id);
+            temp_id += 1;
+            n
+        };
+        if let Some(storage_type) = f.get_storage_type(d) {
+            let storage_type = Hole::Filled(storage_type);
+            allocations.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.clone())),
+                node: asm::Node::AllocTemporary {
+                    place: Hole::Filled(place),
+                    storage_type: storage_type.clone(),
+                    buffer_flags: Hole::Filled(f.get_flag(d).unwrap_or(LOCAL_TEMP_FLAGS)),
+                },
+            })));
+            if !is_ref && place == ir::Place::Local {
+                reads.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(d.clone())),
+                    node: asm::Node::ReadRef {
+                        storage_type,
+                        source: Hole::Filled(asm::NodeId(name)),
+                    },
+                })));
+            }
+        }
+        // No storage type, just let the explicator try and figure it out
+        // TODO: is it better to give the explicator a template and a `???` or just a `???`
+    }
+    allocations.push(Hole::Empty);
+    allocations.extend(reads);
+    (allocations, temp_id)
+}
+
 /// Lowers a scheduling statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
@@ -489,10 +597,16 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
     match s {
         HirBody::ConstDecl {
             lhs, rhs, lhs_tag, ..
-        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f),
+        } => {
+            if f.is_var_or_ref(lhs) {
+                lower_var_decl(lhs, lhs_tag, Some(rhs), temp_id, f)
+            } else {
+                lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f)
+            }
+        }
         HirBody::VarDecl {
             lhs, lhs_tag, rhs, ..
-        } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
+        } => lower_var_decl(lhs, lhs_tag, rhs.as_ref(), temp_id, f),
         HirBody::RefStore {
             lhs, rhs, lhs_tags, ..
         } => lower_store(lhs, lhs_tags, rhs, temp_id, f),
@@ -502,7 +616,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         HirBody::Op {
             dests, op, args, ..
         } => lower_op(dests, &op.lower(), args, temp_id, f),
-        x @ HirBody::Hole(_) => todo!("{x:?}"),
+        HirBody::Hole { info, dests, .. } => lower_hole(dests, *info, temp_id, f),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
         HirBody::BeginEncoding {
             device,
@@ -590,7 +704,7 @@ fn lower_func_call(
             callee_arguments: Hole::Filled(
                 call.args
                     .iter()
-                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .map(|x| x.clone().map(asm::NodeId))
                     .collect(),
             ),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),
@@ -660,7 +774,12 @@ fn lower_yield(captures: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
 /// * `f` - the funclet that contains the return
 /// # Returns
 /// A tuple containing the commands that implement the return
-fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+fn lower_ret(
+    rets: &[Hole<String>],
+    passthrough: &[String],
+    temp_id: usize,
+    f: &Funclet,
+) -> CommandVec {
     assert!(passthrough.len() <= 1 || passthrough.iter().le(passthrough.iter().skip(1)));
     if f.is_final_return() {
         let djoin_id = temp_id;
@@ -684,8 +803,12 @@ fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funcle
             Hole::Filled(asm::Command::TailEdge(asm::TailEdge::Jump {
                 arguments: Hole::Filled(
                     rets.iter()
-                        .chain(passthrough.iter())
-                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .map(|x| x.clone().map(asm::NodeId))
+                        .chain(
+                            passthrough
+                                .iter()
+                                .map(|x| Hole::Filled(asm::NodeId(x.clone()))),
+                        )
                         .collect(),
                 ),
                 join: Hole::Filled(asm::NodeId(join_var)),
@@ -696,8 +819,12 @@ fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funcle
             asm::TailEdge::Return {
                 return_values: Hole::Filled(
                     rets.iter()
-                        .chain(passthrough.iter())
-                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .map(|x| x.clone().map(asm::NodeId))
+                        .chain(
+                            passthrough
+                                .iter()
+                                .map(|x| Hole::Filled(asm::NodeId(x.clone()))),
+                        )
                         .collect(),
                 ),
             },
@@ -749,7 +876,12 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
 /// Lowers a select terminator into a series of caiman assembly commands
 /// # Returns
 /// The commands that implement the terminator
-fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<'_>) -> CommandVec {
+fn lower_select(
+    guard_name: &Hole<String>,
+    tags: &TripleTag,
+    temp_id: usize,
+    f: &Funclet<'_>,
+) -> CommandVec {
     let djoin_id = temp_id;
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
@@ -775,7 +907,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     .map(|x| x.quot)
                     .collect(),
             ),
-            condition: Hole::Filled(asm::NodeId(guard_name.to_string())),
+            condition: guard_name.clone().map(asm::NodeId),
             callee_funclet_ids: Hole::Filled(f.next_blocks()),
             callee_arguments: Hole::Filled(f.output_args()),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),
@@ -846,8 +978,8 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         } else {
             funclet.get_out_tag(name).cloned()
         };
-        t.map_or(
-            asm::Tag {
+        t.map_or_else(
+            || asm::Tag {
                 quot: Hole::Filled(asm::RemoteNodeId {
                     node: None,
                     funclet: SpecType::Timeline.get_meta_id(),
@@ -900,26 +1032,26 @@ pub fn lower_schedule(
     let mut timeline = None;
     let mut spatial = None;
     if func.specs.len() > 3 {
-        return Err(type_error(func.info, "Too many specs"));
+        return Err(type_error!(func.info, "Too many specs"));
     }
     for spec in &func.specs {
         match ctx.specs.get(spec).map(|s| s.typ) {
             Some(SpecType::Value) => val = Some(spec.to_string()),
             Some(SpecType::Timeline) => timeline = Some(spec.to_string()),
             Some(SpecType::Spatial) => spatial = Some(spec.to_string()),
-            None => return Err(type_error(func.info, &format!("Spec '{spec}' not found"))),
+            None => return Err(type_error!(func.info, "Spec '{spec}' not found")),
         }
     }
     let specs = Specs {
         value: val
             .map(asm::FuncletId)
-            .ok_or_else(|| type_error(func.info, "Missing value spec"))?,
+            .ok_or_else(|| type_error!(func.info, "Missing value spec"))?,
         timeline: timeline
             .map(asm::FuncletId)
-            .ok_or_else(|| type_error(func.info, "Missing timeline spec"))?,
+            .ok_or_else(|| type_error!(func.info, "Missing timeline spec"))?,
         spatial: spatial
             .map(asm::FuncletId)
-            .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
+            .ok_or_else(|| type_error!(func.info, "Missing spatial spec"))?,
     };
     let blocks = Funclets::new(func, &specs, ctx, no_inference)?;
     Ok(blocks.funclets().iter().map(lower_block).collect())

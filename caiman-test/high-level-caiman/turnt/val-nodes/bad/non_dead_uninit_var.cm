@@ -1,0 +1,29 @@
+#version 0.1.0
+extern(cpu) pure simple(x: i32) -> i32
+
+val foo(x: i32) -> i32 {
+    r :- simple(x)
+    returns r
+}
+
+tmln foo_time(e: Event) -> out: Event {
+    returns e
+}
+
+sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+fn foo_main(x: &i32) -> i32 
+    impls foo, foo_time, foo_space
+{
+    // The "scope" of this annotation lasts until r is written to.
+    // Pedantically, until r is written to, it should be none()-dead.
+    // I think we could magically do "the right thing", but it's probably
+    // better to error.
+    var r @ node(val.r);
+    r = simple(*x);
+    r
+}
+
+pipeline main {
+    foo_main
+}

@@ -1,2 +1,2 @@
 Error: At "too_many_specs.cm" 13:1 - 19:2, 
-  Type Error: 13:1 - 19:2: Scheduling function main_impl must have exactly 3 specs
+  Type Error: Scheduling function 'main_impl' must have exactly 3 specs

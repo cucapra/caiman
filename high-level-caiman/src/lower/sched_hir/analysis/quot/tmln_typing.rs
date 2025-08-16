@@ -12,27 +12,52 @@
 //! local event that is active right after the instruction takes effect.
 
 use std::{
-    collections::{hash_map::Entry, HashMap, VecDeque},
+    collections::{hash_map::Entry, HashMap, HashSet},
     vec,
 };
 
+use caiman::explication::Hole;
+
 use crate::{
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     lower::{
         sched_hir::{
             analysis::{InOutFacts, LiveVars},
             cfg::{BasicBlock, Cfg, FINAL_BLOCK_ID, START_BLOCK_ID},
-            Hir, HirBody, HirFuncCall, Terminator, TripleTag,
+            Hir, HirBody, HirFuncCall, HirTerm, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{DataType, Quotient, SchedTerm, SpecType},
-    typing::{is_timeline_dtype, Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
+    parse::ast::{DataType, Quotient, SpecType},
+    type_error,
+    typing::{
+        is_timeline_dtype, ClassName, Context, NodeEnv, SchedOrExtern, SpecInfo, UTypeName,
+        ValQuot, VarName,
+    },
 };
 
 use super::{add_constraint, add_node_eq, add_var_constraint};
 
 const LOCAL_STEM: &str = "_loc";
+
+/// Gets the implicit input variable of the starting basic block of `cfg`. If one
+/// is specified, uses the user-supplied tag, otherwise assumes it's the spec's implicit input
+fn get_implicit_input_var<'a>(cfg: &'a Cfg, spec_in: &'a str) -> ClassName {
+    let mut res = spec_in;
+    for stmt in &cfg.blocks.get(&START_BLOCK_ID).unwrap().stmts {
+        if let HirBody::InAnnotation(_, annots) = stmt {
+            for (a, t) in annots {
+                if a == "input"
+                    && !matches!(t.timeline.quot, Some(Quotient::None))
+                    && t.timeline.quot_var.spec_var.is_some()
+                {
+                    res = t.timeline.quot_var.spec_var.as_ref().unwrap();
+                }
+            }
+        }
+    }
+    ClassName::new(res)
+}
 
 /// Deduces the timeline quotients and adds them to tags of instructions in the CFG.
 /// Required that active fences pass has been run and record expansion has NOT
@@ -62,25 +87,11 @@ pub fn deduce_tmln_quots(
     num_dims: usize,
     spec_name: &str,
     live_vars: &InOutFacts<LiveVars>,
-) -> Result<(), LocalError> {
+) -> Result<NodeEnv, LocalError> {
     let env = spec_info.nodes.clone();
-    let mut overrides = Vec::new();
-    for i in &cfg.blocks[&START_BLOCK_ID].stmts {
-        if let HirBody::InAnnotation(_, tags) = i {
-            overrides.extend(tags.iter().cloned());
-        }
-    }
-    let env = add_io_constraints(
-        env,
-        inputs,
-        &overrides,
-        outputs,
-        output_dtypes,
-        dtypes,
-        info,
-        num_dims,
-    )?;
-    let (env, implicit_events) = unify_nodes(cfg, &spec_info.sig.input[0].0, dtypes, ctx, env)?;
+    let env = add_io_constraints(env, inputs, outputs, output_dtypes, dtypes, info, num_dims)?;
+    let implicit_in = get_implicit_input_var(cfg, &spec_info.sig.input[0].0);
+    let (env, implicit_events) = unify_nodes(cfg, &implicit_in, dtypes, ctx, env)?;
     // sort of a hack to support the previous tests without timeline specs:
     // A timeline spec that is trivial and never called is just not deduced so
     // it can remain none
@@ -91,7 +102,7 @@ pub fn deduce_tmln_quots(
         fill_tmln_tags(cfg, &env, &implicit_events, live_vars, dtypes);
         add_implicit_annotations(cfg, &implicit_events);
     }
-    Ok(())
+    Ok(env)
 }
 
 /// A struct containing the implicit input and output events for each funclet in the CFG.
@@ -110,19 +121,19 @@ impl InOutEvents {
 
     /// Gets the local event name of the event that is active right after
     /// the given instruction
-    pub fn get_local_name_after_instr(&self, block: usize, instr_id: usize) -> String {
+    pub fn get_local_name_after_instr(&self, block: usize, instr_id: usize) -> VarName {
         // +1 to skip the implicit input
-        format!("{LOCAL_STEM}{}", &self.0[&block].2[instr_id + 1])
+        VarName::new(format!("{LOCAL_STEM}{}", &self.0[&block].2[instr_id + 1]))
     }
 
     /// Gets the local event name of the implicit input
-    pub fn get_implicit_in_name(&self, block: usize) -> String {
-        format!("{LOCAL_STEM}{}", &self.0[&block].2[0])
+    pub fn get_implicit_in_name(&self, block: usize) -> VarName {
+        VarName::new(format!("{LOCAL_STEM}{}", &self.0[&block].2[0]))
     }
 
     /// Gets the local event name of the implicit output
-    pub fn get_implicit_out_name(&self, block: usize) -> String {
-        format!("{LOCAL_STEM}{}", &self.0[&block].2.last().unwrap())
+    pub fn get_implicit_out_name(&self, block: usize) -> VarName {
+        VarName::new(format!("{LOCAL_STEM}{}", &self.0[&block].2.last().unwrap()))
     }
 }
 
@@ -161,21 +172,26 @@ fn add_implicit_annotations(cfg: &mut Cfg, annots: &InOutEvents) {
 /// If a constraint cannot be added to the environment
 fn unify_nodes(
     cfg: &Cfg,
-    implicit_in: &str,
+    implicit_in: &ClassName,
     dtypes: &HashMap<String, DataType>,
     ctx: &Context,
     mut env: NodeEnv,
 ) -> Result<(NodeEnv, InOutEvents), LocalError> {
     let mut seen = HashMap::new();
-    env = add_var_constraint(implicit_in, &format!("{LOCAL_STEM}0"), Info::default(), env)?;
+    env = add_node_eq(
+        &format!("{LOCAL_STEM}0").into(),
+        implicit_in,
+        Info::default(),
+        env,
+    )?;
     seen.insert(START_BLOCK_ID, 0);
-    let mut node_q = VecDeque::new();
-    node_q.push_back(START_BLOCK_ID);
+    let mut node_q = cfg.topo_order_rev.clone();
     let mut block_loc_events = HashMap::new();
     // the last globally used local event number
     let mut latest_loc = 0;
     let mut implicit_annotations = ImplicitAnnotations::new(cfg);
-    while let Some(bb) = node_q.pop_front() {
+    let mut hole_local_events = HashSet::new();
+    while let Some(bb) = node_q.pop() {
         let bb = &cfg.blocks[&bb];
         // the last local event number for the current path
         let mut last_loc = seen[&bb.id];
@@ -190,6 +206,7 @@ fn unify_nodes(
             &mut implicit_annotations,
             &mut local_events,
             dtypes,
+            &mut hole_local_events,
         )?;
         env = unify_terminator(
             bb,
@@ -204,8 +221,8 @@ fn unify_nodes(
         local_events.push(last_loc);
         env = implicit_annotations.unify_outputs(last_loc, env)?;
         block_loc_events.insert(bb.id, local_events);
-        for succ in cfg.graph[&bb.id].targets() {
-            match seen.entry(succ) {
+        for succ in &cfg.graph[&bb.id] {
+            match seen.entry(*succ) {
                 Entry::Occupied(entry) => {
                     // merge last local events to be equal
                     // this must be the case since the timeline doesn't have selects
@@ -214,10 +231,10 @@ fn unify_nodes(
                         env = add_var_constraint(
                             &format!("{LOCAL_STEM}{last_loc}"),
                             &format!("{LOCAL_STEM}{}", entry.get()),
-                            cfg.blocks[&succ]
+                            cfg.blocks[succ]
                                 .stmts
                                 .first()
-                                .map_or(cfg.blocks[&succ].src_loc, Hir::get_info),
+                                .map_or(cfg.blocks[succ].src_loc, Hir::get_info),
                             env,
                         )?;
                     }
@@ -225,17 +242,25 @@ fn unify_nodes(
                 Entry::Vacant(entry) => {
                     // input event to successor is the current last event
                     entry.insert(last_loc);
-                    node_q.push_back(succ);
                 }
             }
         }
     }
-    env.converge_types().map_err(|e| {
-        type_error(
-            Info::default(),
-            &format!("Failed to converge node types:\n {e}"),
-        )
-    })?;
+    env.converge_types()
+        .map_err(|e| type_error!(Info::default(), "Failed to converge node types:\n {e}"))?;
+    for ev in hole_local_events {
+        // for holes, unify the events we created for each hole if we don't need them
+        if env
+            .get_node_name(&VarName::new(format!("{LOCAL_STEM}{ev}")))
+            .is_none()
+        {
+            env.add_var_eq(
+                format!("{LOCAL_STEM}{ev}").into(),
+                format!("{LOCAL_STEM}{}", ev + 1).into(),
+            )
+            .map_err(|s| type_error!(Info::default(), "{s}"))?;
+        }
+    }
     let io_evs = into_input_output_annotations(cfg, &env, &block_loc_events)?;
     Ok((env, io_evs))
 }
@@ -247,8 +272,8 @@ fn unify_nodes(
 /// * `cfg` - The control flow graph
 /// * `env` - The current environment
 /// * `first_last_events` - The map from block id to the list of local events. Index i
-/// of this vector is the local event right after the `i + 1` instruction in the block.
-/// So index 0 is the implicit input and the last index is the implicit output.
+///     of this vector is the local event right after the `i + 1` instruction in the block.
+///     So index 0 is the implicit input and the last index is the implicit output.
 fn into_input_output_annotations(
     cfg: &Cfg,
     env: &NodeEnv,
@@ -263,27 +288,34 @@ fn into_input_output_annotations(
             Some(Quotient::Node)
         };
         in_ev.timeline.quot_var.spec_var = Some(
-            env.get_node_name(&format!("{LOCAL_STEM}{}", events.first().unwrap()))
-                .ok_or_else(|| {
-                    type_error(
-                        cfg.blocks[block].get_starting_info(),
-                        "Need annotation for implicit in",
-                    )
-                })?,
+            env.get_node_name(&VarName::new(format!(
+                "{LOCAL_STEM}{}",
+                events.first().unwrap()
+            )))
+            .ok_or_else(|| {
+                type_error!(
+                    cfg.blocks[block].get_starting_info(),
+                    "Need annotation for implicit in"
+                )
+            })?
+            .get_name()
+            .to_owned(),
         );
         let mut out_ev = TripleTag::new_unspecified();
         let out_block = cfg.get_continuation_output_block(*block);
         out_ev.timeline.quot_var.spec_var = Some(
-            env.get_node_name(&format!(
+            env.get_node_name(&VarName::new(format!(
                 "{LOCAL_STEM}{}",
                 first_last_events[&out_block].last().unwrap()
-            ))
+            )))
             .ok_or_else(|| {
-                type_error(
+                type_error!(
                     cfg.blocks[&out_block].get_final_info(),
-                    "Need annotation for implicit out",
+                    "Need annotation for implicit out"
                 )
-            })?,
+            })?
+            .get_name()
+            .to_owned(),
         );
         out_ev.timeline.quot = Some(Quotient::Node);
         res.insert(*block, (in_ev, out_ev, events.clone()));
@@ -372,16 +404,16 @@ impl<'a> ImplicitAnnotations<'a> {
 /// * `bb` - The basic block to unify
 /// * `env` - The current environment
 /// * `last_loc` - The last local event number along the current path through
-/// the CFG
+///     the CFG
 /// * `latest_loc` - The last used local event number globally for the entire
-/// CFG
+///     CFG
 /// * `output_annotations` - Will be pushed with annotations for the final
-/// local event
+///     local event
 /// # Returns
 /// The updated environment
 /// # Errors
 /// If a constraint cannot be added to the environment
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn unify_instrs(
     bb: &BasicBlock,
     mut env: NodeEnv,
@@ -390,6 +422,7 @@ fn unify_instrs(
     implicit_annotations: &mut ImplicitAnnotations,
     local_events: &mut Vec<i32>,
     dtypes: &HashMap<String, DataType>,
+    hole_locs: &mut HashSet<i32>,
 ) -> Result<NodeEnv, LocalError> {
     let input_loc = format!("{LOCAL_STEM}{}", *last_loc);
     for instr in &bb.stmts {
@@ -483,7 +516,7 @@ fn unify_instrs(
                         .collect::<Vec<_>>(),
                 ),
                 // fence source is the first source
-                &srcs.processed()[0],
+                VarName::from(&srcs.processed()[0]),
                 tags,
                 *info,
                 env,
@@ -495,8 +528,44 @@ fn unify_instrs(
             HirBody::Op { .. }
             | HirBody::Phi { .. }
             | HirBody::EncodeDo { .. }
-            | HirBody::DeviceCopy { .. }
-            | HirBody::Hole { .. } => env,
+            | HirBody::DeviceCopy { .. } => env,
+            HirBody::Hole {
+                dests,
+                info,
+                active_fences,
+                ..
+            } => {
+                let mut inced = false;
+                for (d, t) in dests {
+                    match dtypes.get(d) {
+                        // TODO: what if they should be returned from calls?
+                        Some(DataType::Encoder(Some(_))) => {
+                            inced = true;
+                            env = unify_begin_encode(
+                                &(d.clone(), t.clone()),
+                                active_fences,
+                                t,
+                                env,
+                                *info,
+                                last_loc,
+                                latest_loc,
+                            )?;
+                        }
+                        Some(DataType::Record(_)) => {
+                            inced = true;
+                            env =
+                                unify_sync(d, env.new_temp(), t, *info, env, last_loc, latest_loc)?;
+                        }
+                        _ => {}
+                    }
+                }
+                if !inced {
+                    hole_locs.insert(*latest_loc);
+                    *latest_loc += 1;
+                    *last_loc = *latest_loc;
+                }
+                env
+            }
         };
         local_events.push(*last_loc);
     }
@@ -508,9 +577,9 @@ fn unify_instrs(
 /// * `bb` - The basic block to unify
 /// * `env` - The current environment
 /// * `last_loc` - The last local event number along the current path through
-/// the CFG
+///     the CFG
 /// * `latest_loc` - The last used local event number globally for the entire
-/// CFG
+///     CFG
 /// * `dtypes` - The data types of the variables in the program
 /// * `ctx` - The context of the program
 /// # Returns
@@ -547,7 +616,9 @@ fn unify_terminator(
             // pass through is ignored (like next)
             // the destination tag is the tag for the merged node, we handle this
             for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
-                env = add_var_constraint(dest, ret, *info, env)?;
+                if let Hole::Filled(ret) = ret {
+                    env = add_var_constraint(dest, ret, *info, env)?;
+                }
             }
             Ok(env)
         }
@@ -583,13 +654,18 @@ fn unify_terminator(
                     {
                         env = add_constraint(
                             &format!("{ret_name}!"),
-                            &ValQuot::Output(MetaVar::new_var_name(ret_name)),
+                            &ValQuot::Output(VarName::from(ret_name).into()),
                             *info,
                             env,
                         )?;
-                        env = add_node_eq(&format!("{ret_name}!"), &func_class, *info, env)?;
+                        env = add_node_eq(
+                            &VarName::new(format!("{ret_name}!")),
+                            &func_class,
+                            *info,
+                            env,
+                        )?;
                     } else {
-                        env = add_node_eq(ret_name, &func_class, *info, env)?;
+                        env = add_node_eq(VarName::new_ref(ret_name), &func_class, *info, env)?;
                     }
                 }
             }
@@ -606,14 +682,14 @@ fn unify_terminator(
 fn unify_implicit_output(
     mut env: NodeEnv,
     out_annotations: &[(TripleTag, Info)],
-    output_classes: &[Option<String>],
+    output_classes: &[Option<ClassName>],
     info: Info,
     last_loc: &mut i32,
     latest_loc: &mut i32,
 ) -> Result<NodeEnv, LocalError> {
     // handle the implicit output
-    let last_loc_event = format!("{LOCAL_STEM}{last_loc}");
-    let implicit_out = format!("{LOCAL_STEM}{}", *latest_loc + 1);
+    let last_loc_event = VarName::new(format!("{LOCAL_STEM}{last_loc}"));
+    let implicit_out = VarName::new(format!("{LOCAL_STEM}{}", *latest_loc + 1));
     *latest_loc += 1;
     *last_loc = *latest_loc;
     // option of whether the output is annotated
@@ -622,7 +698,11 @@ fn unify_implicit_output(
             if t == Quotient::None {
                 todo!("None annotated outputs")
             } else {
-                tag.timeline.quot_var.spec_var.clone()
+                tag.timeline
+                    .quot_var
+                    .spec_var
+                    .as_ref()
+                    .map(|x| ClassName::new(x))
             }
         })
     });
@@ -630,21 +710,21 @@ fn unify_implicit_output(
         // no annotation or the annotation matches
         (None, t) | (Some(t), _) if t == env.get_spec_output_classes()[0] => {
             env = add_constraint(
-                &implicit_out,
-                &ValQuot::Output(MetaVar::new_var_name(&last_loc_event)),
+                implicit_out.get_name(),
+                &ValQuot::Output(last_loc_event.into()),
                 info,
                 env,
             )?;
             env = add_node_eq(
                 &implicit_out,
-                output_classes[0].as_ref().unwrap(),
+                &output_classes[0].clone().unwrap(),
                 info,
                 env,
             )?;
         }
         (Some(output_annot), _) => {
             // annotation doesn't match, take the user's word for it
-            env = add_var_constraint(&last_loc_event, &output_annot, info, env)?;
+            env = add_node_eq(&last_loc_event, &output_annot, info, env)?;
         }
         (None, _) => unreachable!(),
     }
@@ -661,29 +741,29 @@ fn unify_begin_encode(
     latest_loc: &mut i32,
 ) -> Result<NodeEnv, LocalError> {
     // only begin encoding requires an extraction (out of the special timeline commands)
-    let node_args = std::iter::once(MetaVar::new_var_name(&format!("{LOCAL_STEM}{last_loc}")))
-        .chain(active_fences.iter().map(|x| MetaVar::new_var_name(x)))
+    let node_args = std::iter::once(VarName::new(format!("{LOCAL_STEM}{last_loc}")).into())
+        .chain(active_fences.iter().map(|x| VarName::from(x).into()))
         .collect();
-    let enc_result = tuple_id(&[encoder.0.clone()]);
+    let enc_result = VarName::new(tuple_id(&[encoder.0.clone()]));
     env = add_constraint(
-        &enc_result,
+        enc_result.get_name(),
         &ValQuot::Call(String::from("encode_event"), node_args),
         info,
         env,
     )?;
     env = add_constraint(
         &format!("{LOCAL_STEM}{}", *latest_loc + 1),
-        &ValQuot::Extract(MetaVar::new_var_name(&enc_result), 0),
+        &ValQuot::Extract(enc_result.clone().into(), 0),
         info,
         env,
     )?;
     env = add_constraint(
         &encoder.0,
-        &ValQuot::Extract(MetaVar::new_var_name(&enc_result), 1),
+        &ValQuot::Extract(enc_result.clone().into(), 1),
         info,
         env,
     )?;
-    env = add_type_annot(&enc_result, tags, info, env)?;
+    env = add_type_annot(enc_result.get_name(), tags, info, env)?;
     env = add_type_annot(&encoder.0, &encoder.1, info, env)?;
     *latest_loc += 1;
     *last_loc = *latest_loc;
@@ -701,7 +781,7 @@ fn unify_submit(
         dest,
         &ValQuot::CallOne(
             String::from("submit_event"),
-            vec![MetaVar::new_var_name(src)],
+            vec![VarName::from(src).into()],
         ),
         info,
         env,
@@ -711,7 +791,7 @@ fn unify_submit(
 
 fn unify_sync(
     dest: &str,
-    src: &str,
+    src: VarName,
     tags: &TripleTag,
     info: Info,
     mut env: NodeEnv,
@@ -719,8 +799,8 @@ fn unify_sync(
     latest_loc: &mut i32,
 ) -> Result<NodeEnv, LocalError> {
     let srcs = vec![
-        MetaVar::new_var_name(&format!("{LOCAL_STEM}{last_loc}")),
-        MetaVar::new_var_name(src),
+        VarName::new(format!("{LOCAL_STEM}{last_loc}")).into(),
+        src.into(),
     ];
     env = add_constraint(
         dest,
@@ -784,13 +864,14 @@ fn unify_call(
     );
     let call_constraint = ValQuot::SchedCall(
         f_class,
-        std::iter::once(MetaVar::new_var_name(&format!("{LOCAL_STEM}{last_loc}")))
+        std::iter::once(VarName::new(format!("{LOCAL_STEM}{last_loc}")).into())
             .chain(call.args.iter().filter_map(|arg| {
-                let t = dtypes
-                    .get(arg)
-                    .unwrap_or_else(|| panic!("Missing type info for {arg}"));
-                if is_timeline_dtype(t) {
-                    Some(MetaVar::new_var_name(arg))
+                if let Hole::Filled(arg) = arg {
+                    if is_timeline_dtype(&dtypes[arg]) {
+                        Some(VarName::from(arg).into())
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -800,7 +881,11 @@ fn unify_call(
     let succ_implicit_input = implicit_input_annot(succ);
     if !env.spec_has_match(&call_constraint) {
         // there is no call for this function in the spec, so this isn't something to worry about
-        // we do this for "backwards compatibility", in the sense that if the function
+        // we do this for "backwards compatibility" for all the tests written
+        // before the timeline was implemented and thus do not contain
+        // timeline annotations. This isn't a good reason on its own,
+        // but I quite liked the ability to not need to specify any timeline tags
+        // if it's all none. So if the function
         // call isn't in the spec, we assume it's none. This is slightly different from
         // the value language which requires a type annotation to do this.
 
@@ -829,26 +914,20 @@ fn unify_call(
         succ_implicit_input
             .as_ref()
             .unwrap_or(&TripleTag::new_unspecified()),
-        &ValQuot::Extract(MetaVar::new_var_name(&tuple_name), 0),
+        &ValQuot::Extract(VarName::from(&tuple_name).into(), 0),
         call.info,
         env,
     )?;
     for (idx, (dest, tag)) in dests
         .iter()
-        .filter(|(x, _)| {
-            is_timeline_dtype(
-                dtypes
-                    .get(x)
-                    .unwrap_or_else(|| panic!("Missing type info for {x}")),
-            )
-        })
+        .filter(|(x, _)| is_timeline_dtype(&dtypes[x]))
         .enumerate()
     {
         env = add_type_annot(dest, tag, call.info, env)?;
         env = add_overrideable_constraint(
             dest,
             tag,
-            &ValQuot::Extract(MetaVar::new_var_name(&tuple_name), idx + 1),
+            &ValQuot::Extract(VarName::from(&tuple_name).into(), idx + 1),
             call.info,
             env,
         )?;
@@ -860,12 +939,10 @@ fn unify_call(
 /// Any unspecified annotations are going to be assumed to match up with the
 /// spec. Requires that the input and output variables of a given dimension
 /// (timeline, value, etc.) are kept in the same relative order as the spec.
-#[allow(clippy::too_many_arguments)]
 fn add_io_constraints(
     mut env: NodeEnv,
-    inputs: &mut [(String, TripleTag)],
-    input_overrides: &[(String, TripleTag)],
-    outputs: &mut [TripleTag],
+    inputs: &[(String, TripleTag)],
+    outputs: &[TripleTag],
     output_dtypes: &[DataType],
     dtypes: &HashMap<String, DataType>,
     info: Info,
@@ -878,13 +955,6 @@ fn add_io_constraints(
         &is_timeline_dtype,
         1,
     );
-    for (name, tag) in input_overrides {
-        for (n2, t2) in inputs.iter_mut() {
-            if n2 == name {
-                t2.set_specified_info(tag.clone());
-            }
-        }
-    }
     for (idx, (arg_name, fn_in_tag)) in inputs
         .iter()
         .filter(|(arg, _)| is_timeline_dtype(&dtypes[arg]))
@@ -894,7 +964,7 @@ fn add_io_constraints(
             continue;
         }
         let class_name = if let Some(annoted_quot) = &fn_in_tag.timeline.quot_var.spec_var {
-            annoted_quot.clone()
+            ClassName::new(annoted_quot)
         } else {
             let spec_classes = env.get_input_classes();
             assert!(!spec_classes.is_empty());
@@ -905,12 +975,12 @@ fn add_io_constraints(
                 continue;
             }
         };
-        env = super::add_node_eq(arg_name, &class_name, info, env)?;
+        env = super::add_node_eq(VarName::new_ref(arg_name), &class_name, info, env)?;
     }
     let implicit_in = env.get_input_classes()[0].clone();
     for i in 0..num_dims {
         // TODO: allow user to override this
-        env = super::add_node_eq(&format!("_dim{i}"), &implicit_in, info, env)?;
+        env = super::add_node_eq(&VarName::new(format!("_dim{i}")), &implicit_in, info, env)?;
     }
     Ok(env)
 }
@@ -933,10 +1003,10 @@ fn fill_io_tags(
     // the io has already been expanded, so we need to carry over the annotations
     // for fences and encoders
     for (name, tag) in inputs.iter_mut() {
-        fill_tmln_quotient(name, tag, env, START_BLOCK_ID);
+        fill_tmln_quotient(VarName::new_ref(name), tag, env, START_BLOCK_ID);
         if name.contains("::") {
             let record_name = name.split("::").next().unwrap();
-            fill_tmln_quotient(record_name, tag, env, START_BLOCK_ID);
+            fill_tmln_quotient(&VarName::from(record_name), tag, env, START_BLOCK_ID);
         }
         add_tmln_quotient(
             &event_info.get_implicit_in_name(START_BLOCK_ID),
@@ -960,12 +1030,7 @@ fn fill_io_tags(
             tag.timeline.quot = Some(Quotient::Node);
         }
         if let Some(output_class) = output_class {
-            fill_tmln_quotient(
-                &MetaVar::new_class_name(output_class).into_string(),
-                tag,
-                env,
-                FINAL_BLOCK_ID,
-            );
+            fill_tmln_quotient(output_class, tag, env, FINAL_BLOCK_ID);
             if let DataType::Fence(Some(t)) | DataType::Encoder(Some(t)) = dt {
                 if let DataType::RemoteObj { all, .. } = &**t {
                     // annotate all of the following elements of the encoder/fence
@@ -985,12 +1050,7 @@ fn fill_io_tags(
         .filter_map(|(t, dt)| if is_timeline_dtype(dt) { None } else { Some(t) })
     {
         if let Some(node) = annots.get(&out_idx) {
-            fill_tmln_quotient(
-                &MetaVar::new_class_name(node).into_string(),
-                tag,
-                env,
-                FINAL_BLOCK_ID,
-            );
+            fill_tmln_quotient(node, tag, env, FINAL_BLOCK_ID);
         } else {
             add_tmln_quotient(&implicit_out, tag, env, FINAL_BLOCK_ID);
         }
@@ -1047,12 +1107,12 @@ fn add_type_annot(
 fn unify_decl(
     lhs: &str,
     lhs_tag: &TripleTag,
-    rhs: &SchedTerm,
+    rhs: &HirTerm,
     decl_info: Info,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
-    if let SchedTerm::Var { name, info, tag } = rhs {
-        env = add_type_annot(lhs, &TripleTag::from_opt(tag), *info, env)?;
+    if let HirTerm::Var { name, info, tag } = rhs {
+        env = add_type_annot(lhs, tag, *info, env)?;
         env = add_var_constraint(lhs, name, *info, env)?;
     }
     add_type_annot(lhs, lhs_tag, decl_info, env)
@@ -1081,12 +1141,14 @@ fn fill_tmln_tags(
                         add_tmln_quotient(&local_event, t, env, block.id);
                     }
                 }
-                HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
+                HirBody::InAnnotation(_, tags)
+                | HirBody::OutAnnotation(_, tags)
+                | HirBody::Hole { dests: tags, .. } => {
                     for (name, tag) in tags {
-                        fill_tmln_quotient(name, tag, env, block.id);
+                        fill_tmln_quotient(VarName::new_ref(name), tag, env, block.id);
                         if name.contains("::") {
                             let record_name = name.split("::").next().unwrap();
-                            add_tmln_quotient(record_name, tag, env, block.id);
+                            add_tmln_quotient(&VarName::from(record_name), tag, env, block.id);
                         }
                     }
                 }
@@ -1096,23 +1158,28 @@ fn fill_tmln_tags(
                     device_vars,
                     ..
                 } => {
-                    fill_tmln_quotient(&tuple_id(&[encoder.0.clone()]), tags, env, block.id);
-                    fill_tmln_quotient(&encoder.0, &mut encoder.1, env, block.id);
+                    fill_tmln_quotient(
+                        &VarName::new(tuple_id(&[encoder.0.clone()])),
+                        tags,
+                        env,
+                        block.id,
+                    );
+                    fill_tmln_quotient(VarName::new_ref(&encoder.0), &mut encoder.1, env, block.id);
                     for (_, dtag) in device_vars.iter_mut() {
-                        fill_tmln_quotient(&encoder.0, dtag, env, block.id);
+                        fill_tmln_quotient(VarName::new_ref(&encoder.0), dtag, env, block.id);
                     }
                 }
                 HirBody::Submit { dest, tags, .. } => {
-                    fill_tmln_quotient(dest, tags, env, block.id);
+                    fill_tmln_quotient(VarName::new_ref(dest), tags, env, block.id);
                 }
                 HirBody::Sync { dests, tags, .. } => {
-                    let nm = tuple_id(
+                    let nm = VarName::new(tuple_id(
                         &dests
                             .processed()
                             .iter()
                             .map(|(n, _)| n.clone())
                             .collect::<Vec<_>>(),
-                    );
+                    ));
                     fill_tmln_quotient(&nm, tags, env, block.id);
                     for (_, dest_tag) in dests.processed_mut() {
                         add_tmln_quotient(&nm, dest_tag, env, block.id);
@@ -1144,15 +1211,17 @@ fn fill_terminator_tags(block: &mut BasicBlock, env: &NodeEnv, implicit_events: 
     match &mut block.terminator {
         Terminator::CaptureCall { dests, call, .. } | Terminator::Call(dests, call, ..) => {
             for (dest, tag) in dests.iter_mut() {
-                fill_tmln_quotient(dest, tag, env, block.id);
+                fill_tmln_quotient(VarName::new_ref(dest), tag, env, block.id);
                 if dest.contains("::") {
                     let record_name = dest.split("::").next().unwrap();
-                    add_tmln_quotient(record_name, tag, env, block.id);
+                    add_tmln_quotient(&VarName::from(record_name), tag, env, block.id);
                 }
                 add_tmln_quotient(&local_event, tag, env, block.id);
             }
             fill_tmln_quotient(
-                &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
+                &VarName::new(tuple_id(
+                    &dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>(),
+                )),
                 &mut call.tag,
                 env,
                 block.id,
@@ -1173,7 +1242,7 @@ fn fill_local_in_annotations(
     block: usize,
     live_vars: &InOutFacts<LiveVars>,
     dtypes: &HashMap<String, DataType>,
-    last_loc: &str,
+    last_loc: &VarName,
     cfg: &mut Cfg,
     env: &NodeEnv,
 ) {
@@ -1219,7 +1288,7 @@ fn fill_local_in_annotations(
 }
 
 /// Overwrites the tag with the class of the given meta variable
-fn fill_tmln_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
+fn fill_tmln_quotient(name: &dyn UTypeName, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
     super::fill_quotient(name, tag, env, block_id, SpecType::Timeline, false, &|dt| {
         &mut dt.timeline
     });
@@ -1227,7 +1296,7 @@ fn fill_tmln_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: 
 
 /// Attempts to add a timeline quotient to the given tag. Does nothing
 /// if the tag already has a timeline quotient.
-fn add_tmln_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
+fn add_tmln_quotient(name: &dyn UTypeName, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
     super::fill_quotient(name, tag, env, block_id, SpecType::Timeline, true, &|dt| {
         &mut dt.timeline
     });

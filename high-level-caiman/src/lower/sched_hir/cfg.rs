@@ -4,16 +4,20 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use caiman::explication::Hole;
+use smallvec::{smallvec, SmallVec};
+
 use crate::{
-    enum_cast,
     error::Info,
-    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, Tags},
+    parse::ast::{
+        hole_or_var, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, Tags,
+    },
     typing::Context,
 };
 
 use super::{
-    analysis::{compute_continuations, Succs},
-    stmts_to_hir, Hir, HirBody, HirFuncCall, Terminator, TripleTag,
+    analysis::{compute_continuations, DomInfo, Succs},
+    stmts_to_hir, FillIn, Hir, HirBody, HirFuncCall, Terminator, TripleTag,
 };
 
 /// The id of the final block of the canonicalized CFG.
@@ -81,6 +85,84 @@ impl Edge {
     }
 }
 
+pub struct EdgeIter<T> {
+    one: Option<T>,
+    two: Option<T>,
+    i: u8,
+}
+
+impl<T> Iterator for EdgeIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = match self.i {
+            0 => std::mem::take(&mut self.one),
+            1 => std::mem::take(&mut self.two),
+            _ => None,
+        };
+        self.i += 1;
+        r
+    }
+}
+
+impl<'a> IntoIterator for &'a Edge {
+    type Item = &'a usize;
+
+    type IntoIter = EdgeIter<&'a usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Edge::None => EdgeIter {
+                one: None,
+                two: None,
+                i: 0,
+            },
+            Edge::Next(n) => EdgeIter {
+                one: Some(n),
+                two: None,
+                i: 0,
+            },
+            Edge::Select {
+                true_branch,
+                false_branch,
+            } => EdgeIter {
+                one: Some(true_branch),
+                two: Some(false_branch),
+                i: 0,
+            },
+        }
+    }
+}
+
+impl IntoIterator for Edge {
+    type Item = usize;
+
+    type IntoIter = EdgeIter<usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Self::None => EdgeIter {
+                one: None,
+                two: None,
+                i: 0,
+            },
+            Self::Next(n) => EdgeIter {
+                one: Some(n),
+                two: None,
+                i: 0,
+            },
+            Self::Select {
+                true_branch,
+                false_branch,
+            } => EdgeIter {
+                one: Some(true_branch),
+                two: Some(false_branch),
+                i: 0,
+            },
+        }
+    }
+}
+
 /// Something which can be converted to a collection of block ids.
 pub trait NextSet {
     /// Gets the collection of block ids as a vector.
@@ -104,7 +186,11 @@ impl NextSet for BTreeSet<usize> {
 pub struct Cfg {
     pub blocks: HashMap<usize, BasicBlock>,
     pub(super) graph: HashMap<usize, Edge>,
+    /// Reverse (end is first) topological order of `graph`
+    pub(super) topo_order_rev: Vec<usize>,
     pub(super) transpose_graph: HashMap<usize, BTreeSet<usize>>,
+    /// Topo order of `graph`, or reverse topological order of `transpose_graph`
+    pub(super) topo_order: Vec<usize>,
     pub(super) succs: Succs,
 }
 
@@ -112,13 +198,13 @@ pub struct Cfg {
 /// and incrementing the id counter. The current statements are cleared.
 /// # Arguments
 /// * `cur_id` - The id of the next block. For every new block created, this is incremented
-///  and thus always is the id of the next block.
+///     and thus always is the id of the next block.
 /// * `cur_stmt` - The list of scheduling statements that are part of this block.
 /// * `term` - The terminator for the block.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
-/// This is the next block in the parent stack frame.
+///     This is the next block in the parent stack frame.
 /// * `cont_block` - The block whose live-out set is the return arguments of this block. This is
-/// either the block itself (`None`), or the block's continuation.
+///     either the block itself (`None`), or the block's continuation.
 /// * `src_loc` - The source location of the block.
 /// # Returns
 /// The newly created basic block.
@@ -255,7 +341,7 @@ fn handle_return(
     blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
     cur_stmts: &mut Vec<SchedStmt>,
-    sched_expr: SchedExpr,
+    sched_expr: &SchedExpr,
     join_edge: Edge,
     end: Info,
     ret_names: Vec<(String, Option<Tags>)>,
@@ -275,6 +361,7 @@ fn handle_return(
                 dests: ast_to_hir_named_tags(ret_names),
                 rets: expr_to_multi_node_id(sched_expr),
                 passthrough: vec![],
+                extra_uses: FillIn::Initial(()),
             },
             None,
             info,
@@ -296,13 +383,13 @@ fn handle_return(
 /// * `false_block` - The list of scheduling statements for the false branch of the select.
 /// * `end_info` - The source location of the select statement.
 /// * `children` - The list of pending children to add to that will queue up the
-///  children of this block to be processed in the next BFS level.
+///     children of this block to be processed in the next BFS level.
 #[allow(clippy::too_many_arguments)]
 fn handle_select(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
     cur_stmts: &mut Vec<SchedStmt>,
-    guard: SchedExpr,
+    guard: &SchedExpr,
     tag: Option<Vec<crate::parse::ast::Tag>>,
     true_block: Vec<SchedStmt>,
     false_block: Vec<SchedStmt>,
@@ -326,6 +413,7 @@ fn handle_select(
                 dests: ast_to_hir_named_tags(dests),
                 guard: expr_to_node_id(guard),
                 tag: TripleTag::from_owned_opt(tag),
+                extra_uses: FillIn::Initial(()),
             },
             Some(*cur_id + 1),
             info,
@@ -414,14 +502,14 @@ fn handle_call(
 /// # Arguments
 /// * `block` - The sequence statement to handle.
 /// * `cur_stmts` - The list of scheduling statements to convert to blocks. Will be
-/// cleared for the continuation block.
+///     cleared for the continuation block.
 /// * `info` - The source location of the sequence statement.
 /// * `dests` - The list of variables to assign the return values to.
 /// * `cur_id` - The id of the next block. For every new block created, this is incremented
 ///   and thus always is the id of the next block.
 /// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
 /// * `children` - The list of pending children to add to that will queue up the
-/// children of this block to be processed in the next BFS level.
+///     children of this block to be processed in the next BFS level.
 /// * `last_info` - Will become the source location of the last statement in the sequence.
 #[allow(clippy::too_many_arguments)]
 fn handle_seq(
@@ -454,7 +542,7 @@ fn handle_seq(
             cur_id,
             blocks,
             cur_stmts,
-            guard,
+            &guard,
             tag,
             true_block,
             false_block,
@@ -490,7 +578,7 @@ fn handle_seq(
 /// * `stmts` - The list of scheduling statements to convert to blocks.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
 /// * `ret_names` - The names of the return variables to write to in order to return
-///  from the current scope.
+///     from the current scope.
 #[allow(clippy::too_many_lines)]
 fn make_blocks(
     cur_id: &mut usize,
@@ -523,7 +611,7 @@ fn make_blocks(
                     blocks,
                     edges,
                     &mut cur_stmts,
-                    sched_expr,
+                    &sched_expr,
                     join_edge,
                     end,
                     ret_names.to_vec(),
@@ -544,7 +632,7 @@ fn make_blocks(
                     cur_id,
                     blocks,
                     &mut cur_stmts,
-                    guard,
+                    &guard,
                     tag,
                     true_block,
                     false_block,
@@ -678,6 +766,155 @@ fn make_child_blocks(
     }
 }
 
+/// Reverse topological order
+fn topo_order_rev<T>(adj_lst: &HashMap<usize, T>, start_id: usize) -> Vec<usize>
+where
+    for<'a> &'a T: IntoIterator<Item = &'a usize>,
+{
+    enum Node {
+        Start(usize),
+        Finished(usize),
+    }
+    use Node::{Finished, Start};
+
+    let mut reversed_order = vec![];
+    let mut is_done = HashSet::new();
+    let mut stack = vec![];
+    stack.push(Start(start_id));
+    while let Some(n) = stack.pop() {
+        match n {
+            Start(n) => {
+                if is_done.contains(&n) {
+                    continue;
+                }
+                stack.push(Finished(n));
+                for next in &adj_lst[&n] {
+                    stack.push(Start(*next));
+                }
+            }
+            Finished(n) => {
+                reversed_order.push(n);
+                is_done.insert(n);
+            }
+        }
+    }
+    reversed_order
+}
+
+/// A location in the CFG `(block num, local instr idx)`
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub struct Loc(pub usize, pub usize);
+
+impl Loc {
+    /// Returns `self <= b`, that is there is a (possibly empty) path from `self` to `b`.
+    pub fn lte(&self, cfg: &Cfg, b: &Self) -> bool {
+        if self.0 == b.0 {
+            self.1 <= b.1
+        } else {
+            cfg.succs.succs[&self.0].contains(&b.0)
+        }
+    }
+
+    pub fn dom(&self, doms: &DomInfo, b: &Self) -> bool {
+        if self.0 == b.0 {
+            self.1 <= b.1
+        } else {
+            doms.dom(self.0, b.0)
+        }
+    }
+
+    pub fn pdom(&self, doms: &DomInfo, b: &Self) -> bool {
+        if self.0 == b.0 {
+            self.1 >= b.1
+        } else {
+            doms.postdom(self.0, b.0)
+        }
+    }
+
+    /// Gets the immediate successor locations of the current location
+    pub fn succs(&self, cfg: &Cfg) -> SmallVec<[Self; 2]> {
+        if cfg.blocks[&self.0].stmts.len() > self.1 {
+            // note: terminator has local id of `stmts.len()`
+            smallvec![Self(self.0, self.1 + 1)]
+        } else if let Some(edge) = cfg.graph.get(&self.0) {
+            let mut res = SmallVec::new();
+            for next_block in edge {
+                res.push(Self(*next_block, 0));
+            }
+            res
+        } else {
+            smallvec![]
+        }
+    }
+}
+
+impl std::fmt::Display for Loc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.0, self.1)
+    }
+}
+
+/// `A` collectively dominates `B` if all paths to any element in `B` contains
+/// some element in `A`. Implemented as a trait to get more natural "infix"
+/// notation using a receiver object.
+pub trait CollectiveDom {
+    /// `A` collectively dominates `B` if all paths to any element in `B` contains
+    /// some element in `A`.
+    fn cdom(&self, cfg: &Cfg, b: &Self) -> bool;
+}
+
+/// Returns true if, starting from `start`, we can reach some element in `goal_set`
+/// without crossing an element in `blocking_set`.
+///
+/// We check membership of the blocking set before the goal set. So if we reach
+/// an element that is both in the blocking and goal set, we consider that we
+/// don't reach the goal.
+pub fn can_reach_goal(
+    cfg: &Cfg,
+    start: &Loc,
+    blocking_set: &HashSet<Loc>,
+    goal_set: &HashSet<Loc>,
+) -> bool {
+    let mut q = Vec::new();
+    q.push(start.clone());
+    let mut visited = HashSet::new();
+    'worklist: while let Some(s) = q.pop() {
+        if blocking_set.contains(&s) {
+            continue;
+        }
+        if goal_set.contains(&s) {
+            return true;
+        }
+        let blk = &cfg.blocks[&s.0];
+        if visited.contains(&s.0) {
+            continue;
+        }
+        visited.insert(s.0);
+        for local_id in s.1..=blk.stmts.len() {
+            if blocking_set.contains(&Loc(s.0, local_id)) {
+                continue 'worklist;
+            }
+            if goal_set.contains(&Loc(s.0, local_id)) {
+                return true;
+            }
+        }
+        for succ in cfg.graph[&s.0] {
+            q.push(Loc(succ, 0));
+        }
+    }
+    false
+}
+
+impl CollectiveDom for HashSet<Loc> {
+    fn cdom(&self, cfg: &Cfg, b: &Self) -> bool {
+        if self.is_empty() {
+            false
+        } else {
+            !can_reach_goal(cfg, &Loc(START_BLOCK_ID, 0), self, b)
+        }
+    }
+}
+
 impl Cfg {
     /// Create a new CFG from a list of scheduling statements
     /// # Arguments
@@ -717,10 +954,14 @@ impl Cfg {
                 .collect::<Vec<_>>(),
             ctx,
         );
+        let transpose_graph = Self::transpose(&edges);
+        let topo_order_rev = topo_order_rev(&edges, START_BLOCK_ID);
         compute_continuations(
             Self {
                 blocks,
-                transpose_graph: Self::transpose(&edges),
+                topo_order: topo_order_rev.iter().copied().rev().collect(),
+                topo_order_rev,
+                transpose_graph,
                 graph: edges,
                 succs: Succs::default(),
             }
@@ -855,20 +1096,19 @@ impl Cfg {
 /// Converts an expression to a node Id, assuming the expression is just a variable
 /// # Panics
 /// Panics if the expression is not a variable
-fn expr_to_node_id(e: SchedExpr) -> String {
-    let t = enum_cast!(SchedExpr::Term, e);
-    enum_cast!(SchedTerm::Var { name, .. }, name, t)
+fn expr_to_node_id(e: &SchedExpr) -> Hole<String> {
+    hole_or_var(e).unwrap().cloned()
 }
 
 /// Converts an expression to a list of node Ids, assuming the expression is just a variable
 /// or a tuple of variables
-fn expr_to_multi_node_id(e: SchedExpr) -> Vec<String> {
+fn expr_to_multi_node_id(e: &SchedExpr) -> Vec<Hole<String>> {
     if let SchedExpr::Term(SchedTerm::Lit {
         lit: SchedLiteral::Tuple(lits),
         ..
     }) = e
     {
-        lits.into_iter().map(expr_to_node_id).collect()
+        lits.iter().map(expr_to_node_id).collect()
     } else {
         vec![expr_to_node_id(e)]
     }

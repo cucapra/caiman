@@ -1,4 +1,4 @@
-#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::all, clippy::pedantic, clippy::nursery, dead_code)]
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
@@ -41,6 +41,7 @@ match {
 pub Program: Program = { 
     "#version" <maj_min: r"[0-9]+[.][0-9]+"> "." <patch: r"[0-9]+">
     <tls: TopLevel*> =>? astf.program(maj_min, patch, tls), 
+    <TopLevel*> => <>,
 }
 
 // Top level statements and declarations
@@ -183,6 +184,21 @@ MaybeArgFullType: (String, Option<FullType>) = {
         tags: t,
     })),
     <i: Id> => (String::from(i), None),
+
+    "_" ":" <b: FlaggedType> => (String::from("_"), Some(FullType {
+        base: Some(b),
+        tags: vec![],
+    })),
+    "_" ":" <b: FlaggedType> <t: TagOp> => (String::from("_"), Some(FullType {
+        base: Some(b),
+        tags: t,
+    })),
+    "_" <t: TagOp> => (String::from("_"), Some(FullType {
+        base: None,
+        tags: t,
+    })),
+    "_" => (String::from("_"), None),
+    
 }
 
 MaybeArgTaggedType: (String, Option<Vec<Tag>>) = { 
@@ -387,6 +403,7 @@ SchedCallStmt: SchedFuncCall = {
 #[inline]
 SchedAtom<L>: SchedTerm = {
     <@L> "?" <@R> => astf.sched_hole_expr(<>),
+    <@L> "???" <@R> => astf.sched_big_hole_expr(<>),
     <@L> <Id> <TagOp?> <@R> => astf.sched_var(<>),
     <l: @L> <s: r"_dim[0-9]"> <k: TagOp?> <r: @R> => astf.sched_var(l, s.to_string(), k, r),
     <@L> <L> <TagOp?> <@R> => astf.sched_lit(<>),

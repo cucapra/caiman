@@ -149,6 +149,7 @@ def process_inputs(
     quiet: bool,
 ) -> ProcessStatistics:
     lf = (test_dir / "src" / "lib.rs").open(mode="w")
+    lf.write("#![allow(dead_code)]\n")
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0, 0, 0)
     if not inputs:

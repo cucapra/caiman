@@ -1,0 +1,94 @@
+val value(a: i32) -> i32 {
+    t :- a * 2
+    x :- t + t
+    z :- t + x
+    y :- a if 0 > a else x
+    returns y + z
+
+}
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(b: BufferSpace) -> BufferSpace {
+    returns b
+}
+
+fn main(a: i32) -> i32 impls value, time, space {
+    var z;
+    ???;
+    let y = if 0 > a {
+        /* #CHECK-LABEL:
+        name: FuncletId(
+            "_main3",
+        ),
+        args: [...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_z%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+        #END */
+        let t = a * 2;
+        ???;
+        a
+    } else {
+        ???
+    };
+    /* #CHECK-LABEL:
+    name: FuncletId(
+        "_main2",
+    ),
+    args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "_z%0_ref",
+                ),
+            ),
+            typ: TypeId(
+                "&i32",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "z",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+    #END */
+    ???;
+    y + z
+}

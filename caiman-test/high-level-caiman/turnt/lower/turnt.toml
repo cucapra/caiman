@@ -1,0 +1,2 @@
+command = """../../../../target/debug/hlc --lower {filename} \
+             | python3 ../../../fcheck.py {filename} -d bool_t=I32"""

@@ -76,7 +76,7 @@ impl From<Info> for ErrorLocation {
 }
 
 /// An error that occurs in a single file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalError {
     pub kind: ErrorKind,
     pub location: ErrorLocation,
@@ -125,11 +125,33 @@ impl std::fmt::Debug for Error {
     }
 }
 
-/// Constructs a type error
+#[macro_export]
+macro_rules! type_error {
+    ($loc:expr, $($msg:expr),*) => {
+        $crate::error::LocalError {
+            kind: $crate::error::ErrorKind::TypeError(format!($($msg),*)),
+            location: $loc.into(),
+        }
+    };
+}
+
+/// Strips a name of all the adornments added in high-level caiman to return the original name
+/// as specified in the source file.
 #[must_use]
-pub fn type_error(info: Info, msg: &str) -> LocalError {
-    LocalError {
-        kind: ErrorKind::TypeError(msg.to_string()),
-        location: info.into(),
+pub fn hir_to_source_name(mut n: &str) -> String {
+    fn trim(mut n: &str) -> &str {
+        if let Some(dot_idx) = n.find('.') {
+            n = &n[0..dot_idx];
+        }
+        n
     }
+    let suffix = n.find("::").map(|end_loc| trim(&n[end_loc..]).to_string());
+    if let Some(percent_loc) = n.find('%') {
+        n = &n[0..percent_loc];
+    }
+    if let Some(starting_char) = n.find(|s| char::is_ascii_alphabetic(&s)) {
+        n = &n[starting_char..];
+    }
+    n = trim(n);
+    suffix.map_or_else(|| n.to_string(), |suffix| format!("{n}{suffix}"))
 }

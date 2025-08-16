@@ -1,4 +1,4 @@
-# version 0.1.0
+#version 0.1.0
 fn foo() -> i64 impls a {
     if true {
         10

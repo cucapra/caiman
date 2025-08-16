@@ -1,5 +1,5 @@
 Error: At "bad_enc_arg.cm" 74:5 - 74:33, 
-  Type Error: Failed to unify type constraints of variable e2_0
+  Type Error: Failed to unify type constraints of variable 'e2'
 Encoder(
     RemoteObj(
         Record {
@@ -19,11 +19,6 @@ Encoder(
                 0,
             ),
         },
-        Record {
-            x_gpu: Var(
-                1,
-            ),
-        },
     ),
 )
 	!=
@@ -37,12 +32,5 @@ Encoder(
             ),
         },
         Record,
-        Record {
-            z_gpu: Num(
-                Int(
-                    I32,
-                ),
-            ),
-        },
     ),
 )

@@ -1,0 +1,25 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(s: BufferSpace) -> BufferSpace {
+    returns s
+}
+
+val foo() -> i64 {
+    a :- 10
+    b :- 10
+    c :- b + a
+    returns c + a
+}
+
+fn main() -> i64 impls time, space, foo {
+    let x @ node(val.b) = 10;
+    let y = 10 @ node(val.a);
+    let x @ node(val.c) = ? + ?;
+    ? + ?
+}
+
+pipeline main { main }

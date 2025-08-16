@@ -1,2 +1,2 @@
 Error: At "bad_assign2.cm" 19:5 - 19:12, 
-  Type Error: Immutable variable _f1_0 cannot be assigned to or have its reference taken
+  Type Error: Immutable variable 'f1' cannot be assigned to or have its reference taken

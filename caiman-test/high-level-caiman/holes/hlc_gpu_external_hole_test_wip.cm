@@ -33,17 +33,13 @@ sptl foo_space(bs: BufferSpace) -> BufferSpace { returns bs }
 fn foo_main(x: &i32) -> i32 
     impls foo, foo_time, foo_space
 {
-    @in { input: node(tmln.e) };
-    let e = encode-begin @ node(tmln.(enc1, enc2)) gpu;
-    encode e.copy[x_gpu <- x];
-    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu) @ node(val.r)];
-    let f = submit @ node(tmln.sub) e;
+    let e = encode-begin gpu;
+    encode e.copy[x_gpu <- ?];
+    encode e.call[y_gpu <- simple'<1, 1, 1>(x_gpu)];
+    let f = submit e;
 
 
-    let y = await @ node(tmln.snc) f;
-    let result = y.z_gpu;
-    @out { output: node(tmln.out), input: node(tmln.out) };
-    result
+    (await f).y_gpu
 
 }
 

@@ -2,17 +2,19 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    error::{type_error, Info, LocalError},
+    error::{Info, LocalError},
     lower::tuple_id,
     parse::ast::{
         Binop, DataType, FlaggedType, IntSize, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
         TemplateArgs,
     },
+    type_error,
+    typing::types::ClassName,
 };
 
 use super::{
     binop_to_contraints,
-    types::{DTypeConstraint, MetaVar, ValQuot},
+    types::{DTypeConstraint, ValQuot, VarName},
     DTypeEnv, NodeEnv, Signature, SpecInfo, TypedBinop, UnresolvedTypedBinop,
 };
 
@@ -24,7 +26,7 @@ fn collect_spec_names(
     let mut res = HashSet::new();
     for (name, _) in &ctx.sig.input {
         if res.contains(name) {
-            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
+            return Err(type_error!(ctx.info, "Duplicate node: {name}"));
         }
         res.insert(name.clone());
     }
@@ -33,7 +35,7 @@ fn collect_spec_names(
             SpecStmt::Assign { lhs, info, .. } => {
                 for (name, _) in lhs {
                     if res.contains(name) {
-                        return Err(type_error(*info, &format!("Duplicate node: {name}")));
+                        return Err(type_error!(*info, "Duplicate node: {name}"));
                     }
                     res.insert(name.clone());
                 }
@@ -94,30 +96,26 @@ fn get_target_signature(
         _ => (
             signatures
                 .get(callee)
-                .ok_or_else(|| type_error(info, &format!("Unknown spec `{callee}` invoked")))?
+                .ok_or_else(|| type_error!(info, "Unknown spec '{callee}' invoked"))?
                 .input
                 .clone(),
             signatures.get(callee).unwrap().output.clone(),
         ),
     };
     if args.len() != input_types.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "Wrong number of arguments to function {callee}: expected {}, got {}",
-                input_types.len(),
-                args.len(),
-            ),
+            "Wrong number of arguments to function '{callee}': expected {}, got {}",
+            input_types.len(),
+            args.len()
         ));
     }
     if num_dests != output_types.len() {
-        return Err(type_error(
+        return Err(type_error!(
             info,
-            &format!(
-                "Wrong number of return values from function {callee}: expected {}, got {}",
-                output_types.len(),
-                num_dests,
-            ),
+            "Wrong number of return values from function '{callee}': expected {}, got {}",
+            output_types.len(),
+            num_dests
         ));
     }
     Ok((input_types, output_types))
@@ -134,13 +132,13 @@ fn is_single_return_builtin(fn_name: &str) -> bool {
 /// to a function call.
 /// # Panics
 /// Panics if the arguments are not lowered to variables
-fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Vec<String> {
+fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Vec<(String, Info)> {
     let mut arg_nodes: Vec<_> = args
         .iter()
         .map(|arg| {
             let t = enum_cast!(SpecExpr::Term, arg);
-            let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-            name.to_string()
+            let (name, info) = enum_cast!(SpecTerm::Var { name, info }, (name, info), t);
+            (name.to_string(), *info)
         })
         .collect();
     if let Some(TemplateArgs::Vals(vs)) = templates {
@@ -148,8 +146,8 @@ fn get_call_arguments(args: &[SpecExpr], templates: &Option<TemplateArgs>) -> Ve
             .iter()
             .map(|arg| {
                 let t = enum_cast!(SpecExpr::Term, arg);
-                let name = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-                name.to_string()
+                let (name, info) = enum_cast!(SpecTerm::Var { name, info }, (name, info), t);
+                (name.to_string(), *info)
             })
             .collect();
         res.extend(arg_nodes);
@@ -169,6 +167,7 @@ fn collect_spec_assign_call(
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<String, LocalError> {
     if let SpecExpr::Term(SpecTerm::Var {
         name: func_name, ..
@@ -177,6 +176,11 @@ fn collect_spec_assign_call(
         let (input_types, output_types) =
             get_target_signature(func_name, signatures, args, lhs.len(), info)?;
         let arg_nodes = get_call_arguments(args, templates);
+        for (arg, arg_info) in &arg_nodes {
+            if !defined_nodes.contains(arg) {
+                return Err(type_error!(*arg_info, "Undefined node '{arg}'"));
+            }
+        }
         let single_ret_builtin = is_single_return_builtin(func_name);
         assert!(!single_ret_builtin || lhs.len() == 1);
         let tuple_name = if single_ret_builtin {
@@ -186,23 +190,23 @@ fn collect_spec_assign_call(
         };
         if single_ret_builtin {
             ctx.nodes.add_quotient(
-                &tuple_name,
+                ClassName::new(&tuple_name),
                 ValQuot::CallOne(
                     func_name.clone(),
                     arg_nodes
                         .iter()
-                        .map(|x| MetaVar::new_class_name(x))
+                        .map(|(x, _)| ClassName::new(x).into())
                         .collect(),
                 ),
             );
         } else {
             ctx.nodes.add_quotient(
-                &tuple_name,
+                ClassName::new(&tuple_name),
                 ValQuot::Call(
                     func_name.clone(),
                     arg_nodes
                         .iter()
-                        .map(|x| MetaVar::new_class_name(x))
+                        .map(|(x, _)| ClassName::new(x).into())
                         .collect(),
                 ),
             );
@@ -210,9 +214,9 @@ fn collect_spec_assign_call(
         for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
                 if a != &typ.base {
-                    return Err(type_error(
+                    return Err(type_error!(
                         info,
-                        &format!("Annotation of {name} conflicts with return type of {func_name}",),
+                        "Annotation of '{name}' conflicts with return type of '{func_name}'"
                     ));
                 }
             }
@@ -220,19 +224,21 @@ fn collect_spec_assign_call(
                 .add_dtype_constraint(name, typ.base.clone(), info)?;
             if !single_ret_builtin {
                 ctx.nodes.add_quotient(
-                    name,
-                    ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
+                    ClassName::new(name),
+                    ValQuot::Extract(ClassName::new(&tuple_name).into(), idx),
                 );
             }
         }
         let num_dims = dimensions.get(func_name).copied().unwrap_or(0);
-        for arg_name in arg_nodes.iter().take(num_dims) {
+        for (arg_name, arg_info) in arg_nodes.iter().take(num_dims) {
             ctx.types
-                .add_dtype_constraint(arg_name, DataType::Int(IntSize::I32), info)?;
+                .add_dtype_constraint(arg_name, DataType::Int(IntSize::I32), *arg_info)?;
         }
-        for (arg_name, arg_type) in arg_nodes.iter().skip(num_dims).zip(input_types.iter()) {
+        for ((arg_name, arg_info), arg_type) in
+            arg_nodes.iter().skip(num_dims).zip(input_types.iter())
+        {
             ctx.types
-                .add_dtype_constraint(arg_name, arg_type.base.clone(), info)?;
+                .add_dtype_constraint(arg_name, arg_type.base.clone(), *arg_info)?;
         }
         Ok(func_name.clone())
     } else {
@@ -251,11 +257,12 @@ fn collect_spec_assign_term(
     signatures: &HashMap<String, Signature>,
     dimensions: &HashMap<String, usize>,
     called_specs: &mut HashSet<String>,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
             ctx.nodes.add_quotient(
-                &lhs[0].0,
+                ClassName::new(&lhs[0].0),
                 match lit {
                     SpecLiteral::Int(i) => ValQuot::Int(i.clone()),
                     SpecLiteral::Bool(b) => ValQuot::Bool(*b),
@@ -287,7 +294,15 @@ fn collect_spec_assign_term(
             ..
         } => {
             let r = collect_spec_assign_call(
-                lhs, function, args, templates, ctx, signatures, dimensions, *info,
+                lhs,
+                function,
+                args,
+                templates,
+                ctx,
+                signatures,
+                dimensions,
+                *info,
+                defined_nodes,
             )?;
             called_specs.insert(r);
             Ok(())
@@ -310,16 +325,32 @@ fn collect_spec_assign_if(
     guard: &SpecExpr,
     ctx: &mut SpecEnvs,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     if let (
-        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
-        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name1,
+            info: info1,
+        }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name2,
+            info: info2,
+        }),
         SpecExpr::Term(SpecTerm::Var {
             name: guard,
             info: g_info,
         }),
     ) = (if_true, if_false, guard)
     {
+        if !defined_nodes.contains(name1) {
+            return Err(type_error!(*info1, "Undefined node '{name1}'"));
+        }
+        if !defined_nodes.contains(name2) {
+            return Err(type_error!(*info2, "Undefined node '{name2}'"));
+        }
+        if !defined_nodes.contains(guard) {
+            return Err(type_error!(*g_info, "Undefined node '{guard}'"));
+        }
         ctx.types
             .add_dtype_constraint(guard, DataType::Bool, *g_info)?;
         ctx.types.add_var_equiv(name1, name2, info)?;
@@ -328,11 +359,11 @@ fn collect_spec_assign_if(
             ctx.types.add_dtype_constraint(&lhs[0].0, t.clone(), info)?;
         }
         ctx.nodes.add_quotient(
-            &lhs[0].0,
+            ClassName::new(&lhs[0].0),
             ValQuot::Select {
-                guard: MetaVar::new_class_name(guard),
-                true_id: MetaVar::new_class_name(name1),
-                false_id: MetaVar::new_class_name(name2),
+                guard: ClassName::new(guard).into(),
+                true_id: ClassName::new(name1).into(),
+                false_id: ClassName::new(name2).into(),
             },
         );
     } else {
@@ -349,6 +380,7 @@ fn collect_spec_assign_if(
 /// # Panics
 /// Panics if the statement is not lowered or it uses a variable that is
 /// undefined (i.e. not present in `names`).
+#[allow(clippy::too_many_arguments)]
 fn collect_spec_assign_bop(
     op_l: &SpecExpr,
     op_r: &SpecExpr,
@@ -357,12 +389,25 @@ fn collect_spec_assign_bop(
     lhs: &[(String, Option<DataType>)],
     ctx: &mut SpecEnvs,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     if let (
-        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
-        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name1,
+            info: info1,
+        }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: name2,
+            info: info2,
+        }),
     ) = (op_l, op_r)
     {
+        if !defined_nodes.contains(name1) {
+            return Err(type_error!(*info1, "Undefined node '{name1}'"));
+        }
+        if !defined_nodes.contains(name2) {
+            return Err(type_error!(*info2, "Undefined node '{name2}'"));
+        }
         let (left_constraint, right_constraint, ret_constraint) =
             binop_to_contraints(op, &mut ctx.types.env);
         ctx.types
@@ -382,11 +427,11 @@ fn collect_spec_assign_bop(
             ret: lhs[0].0.clone(),
         });
         ctx.nodes.add_quotient(
-            &lhs[0].0,
+            ClassName::new(&lhs[0].0),
             ValQuot::Bop(
                 op,
-                MetaVar::new_class_name(name1),
-                MetaVar::new_class_name(name2),
+                ClassName::new(name1).into(),
+                ClassName::new(name2).into(),
             ),
         );
     } else {
@@ -402,30 +447,22 @@ fn resolve_types(
     ctx: &mut SpecInfo,
 ) -> Result<(), LocalError> {
     for name in names {
-        match env.env.get_type(name) {
+        match env.env.get_type(VarName::new_ref(name)) {
             Some(c) => {
                 let dt = DTypeConstraint::try_from(c.clone()).map_err(|e| {
-                    type_error(
-                        ctx.info,
-                        &format!("Failed to resolve type of variable {name}: {e}"),
-                    )
+                    type_error!(ctx.info, "Failed to resolve type of variable '{name}': {e}")
                 })?;
                 ctx.types.insert(
                     name.clone(),
-                    dt.try_into().map_err(|_| {
-                        type_error(
+                    dt.try_into().map_err(|()| {
+                        type_error!(
                             ctx.info,
-                            &format!("Failed to resolve type of variable {name}. Not enough constraints."),
+                            "Failed to resolve type of variable '{name}'. Not enough constraints."
                         )
                     })?,
                 );
             }
-            None => {
-                return Err(type_error(
-                    ctx.info,
-                    &format!("Undefined variable {name} in spec",),
-                ))
-            }
+            None => return Err(type_error!(ctx.info, "Undefined variable '{name}' in spec")),
         }
     }
     Ok(())
@@ -435,13 +472,15 @@ fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError
     let info = ctx.info;
     for (arg, typ) in ctx.sig.input.clone() {
         env.types.add_dtype_constraint(&arg, typ.base, info)?;
-        env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
+        env.nodes
+            .add_quotient(ClassName::new(&arg), ValQuot::Input(arg.clone()));
     }
     for i in 0..ctx.sig.num_dims {
         let name = format!("_dim{i}");
         env.types
             .add_dtype_constraint(&name, DataType::Int(IntSize::I32), info)?;
-        env.nodes.add_quotient(&name, ValQuot::Input(name.clone()));
+        env.nodes
+            .add_quotient(ClassName::new(&name), ValQuot::Input(name.clone()));
     }
     Ok(())
 }
@@ -451,25 +490,24 @@ fn collect_spec_returns(
     ctx: &SpecInfo,
     e: &SpecExpr,
     info: Info,
+    defined_nodes: &HashSet<String>,
 ) -> Result<(), LocalError> {
     env.nodes.set_output_classes(&ctx.sig);
     match e {
         SpecExpr::Term(SpecTerm::Var { name, .. }) => {
             if ctx.sig.output.len() != 1 {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "Wrong number of return values: expected {}, got {}",
-                        ctx.sig.output.len(),
-                        1,
-                    ),
+                    "Wrong number of return values: expected {}, got {}",
+                    ctx.sig.output.len(),
+                    1
                 ));
             }
             env.types
                 .add_dtype_constraint(name, ctx.sig.output[0].1.base.clone(), info)?;
             env.nodes.add_quotient(
-                &ctx.sig.output[0].0,
-                ValQuot::Output(MetaVar::new_class_name(name)),
+                ClassName::new(&ctx.sig.output[0].0),
+                ValQuot::Output(ClassName::new(name).into()),
             );
             Ok(())
         }
@@ -481,27 +519,34 @@ fn collect_spec_returns(
             ..,
         ) => {
             if rets.len() != ctx.sig.output.len() {
-                return Err(type_error(
+                return Err(type_error!(
                     info,
-                    &format!(
-                        "Wrong number of return values: expected {}, got {}",
-                        ctx.sig.output.len(),
-                        rets.len(),
-                    ),
+                    "Wrong number of return values: expected {}, got {}",
+                    ctx.sig.output.len(),
+                    rets.len()
                 ));
             }
             let mut constraints = vec![];
             for (r, out) in rets.iter().zip(ctx.sig.output.iter()) {
-                if let SpecExpr::Term(SpecTerm::Var { name, .. }) = r {
+                if let SpecExpr::Term(SpecTerm::Var {
+                    name,
+                    info: name_info,
+                }) = r
+                {
                     constraints.push((name, out.clone()));
+                    if !defined_nodes.contains(name) {
+                        return Err(type_error!(*name_info, "Undefined node '{name}'"));
+                    }
                 } else {
                     panic!("Not lowered")
                 }
             }
             for (name, (class, typ)) in constraints {
                 env.types.add_dtype_constraint(name, typ.base, info)?;
-                env.nodes
-                    .add_quotient(&class, ValQuot::Output(MetaVar::new_class_name(name)));
+                env.nodes.add_quotient(
+                    ClassName::new(&class),
+                    ValQuot::Output(ClassName::new(name).into()),
+                );
             }
             Ok(())
         }
@@ -528,9 +573,9 @@ impl SpecEnvs {
 /// # Arguments
 /// * `stmts` - the statements to scan
 /// * `externs` - a set of all extern operations used in `stmts`. This is updated
-/// as we scan `stmts` for all new extern operations.
+///     as we scan `stmts` for all new extern operations.
 /// * `types` - a map from variable names to their types. This is updated as
-/// we scan `stmts` for all new variables.
+///     we scan `stmts` for all new variables.
 /// * `signatures` - a map from spec names to their signatures
 pub(super) fn collect_spec(
     stmts: &Vec<SpecStmt>,
@@ -554,6 +599,7 @@ pub(super) fn collect_spec(
                         signatures,
                         dimensions,
                         &mut called_specs,
+                        &names,
                     )?;
                 }
                 SpecExpr::Conditional {
@@ -561,7 +607,9 @@ pub(super) fn collect_spec(
                     guard,
                     if_false,
                     info,
-                } => collect_spec_assign_if(lhs, if_true, if_false, guard, &mut env, *info)?,
+                } => {
+                    collect_spec_assign_if(lhs, if_true, if_false, guard, &mut env, *info, &names)?;
+                }
                 SpecExpr::Binop {
                     op,
                     lhs: op_l,
@@ -575,11 +623,12 @@ pub(super) fn collect_spec(
                     lhs,
                     &mut env,
                     *info,
+                    &names,
                 )?,
 
                 SpecExpr::Uop { .. } => todo!(),
             },
-            SpecStmt::Returns(info, e) => collect_spec_returns(&mut env, ctx, e, *info)?,
+            SpecStmt::Returns(info, e) => collect_spec_returns(&mut env, ctx, e, *info, &names)?,
         }
     }
     resolve_types(&env.types, &names, ctx)?;

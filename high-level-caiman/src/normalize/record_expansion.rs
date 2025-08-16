@@ -15,7 +15,6 @@ fn insert_record_args(
     new_inputs: &mut Vec<(String, Option<FullType>)>,
     record_types: &Vec<(String, DataType)>,
     read: &BTreeSet<String>,
-    write: &BTreeSet<String>,
     flags: &BTreeSet<WGPUFlags>,
     settings: &BTreeSet<WGPUSettings>,
     tags: &[Tag],
@@ -29,10 +28,8 @@ fn insert_record_args(
             if read.contains(field_nm) {
                 flags.insert(WGPUFlags::MapRead);
             }
-            if write.contains(field_nm) {
-                flags.insert(WGPUFlags::CopyDst);
-            }
             flags.insert(WGPUFlags::Storage);
+            flags.insert(WGPUFlags::CopyDst);
         }
         new_inputs.push((
             format!("{arg_prefix}::{field_nm}"),
@@ -74,7 +71,7 @@ fn replace_io<T: IntoIterator<Item = (String, Option<FullType>)>>(
                     }),
                 tags,
             }) => {
-                if let DataType::RemoteObj { all, read, write } = &**t {
+                if let DataType::RemoteObj { all, read } = &**t {
                     new_inputs.push((
                         input_nm.clone(),
                         Some(FullType {
@@ -91,7 +88,6 @@ fn replace_io<T: IntoIterator<Item = (String, Option<FullType>)>>(
                         &mut new_inputs,
                         all,
                         read,
-                        write,
                         &flags,
                         &settings,
                         &tags,
@@ -106,7 +102,7 @@ fn replace_io<T: IntoIterator<Item = (String, Option<FullType>)>>(
             Some(FullType {
                 base:
                     Some(FlaggedType {
-                        base: DataType::RemoteObj { all, read, write },
+                        base: DataType::RemoteObj { all, read },
                         flags,
                         info,
                         settings,
@@ -116,7 +112,6 @@ fn replace_io<T: IntoIterator<Item = (String, Option<FullType>)>>(
                 &mut new_inputs,
                 &all,
                 &read,
-                &write,
                 &flags,
                 &settings,
                 &tags,
@@ -136,7 +131,6 @@ fn replace_io<T: IntoIterator<Item = (String, Option<FullType>)>>(
             }) => insert_record_args(
                 &mut new_inputs,
                 &types,
-                &BTreeSet::new(),
                 &BTreeSet::new(),
                 &flags,
                 &settings,

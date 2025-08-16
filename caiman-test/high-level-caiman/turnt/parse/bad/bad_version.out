@@ -1,2 +1,2 @@
 Error: At "bad_version.cm" 0:0, 
-  Parsing Error: Version mismatch: expected 0.1.0 but found 0.0.1
+  Parsing Error: Version mismatch: compiler version 0.2.0 cannot support 1000.0.1

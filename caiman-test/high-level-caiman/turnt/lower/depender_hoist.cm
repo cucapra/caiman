@@ -1,0 +1,157 @@
+extern(cpu) pure foo() -> i32
+extern(cpu) pure bar() -> i32
+
+val value(a: i32) -> i32 {
+    f :- foo()
+    b :- bar()
+    h :- f + b
+    left :- f * b + h
+    right :- b * f - h
+    z :- h * h
+    y :- left if 0 > a else right
+    returns y + z + h
+
+}
+
+tmln time(e: Event) -> Event {
+    returns e
+}
+
+sptl space(b: BufferSpace) -> BufferSpace {
+    returns b
+}
+
+fn main(a: i32) -> i32 impls value, time, space {
+    var z;
+    var h;
+    ???;
+    let y = if 0 > a {
+        /* #CHECK-LABEL:
+        name: FuncletId(
+            "_main3",
+        ),
+        args: [...
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_h%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },...
+                ],
+            },
+            FuncletArgument {
+                name: Some(
+                    NodeId(
+                        "_z%0_ref",
+                    ),
+                ),
+                typ: TypeId(
+                    "&i32",
+                ),
+                tags: [
+                    Tag {
+                        quot: Filled(
+                            RemoteNodeId {
+                                funclet: MetaId(
+                                    "val",
+                                ),
+                                node: None,
+                            },
+                        ),
+                        flow: Filled(
+                            Dead,
+                        ),
+                    },
+        #END */
+        let b = bar();
+        ???
+    } else {
+        let f = foo();
+        ???
+    };
+    /* #CHECK-LABEL:
+    name: FuncletId(
+        "_main2",
+    ),
+    args: [...
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "_h%0_ref",
+                ),
+            ),
+            typ: TypeId(
+                "&i32",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "h",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },...
+            ],
+        },
+        FuncletArgument {
+            name: Some(
+                NodeId(
+                    "_z%0_ref",
+                ),
+            ),
+            typ: TypeId(
+                "&i32",
+            ),
+            tags: [
+                Tag {
+                    quot: Filled(
+                        RemoteNodeId {
+                            funclet: MetaId(
+                                "val",
+                            ),
+                            node: Some(
+                                Filled(
+                                    NodeId(
+                                        "z",
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                    flow: Filled(
+                        Usable,
+                    ),
+                },
+    #END */
+    ???;
+    y + z + h
+}

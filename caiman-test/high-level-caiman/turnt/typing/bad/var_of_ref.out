@@ -1,2 +1,2 @@
 Error: At "var_of_ref.cm" 0:0 - 0:0, 
-  Type Error: Reference to reference types are not allowed. Found: r_0: &i64
+  Type Error: Reference or variable of reference types are not allowed. Found var 'r': &i64

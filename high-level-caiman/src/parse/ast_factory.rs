@@ -1,7 +1,7 @@
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
-#![allow(clippy::unused_self, clippy::option_option)]
+#![allow(clippy::unused_self, clippy::option_option, clippy::too_long_first_doc_paragraph)]
 use std::collections::{BTreeSet, HashMap};
 use std::iter;
 
@@ -11,9 +11,9 @@ use super::ast::*;
 use crate::error::{CustomParsingError, HasInfo, Info};
 use crate::custom_parse_error;
 
-const MAJOR_VERSION: &str = "0";
-const MINOR_VERSION: &str = "1";
-const PATCH_VERSION: &str = "0";
+const MAJOR_VERSION: usize = 0;
+const MINOR_VERSION: usize = 2;
+const PATCH_VERSION: usize = 0;
 
 /// A macro for creating tuple-like enum variants that handles the passing along
 /// of location information.
@@ -217,7 +217,7 @@ impl ASTFactory {
                 caiman_val: match (input, output) {
                     (Some(s), None) => InputOrOutputVal::Input(s),
                     (None, Some(s)) => InputOrOutputVal::Output(s),
-                    _ => panic!("Resource at {src_info} must have exactly one input or output"),
+                    _ => return Err(custom_parse_error!(src_info, "Resource must have exactly one input or output")),
                 },
             })
     }
@@ -300,7 +300,7 @@ impl ASTFactory {
                 }
             }
         }
-        sanitize_expr(&expr).map(|_| expr)
+        sanitize_expr(&expr).map(|()| expr)
     }
 
     /// Finalizes a datatype used as the base type of a flagged type. Flagged types
@@ -429,7 +429,7 @@ impl ASTFactory {
                 Err(custom_parse_error!(info, "Timeline operation cannot occur in this context")),
             SchedTerm::Call(info, ..) => Err(custom_parse_error!(info, 
                 "Cannot parameterize a function call with non-type template arguments nor specify a tag in this context")),
-            SchedTerm::Hole(info) => Err(custom_parse_error!(info, 
+            SchedTerm::Hole{ info, ..} => Err(custom_parse_error!(info, 
                 "Holes cannot occur in this context")),
         }
     }
@@ -541,7 +541,12 @@ impl ASTFactory {
 
     struct_variant_factory!(sched_lit(lit: SchedLiteral, tag: Option<Tags>) -> SchedTerm:SchedTerm::Lit);
     struct_variant_factory!(sched_var(name: Name, tag: Option<Tags>) -> SchedTerm:SchedTerm::Var);
-    tuple_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole);
+    struct_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole {
+        can_generate_code: false
+    });
+    struct_variant_factory!(sched_big_hole_expr() -> SchedTerm:SchedTerm::Hole {
+        can_generate_code: true
+    });
     struct_variant_factory!(sched_submit(tag: Option<Tags>, e: SchedExpr) -> 
         SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
@@ -744,19 +749,21 @@ impl ASTFactory {
     /// Returns an error if the program is not a valid high-level-caiman program
     pub fn program(&self, maj_min: &str, patch: &str, prog: Program) -> Result<Program, ParserError> {
         let split_maj_min: Vec<_> = maj_min.split('.').collect();
+        let make_err = || custom_parse_error!(Info {
+            start_ln_and_col: (0, 0),
+            end_ln_and_col: (0, 0),
+        }, "Invalid version string: {}.{}", maj_min, patch);
         if split_maj_min.len() != 2 {
-            return Err(custom_parse_error!(Info {
-                start_ln_and_col: (0, 0),
-                end_ln_and_col: (0, 0),
-            }, "Invalid version string: {}.{}", maj_min, patch));
+            return Err(make_err());
         }
-        let maj = split_maj_min[0];
-        let min = split_maj_min[1];
-        if (MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION) != (maj, min, patch) {
+        let maj = split_maj_min[0].parse::<usize>().map_err(|_| make_err())?;
+        let min = split_maj_min[1].parse::<usize>().map_err(|_| make_err())?;
+        let patch = patch.parse::<usize>().map_err(|_| make_err())?;
+        if MAJOR_VERSION != maj || min > MINOR_VERSION {
             return Err(custom_parse_error!(Info {
                 start_ln_and_col: (0, 0),
                 end_ln_and_col: (0, 0),
-            }, "Version mismatch: expected {}.{}.{} but found {}.{}.{}", 
+            }, "Version mismatch: compiler version {}.{}.{} cannot support {}.{}.{}", 
                 MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, maj, min, patch));
         }
         Ok(prog)
@@ -771,7 +778,6 @@ impl ASTFactory {
     pub fn class_type(&self, l:usize, v: Vec<Arg<FlaggedType>>, r:usize) -> Result<DataType, ParserError> {
         let mut all = Vec::new();
         let mut read = BTreeSet::new();
-        let mut write = BTreeSet::new();
         let info = self.info(l, r);
         for (name, typ) in v {
             all.push((name.clone(), typ.base));
@@ -781,12 +787,11 @@ impl ASTFactory {
             for f in typ.flags {
                 match f {
                     WGPUFlags::MapRead => { read.insert(name.clone()); },
-                    WGPUFlags::CopyDst => { write.insert(name.clone()); },
-                    WGPUFlags::Storage => {},
+                    WGPUFlags::Storage | WGPUFlags::CopyDst => {},
                     _ => return Err(custom_parse_error!(info, "Unimplemented flag {f:?}")),
                 };
             }
         }
-        Ok(DataType::RemoteObj { all, read, write })
+        Ok(DataType::RemoteObj { all, read })
     }
 }

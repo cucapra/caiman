@@ -1,11 +1,12 @@
 //! Computes dominators of a CFG.
 //! Mostly taken from
 //! [here](https://github.com/stephenverderame/cs6120-bril/blob/main/cfg/src/analysis/dominators.rs)
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
-use crate::lower::sched_hir::cfg::Cfg;
+use crate::lower::sched_hir::cfg::{BasicBlock, Cfg};
 
 /// A node in the dominator tree.
+#[derive(Clone)]
 pub struct DomNode {
     /// The block id
     #[allow(dead_code)]
@@ -31,6 +32,7 @@ impl DomNode {
 
 /// A dominator tree. The dominator tree is a tree where each node
 /// immediately dominates its children.
+#[derive(Clone)]
 pub struct DomTree {
     /// A map from each block id to `DomTree` node
     nodes: HashMap<usize, DomNode>,
@@ -114,6 +116,14 @@ impl DomTree {
     pub fn immediately_dominated(&self, block: usize) -> HashSet<usize> {
         self.nodes[&block].dominated.iter().copied().collect()
     }
+
+    /// Returns all the blocks dominated by `block`
+    #[must_use]
+    pub fn dominated(&self, block: usize) -> HashSet<usize> {
+        let mut s = self.nodes[&block].dominated(&self.nodes, HashSet::new());
+        s.insert(block);
+        s
+    }
 }
 
 /// Computes the dominators of each block in the CFG
@@ -125,34 +135,88 @@ impl DomTree {
 #[must_use]
 #[allow(clippy::module_name_repetitions)]
 pub fn compute_dominators(cfg: &Cfg) -> DomTree {
-    let preds = &cfg.transpose_graph;
+    DomTree::new(&make_dom_map(&cfg.transpose_graph, &cfg.blocks))
+}
+
+/// Returns a map from blocks to nodes that dominate it
+fn make_dom_map<T>(
+    preds: &HashMap<usize, T>,
+    blocks: &HashMap<usize, BasicBlock>,
+) -> HashMap<usize, HashSet<usize>>
+where
+    for<'a> &'a T: IntoIterator<Item = &'a usize>,
+{
     let mut doms: HashMap<_, HashSet<_>> = HashMap::new();
-    let all_blocks = cfg.blocks.keys().copied().collect::<HashSet<_>>();
-    for block in cfg.blocks.keys() {
+    let all_blocks = blocks.keys().copied().collect::<HashSet<_>>();
+    for block in blocks.keys() {
         doms.insert(*block, all_blocks.clone());
     }
     let mut changed = true;
-    let default_preds = BTreeSet::new();
     while changed {
         changed = false;
-        for block in cfg.blocks.keys() {
-            let mut pred_iter = preds.get(block).unwrap_or(&default_preds).iter();
-            let mut new_dom: HashSet<usize> = pred_iter
-                .next()
-                .map(|x| doms.get(x).unwrap().clone())
-                .unwrap_or_default();
-            for pred in pred_iter {
-                new_dom = new_dom
-                    .intersection(doms.get(pred).unwrap())
-                    .copied()
-                    .collect();
-            }
-            new_dom.insert(*block);
-            if new_dom != *doms.get(block).unwrap_or(&HashSet::new()) {
-                doms.insert(*block, new_dom);
-                changed = true;
+        for block in blocks.keys() {
+            if let Some(pred_iter) = preds.get(block) {
+                let mut pred_iter = pred_iter.into_iter();
+                let mut new_dom: HashSet<usize> = pred_iter
+                    .next()
+                    .map(|x| doms.get(x).unwrap().clone())
+                    .unwrap_or_default();
+                for pred in pred_iter {
+                    new_dom = new_dom
+                        .intersection(doms.get(pred).unwrap())
+                        .copied()
+                        .collect();
+                }
+                new_dom.insert(*block);
+                if !doms.contains_key(block) || new_dom != doms[block] {
+                    doms.insert(*block, new_dom);
+                    changed = true;
+                }
             }
         }
     }
-    DomTree::new(&doms)
+    doms
+}
+
+fn invert_map(map: &HashMap<usize, HashSet<usize>>) -> HashMap<usize, HashSet<usize>> {
+    let mut res: HashMap<_, HashSet<_>> = HashMap::new();
+    for (key, vals) in map {
+        for val in vals {
+            res.entry(*val).or_default().insert(*key);
+        }
+    }
+    res
+}
+
+pub struct DomInfo {
+    /// A map from each block to nodes that dominate it
+    dominated_by: HashMap<usize, HashSet<usize>>,
+    /// A map from each block to nodes it dominates
+    dominates: HashMap<usize, HashSet<usize>>,
+    /// A map from each block to nodes that postdominate it
+    postdominated_by: HashMap<usize, HashSet<usize>>,
+}
+
+impl DomInfo {
+    pub fn new(cfg: &Cfg) -> Self {
+        let dominated_by = make_dom_map(&cfg.transpose_graph, &cfg.blocks);
+        let postdominated_by = make_dom_map(&cfg.graph, &cfg.blocks);
+        Self {
+            dominates: invert_map(&dominated_by),
+            dominated_by,
+            postdominated_by,
+        }
+    }
+
+    pub fn dom(&self, a: usize, b: usize) -> bool {
+        self.dominated_by[&b].contains(&a)
+    }
+
+    pub fn postdom(&self, a: usize, b: usize) -> bool {
+        self.postdominated_by[&b].contains(&a)
+    }
+
+    pub fn dominated_by(&self, a: usize) -> &HashSet<usize> {
+        &self.dominates[&a]
+    }
 }

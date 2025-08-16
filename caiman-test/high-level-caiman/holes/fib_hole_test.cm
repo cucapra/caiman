@@ -1,0 +1,24 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val fib(a: i64) -> i64 {
+    returns 0 if a <= 0 else 
+            1 if a == 1 else
+            fib(a - 1) + fib(a - 2)
+}
+
+fn fib_impl(a: i64) -> i64 impls fib, time, space {
+    if a <= 0 {
+        0
+    } else if ? == 1 {
+        1
+    } else {
+        let x = fib_impl(a - 1);
+        let y = fib_impl(a - 2);
+        ? + ?
+    }
+}
+
+pipeline main { fib_impl }

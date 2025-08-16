@@ -10,7 +10,6 @@ val min() -> i64 {
 fn min_impl() -> i64
     impls min, time, space
 {
-    // TODO: we need to pass 1 thing for codegen to work
     let a = 2;
     let r = if 2 < 1 {
         a

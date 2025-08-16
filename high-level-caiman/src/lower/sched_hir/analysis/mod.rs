@@ -1,7 +1,8 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{hash_map::Entry, BTreeSet, HashMap, HashSet};
 
 mod continuations;
 mod dominators;
+mod holes;
 mod op_transform;
 mod quot;
 mod record_expansion;
@@ -9,32 +10,55 @@ mod refs;
 mod ssa;
 mod tags;
 
+use crate::{
+    error::{hir_to_source_name, Info, LocalError},
+    parse::ast::DataType,
+    type_error,
+};
+
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
     hir::HirInstr,
-    HirBody,
+    HirBody, Terminator,
 };
 
+use caiman::explication::Hole;
 pub use continuations::{compute_continuations, Succs};
+pub use dominators::compute_dominators;
+pub use dominators::DomInfo;
+pub use holes::{set_hole_defs, set_hole_initializations};
 pub use op_transform::op_transform_pass;
-pub use quot::deduce_tmln_quots;
-pub use quot::deduce_val_quots;
+pub use quot::{deduce_tmln_quots, deduce_val_quots, fill_fn_input_overrides, fill_val_quots};
 pub use record_expansion::transform_encode_pass;
 pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;
 pub use ssa::transform_to_ssa;
 #[allow(clippy::module_name_repetitions)]
-pub use tags::TagAnalysis;
+pub use tags::FlowAnalysis;
 
-/// A dataflow analysis fact
+#[derive(Default, PartialEq, Eq, Clone)]
+#[allow(clippy::struct_field_names)]
+pub struct TransferData {
+    pub block_id: usize,
+    pub cont_id: Option<usize>,
+    pub local_instr_id: usize,
+}
+
+/// A dataflow analysis fact.
+///
+/// Note that many analyses rely on the fact that they were be executed in topological
+/// or reverse topological order and that there are no loops. Many of the analyses
+/// do not have a true top. For example, the meet might be set intersection, the
+/// input value to the start block might be the empty set, and no logic will be
+/// present to handle meeting with some kind of top value that is anything other
+/// than the absence of a fact.
 pub trait Fact: PartialEq + Clone {
     /// Performs a meet operation on two facts
-    #[must_use]
-    fn meet(self, other: &Self) -> Self;
+    fn meet(self, other: &Self, block_info: Info) -> Result<Self, LocalError>;
 
     /// Updates the basic block's fact after propagating the fact through the given
     /// statement or terminator.
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, data: TransferData) -> Result<(), LocalError>;
 
     type Dir: Direction;
 }
@@ -52,9 +76,9 @@ pub trait Direction {
     ///    The function is called on instructions in the order of the direction
     ///    of the analysis
     fn local_iter<'a>(
-        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
-        func: &mut dyn FnMut(HirInstr<'a>),
-    );
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
+        func: &mut dyn FnMut(HirInstr<'a>, usize) -> Result<(), LocalError>,
+    ) -> Result<(), LocalError>;
 
     /// Gets the starting point for the analysis in this direction
     fn root_id() -> usize;
@@ -80,6 +104,17 @@ pub trait Direction {
         in_facts: &'a HashMap<usize, T>,
         out_facts: &'a HashMap<usize, T>,
     ) -> &'a HashMap<usize, T>;
+
+    /// Returns one of the two topological orders, depending on whether the analysis
+    /// is forwards or backwards. This will be the order to execute the analysis on.
+    fn get_worklist<'a>(topo_order: &'a [usize], topo_order_rev: &'a [usize]) -> &'a [usize] {
+        if Self::root_id() == START_BLOCK_ID {
+            topo_order_rev
+        } else {
+            assert_eq!(Self::root_id(), FINAL_BLOCK_ID);
+            topo_order
+        }
+    }
 }
 
 /// Analyzes a basic block
@@ -90,20 +125,34 @@ pub trait Direction {
 /// * `in_fact` - The input fact for the block
 /// # Returns
 /// * Tuple of input facts for each instruction and the output fact for the block
-fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> T {
+fn analyze_basic_block<T: Fact>(
+    cfg: &mut Cfg,
+    block_id: usize,
+    in_fact: &T,
+) -> Result<T, LocalError> {
     let mut fact = in_fact.clone();
     let block = cfg.blocks.get_mut(&block_id).unwrap();
+    let cont_id = block.ret_block;
+    let sz = block.stmts.len();
     T::Dir::local_iter(
         &mut block
             .stmts
             .iter_mut()
-            .map(HirInstr::Stmt)
-            .chain(std::iter::once(HirInstr::Tail(&mut block.terminator))),
-        &mut |instr| {
-            fact.transfer_instr(instr, block_id);
+            .enumerate()
+            .map(|(id, x)| (id, HirInstr::Stmt(x)))
+            .chain(std::iter::once((sz, HirInstr::Tail(&mut block.terminator)))),
+        &mut |instr, local_instr_id| {
+            fact.transfer_instr(
+                instr,
+                TransferData {
+                    block_id,
+                    cont_id,
+                    local_instr_id,
+                },
+            )
         },
-    );
-    fact
+    )?;
+    Ok(fact)
 }
 
 /// The result of an analysis pass
@@ -134,63 +183,32 @@ impl<T: Fact> InOutFacts<T> {
     }
 }
 
-/// Performs a dataflow analysis using the worklist algorithm
-#[must_use]
-pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
+/// Performs a data flow analysis. Requires that `cfg` has a topological order
+/// and does not contain loops.
+///
+/// Furthermore, we assume that any `x` met with Top results in `x`.
+pub fn analyze<T: Fact>(cfg: &mut Cfg, top: T) -> Result<InOutFacts<T>, LocalError> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
     let mut out_facts: HashMap<usize, T> = HashMap::new();
-    let mut worklist: Vec<usize> = Vec::new();
     let adj_lst = T::Dir::get_adj_list(cfg);
-    in_facts.extend(cfg.graph.keys().map(|k| (*k, top.clone())));
-    worklist.push(T::Dir::root_id());
+    in_facts.insert(T::Dir::root_id(), top);
+    let mut worklist = T::Dir::get_worklist(&cfg.topo_order, &cfg.topo_order_rev).to_vec();
 
     while let Some(block) = worklist.pop() {
         let in_fact = in_facts.get(&block).unwrap();
-        let out_fact = analyze_basic_block(cfg, block, in_fact);
+        let out_fact = analyze_basic_block(cfg, block, in_fact)?;
         let add_neighbors = out_facts.get(&block) != Some(&out_fact);
         if add_neighbors {
-            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
-            worklist.extend(adj_lst.get(&block).unwrap());
+            let blk_info = cfg.blocks[&block].get_starting_info();
+            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block, blk_info)?;
+            // use topo order, so don't add to worklist
         }
         out_facts.insert(block, out_fact);
     }
-    InOutFacts {
+    Ok(InOutFacts {
         in_facts,
         out_facts,
-    }
-}
-
-/// Performs a breadth first traversal, only performing a dataflow analysis
-/// once per block. Similar to `analyze`, but we won't ever reanalyze a block.
-///
-/// Furthermore, we don't meet with top. Only the input fact of the initial block
-/// is initialized to top.
-pub fn bft_transform<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
-    let mut in_facts: HashMap<usize, T> = HashMap::new();
-    let mut out_facts: HashMap<usize, T> = HashMap::new();
-    let mut worklist: VecDeque<usize> = VecDeque::new();
-    let mut visited: HashSet<usize> = HashSet::new();
-    let adj_lst = T::Dir::get_adj_list(cfg);
-    in_facts.insert(T::Dir::root_id(), top.clone());
-    worklist.push_back(T::Dir::root_id());
-
-    while let Some(block) = worklist.pop_front() {
-        if !visited.insert(block) {
-            continue;
-        }
-        let in_fact = in_facts.get(&block).unwrap();
-        let out_fact = analyze_basic_block(cfg, block, in_fact);
-        let add_neighbors = out_facts.get(&block) != Some(&out_fact);
-        if add_neighbors {
-            in_facts = broadcast_out_facts(&[&out_fact], in_facts, &adj_lst, block);
-            worklist.extend(adj_lst.get(&block).unwrap());
-        }
-        out_facts.insert(block, out_fact);
-    }
-    InOutFacts {
-        in_facts,
-        out_facts,
-    }
+    })
 }
 
 /// Broadcasts the output facts to the neighbors
@@ -208,7 +226,8 @@ fn broadcast_out_facts<T: Fact>(
     mut in_facts: HashMap<usize, T>,
     adj_lst: &HashMap<usize, Vec<usize>>,
     block: usize,
-) -> HashMap<usize, T> {
+    block_info: Info,
+) -> Result<HashMap<usize, T>, LocalError> {
     if out_fact.is_empty() {
         // do nothing (meet w/ top)
     } else {
@@ -218,14 +237,14 @@ fn broadcast_out_facts<T: Fact>(
         for neighbor in adj_lst.get(&block).unwrap() {
             in_facts.insert(
                 *neighbor,
-                in_facts
-                    .get(neighbor)
-                    .cloned()
-                    .map_or_else(|| out_fact[0].clone(), |x| x.meet(out_fact[0])),
+                in_facts.get(neighbor).cloned().map_or_else(
+                    || Ok(out_fact[0].clone()),
+                    |x| x.meet(out_fact[0], block_info),
+                )?,
             );
         }
     }
-    in_facts
+    Ok(in_facts)
 }
 
 /// A backwards analysis
@@ -254,12 +273,13 @@ impl Direction for Backwards {
     }
 
     fn local_iter<'a>(
-        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
-        func: &mut dyn FnMut(HirInstr<'a>),
-    ) {
-        for instr in it.rev() {
-            func(instr);
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
+        func: &mut dyn FnMut(HirInstr<'a>, usize) -> Result<(), LocalError>,
+    ) -> Result<(), LocalError> {
+        for (id, instr) in it.rev() {
+            func(instr, id)?;
         }
+        Ok(())
     }
 
     fn root_id() -> usize {
@@ -311,12 +331,13 @@ impl Direction for Forwards {
     }
 
     fn local_iter<'a>(
-        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
-        func: &mut dyn FnMut(HirInstr<'a>),
-    ) {
-        for instr in it {
-            func(instr);
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = (usize, HirInstr<'a>)>,
+        func: &mut dyn FnMut(HirInstr<'a>, usize) -> Result<(), LocalError>,
+    ) -> Result<(), LocalError> {
+        for (id, instr) in it {
+            func(instr, id)?;
         }
+        Ok(())
     }
 
     fn root_id() -> usize {
@@ -338,7 +359,249 @@ impl Direction for Forwards {
     }
 }
 
+/// Computes reaching definitions and uses the information to fill the uses
+/// for holes
 #[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ReachingDefs<'a> {
+    available_set: HashSet<String>,
+    kill_set: HashSet<String>,
+    data_types: &'a HashMap<String, DataType>,
+    variables: &'a HashSet<String>,
+    /// Map from block id to list of defs that become available at that block
+    becomes_available: HashMap<usize, Vec<String>>,
+}
+
+impl<'a> ReachingDefs<'a> {
+    pub fn top<'b>(
+        inputs: impl Iterator<Item = &'b String>,
+        dims: usize,
+        dt: &'a HashMap<String, DataType>,
+        variables: &'a HashSet<String>,
+    ) -> Self {
+        let mut available_set: HashSet<_> = inputs.cloned().collect();
+        for i in 0..dims {
+            available_set.insert(format!("_dim{i}"));
+        }
+        Self {
+            available_set,
+            kill_set: HashSet::new(),
+            data_types: dt,
+            variables,
+            becomes_available: HashMap::new(),
+        }
+    }
+
+    pub fn reaching_defs(&self) -> impl Iterator<Item = &String> {
+        self.available_set.difference(&self.kill_set)
+    }
+
+    /// Set the uses of a hole to be all reaching definitions of its current program point
+    fn set_hole_uses(&self, stmt: &mut HirInstr<'_>) {
+        match stmt {
+            HirInstr::Stmt(
+                HirBody::ConstDecl { rhs, .. }
+                | HirBody::VarDecl { rhs: Some(rhs), .. }
+                | HirBody::RefStore { rhs, .. }
+                | HirBody::DeviceCopy { src: rhs, .. },
+            ) => rhs.fill_uses(|| self.reaching_defs().cloned().collect()),
+            HirInstr::Stmt(HirBody::Hole { uses, .. }) => {
+                assert!(uses.is_initial());
+                uses.process(|()| self.reaching_defs().cloned().collect());
+            }
+            HirInstr::Stmt(HirBody::EncodeDo { func, .. })
+            | HirInstr::Tail(Terminator::Call(_, func)) => {
+                if let Some(x) = func.extra_uses.as_mut() {
+                    assert!(x.is_initial());
+                    x.process(|()| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Tail(Terminator::Select {
+                guard, extra_uses, ..
+            }) => {
+                if guard.is_empty() {
+                    extra_uses.process(|()| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Tail(Terminator::Return {
+                rets, extra_uses, ..
+            }) => {
+                let mut process_uses = false;
+                for r in rets {
+                    if r.is_empty() {
+                        process_uses = true;
+                        break;
+                    }
+                }
+                if process_uses {
+                    extra_uses.process(|()| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Stmt(HirBody::Op { args, .. }) => {
+                for arg in args {
+                    arg.fill_uses(|| self.reaching_defs().cloned().collect());
+                }
+            }
+            HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Pass out of order"),
+            HirInstr::Tail(_)
+            | HirInstr::Stmt(
+                HirBody::RefLoad { .. }
+                | HirBody::InAnnotation(..)
+                | HirBody::OutAnnotation(..)
+                | HirBody::BeginEncoding { .. }
+                | HirBody::Submit { .. }
+                | HirBody::Sync { .. }
+                | HirBody::Phi { .. }
+                | HirBody::VarDecl { rhs: None, .. },
+            ) => {}
+        }
+    }
+
+    fn check_uses_are_valid(&self, stmt: &HirInstr<'_>) -> Result<(), LocalError> {
+        let mut uses = BTreeSet::new();
+        stmt.get_uses(&mut uses);
+        let reaching_defs: HashSet<_> = self.reaching_defs().collect();
+        for u in uses {
+            if !reaching_defs.contains(&u) {
+                return Err(type_error!(
+                    stmt.get_info(),
+                    "No definition of '{}' reaches this use.\nNote that references cannot be captured across function calls and function arguments are consumed.",
+                    hir_to_source_name(&u)
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Fact for ReachingDefs<'a> {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
+        self.kill_set.extend(other.kill_set.iter().cloned());
+        for item in &self.available_set {
+            if !other.available_set.contains(item) {
+                self.kill_set.insert(item.clone());
+            }
+        }
+        for item in &other.available_set {
+            if !self.available_set.contains(item) {
+                self.kill_set.insert(item.clone());
+            }
+        }
+        self.available_set
+            .extend(other.available_set.iter().cloned());
+        Ok(self)
+    }
+
+    fn transfer_instr(
+        &mut self,
+        mut stmt: HirInstr<'_>,
+        data: TransferData,
+    ) -> Result<(), LocalError> {
+        self.set_hole_uses(&mut stmt);
+        if let Some(newly_available) = self.becomes_available.get(&data.block_id) {
+            self.available_set.extend(newly_available.iter().cloned());
+        }
+        let r = self.check_uses_are_valid(&stmt);
+        match stmt {
+            HirInstr::Stmt(
+                HirBody::ConstDecl { lhs: dest, .. }
+                | HirBody::Phi { dest, .. }
+                | HirBody::RefLoad { dest, .. }
+                | HirBody::VarDecl { lhs: dest, .. }
+                | HirBody::DeviceCopy { dest, .. },
+            ) => {
+                self.available_set.insert(dest.clone());
+                self.kill_set.remove(dest);
+            }
+            HirInstr::Stmt(HirBody::Submit { dest, src, .. }) => {
+                self.available_set.insert(dest.clone());
+                assert!(!self.variables.contains(src));
+                self.kill_set.insert(src.clone());
+            }
+            HirInstr::Stmt(HirBody::Sync { dests, srcs, .. }) => {
+                self.available_set
+                    .extend(dests.processed().iter().map(|(x, _)| x.clone()));
+                assert!(!srcs.processed().iter().any(|x| self.variables.contains(x)));
+                self.kill_set.extend(srcs.processed().iter().cloned());
+            }
+            HirInstr::Stmt(
+                HirBody::EncodeDo { dests, .. }
+                | HirBody::Op { dests, .. }
+                | HirBody::Hole { dests, .. },
+            ) => {
+                // ops are pure, so srcs aren't killed
+                // srcs of encode-do are references, so they aren't killed
+                self.available_set
+                    .extend(dests.iter().map(|(x, _)| x.clone()));
+            }
+            HirInstr::Stmt(HirBody::BeginEncoding {
+                encoder,
+                device_vars,
+                ..
+            }) => {
+                self.available_set.insert(encoder.0.clone());
+                self.available_set
+                    .extend(device_vars.iter().map(|(x, _)| x.clone()));
+            }
+            HirInstr::Stmt(
+                HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) | HirBody::RefStore { .. },
+            )
+            | HirInstr::Tail(
+                Terminator::Next(..) | Terminator::None(_) | Terminator::FinalReturn(..),
+            ) => {}
+            HirInstr::Tail(x @ (Terminator::Call(..) | Terminator::Yield(..))) => {
+                for avail in &self.available_set {
+                    // we can't capture references, so they are no longer reachable over a call
+                    if matches!(self.data_types.get(avail), Some(DataType::Ref(_)))
+                        && !self.variables.contains(avail)
+                    {
+                        self.kill_set.insert(avail.clone());
+                    }
+                }
+                if let Terminator::Call(dests, func) = x {
+                    for arg in &func.args {
+                        if let Hole::Filled(arg) = arg {
+                            // arguments that are consumed are also no longer reachable
+                            if !self.variables.contains(arg) {
+                                self.kill_set.insert(arg.clone());
+                            }
+                        } else {
+                            // If we use `?` in a function argument, we have to kill everything because
+                            // we don't know what might be consumed here.
+                            self.kill_set.extend(self.available_set.iter().cloned());
+                        }
+                    }
+                    for (dest, _) in dests {
+                        self.available_set.insert(dest.clone());
+                    }
+                }
+            }
+            HirInstr::Tail(Terminator::Return { dests, rets, .. }) => {
+                self.available_set
+                    .extend(dests.iter().map(|(x, _)| x.clone()));
+                self.kill_set
+                    .extend(rets.iter().filter_map(|x| x.as_ref().opt().cloned()));
+            }
+            HirInstr::Tail(Terminator::Select { dests, .. }) => {
+                let cont_id = data.cont_id.expect("Select should have a continuation");
+                // dests of a select become available at the continuation
+                match self.becomes_available.entry(cont_id) {
+                    Entry::Vacant(e) => {
+                        e.insert(dests.iter().map(|(x, _)| x.clone()).collect());
+                    }
+                    Entry::Occupied(mut e) => {
+                        e.get_mut().extend(dests.iter().map(|(x, _)| x.clone()));
+                    }
+                }
+            }
+            HirInstr::Tail(Terminator::CaptureCall { .. }) => panic!("Passes out of order"),
+        }
+        r
+    }
+
+    type Dir = Forwards;
+}
+
+#[derive(Clone, Eq, Debug)]
 pub struct LiveVars {
     pub(super) live_set: BTreeSet<String>,
 }
@@ -355,25 +618,32 @@ impl LiveVars {
     }
 }
 
+impl PartialEq for LiveVars {
+    fn eq(&self, other: &Self) -> bool {
+        self.live_set == other.live_set
+    }
+}
+
 /// The stem of the special variables used for return values. Each return variable
 /// will have a number appended to this stem.
 pub const RET_VAR: &str = "_out";
 
 impl Fact for LiveVars {
-    fn meet(mut self, other: &Self) -> Self {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         for var in &other.live_set {
             self.live_set.insert(var.clone());
         }
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) -> Result<(), LocalError> {
         if let Some(defs) = stmt.get_defs() {
             for var in defs {
                 self.live_set.remove(&var);
             }
         }
         stmt.get_uses(&mut self.live_set);
+        Ok(())
     }
 
     type Dir = Backwards;
@@ -382,42 +652,85 @@ impl Fact for LiveVars {
 /// For each `begin-encode` determines the fences that are active at that point
 /// and mutates the `begin-encode` to include the active fences.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ActiveFences {
+pub struct ActiveFences<'a> {
     active_fences: HashSet<String>,
+    data_types: &'a HashMap<String, DataType>,
 }
 
-impl ActiveFences {
-    pub fn top<'a, T: Iterator<Item = &'a String>>(fences: T) -> Self {
+impl<'a> ActiveFences<'a> {
+    pub fn top<'b, T: Iterator<Item = &'b String>>(
+        fences: T,
+        data_types: &'a HashMap<String, DataType>,
+    ) -> Self {
         Self {
             active_fences: fences.cloned().collect(),
+            data_types,
         }
     }
 }
 
-impl Fact for ActiveFences {
-    fn meet(mut self, other: &Self) -> Self {
+impl<'a> Fact for ActiveFences<'a> {
+    fn meet(mut self, other: &Self, _: Info) -> Result<Self, LocalError> {
         self.active_fences = self
             .active_fences
             .intersection(&other.active_fences)
             .cloned()
             .collect();
-        self
+        Ok(self)
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: TransferData) -> Result<(), LocalError> {
         match stmt {
             HirInstr::Stmt(HirBody::BeginEncoding { active_fences, .. }) => {
                 *active_fences = self.active_fences.iter().cloned().collect();
             }
-            HirInstr::Stmt(HirBody::Submit { dest, .. }) => {
-                self.active_fences.insert((*dest).to_string());
+            stmt => {
+                if let HirInstr::Stmt(HirBody::Hole { active_fences, .. }) = stmt {
+                    *active_fences = self.active_fences.iter().cloned().collect();
+                }
+                // fences cannot be stored in references or variables, so we only have to worry about defs
+                if let Some(defs) = stmt.get_defs() {
+                    for d in defs {
+                        if matches!(self.data_types.get(&d), Some(DataType::Fence(_))) {
+                            self.active_fences.insert(d);
+                        }
+                    }
+                }
+                let mut use_set = BTreeSet::new();
+                stmt.get_uses(&mut use_set);
+                for u in use_set {
+                    if matches!(self.data_types.get(&u), Some(DataType::Fence(_))) {
+                        self.active_fences.remove(&u);
+                    }
+                }
             }
-            HirInstr::Stmt(HirBody::Sync { srcs, .. }) => {
-                self.active_fences.remove(srcs.initial());
-            }
-            _ => {}
         }
+        Ok(())
     }
 
     type Dir = Forwards;
+}
+
+pub type UseMap = HashMap<String, HashSet<(usize, usize)>>;
+
+/// Gets a map from variable name to a set of `(block_idx, block_local_instr_idx)`
+/// for every use of that variable.
+pub fn get_uses(cfg: &mut Cfg) -> UseMap {
+    let mut res = UseMap::new();
+    for block in cfg.blocks.values_mut() {
+        for (loc_id, instr) in block
+            .stmts
+            .iter_mut()
+            .map(HirInstr::Stmt)
+            .chain(std::iter::once(HirInstr::Tail(&mut block.terminator)))
+            .enumerate()
+        {
+            let mut uses = BTreeSet::new();
+            instr.get_uses(&mut uses);
+            for u in uses {
+                res.entry(u).or_default().insert((block.id, loc_id));
+            }
+        }
+    }
+    res
 }
