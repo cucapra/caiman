@@ -3,9 +3,9 @@ use std::{
     vec,
 };
 
-use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
 use crate::error::Info;
-use crate::parse::ast::{Binop, DataType, FloatSize, IntSize, SpecExpr, SpecLiteral, SpecTerm};
+use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
+use crate::parse::ast::{SpecExpr, SpecLiteral, SpecTerm};
 
 use super::unification::{Constraint, Env, Kind, SubtypeConstraint};
 
@@ -90,6 +90,7 @@ pub enum DTypeConstraint {
     SpecEncoder,
     SpecFence,
     Var(String),
+    Array(Box<DataType>, usize),
 }
 
 impl DTypeConstraint {
@@ -120,7 +121,8 @@ impl DTypeConstraint {
             | Self::Ref(_)
             | Self::Var(_)
             | Self::SpecEncoder
-            | Self::SpecFence => self,
+            | Self::SpecFence
+            | Self::Array(_, _) => self,
             Self::RefN(x) => Self::RefN(Box::new(x.into_subtypeable())),
             Self::Encoder(x) => Self::Encoder(Box::new(x.into_subtypeable())),
             Self::Fence(x) => Self::Fence(Box::new(x.into_subtypeable())),
@@ -132,9 +134,6 @@ impl DTypeConstraint {
             },
         }
     }
-    Array(Box<DataType>, usize),
-    Encoder,
-    Fence,
 }
 
 impl From<IntSize> for ADataType {
@@ -277,8 +276,6 @@ impl DTypeConstraint {
                 },
                 size,
             )),
-            Self::Encoder => Constraint::Atom(ADataType::Encoder),
-            Self::Fence => Constraint::Atom(ADataType::Fence),
         }
     }
 }
@@ -350,8 +347,6 @@ impl TryFrom<DTypeConstraint> for DataType {
                     lit: SpecLiteral::Int(format!("{}", size)),
                 })),
             )),
-            DTypeConstraint::Encoder => Ok(Self::Encoder(None)),
-            DTypeConstraint::Fence => Ok(Self::Fence(None)),
         }
     }
 }
@@ -439,9 +434,6 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
             }
             Constraint::Atom(ADataType::SpecEncoder) => Ok(Self::SpecEncoder),
             Constraint::Atom(ADataType::SpecFence) => Ok(Self::SpecFence),
-            _ => todo!("Cannot convert {c:?} to DTypeConstraint"),
-            Constraint::Atom(ADataType::Encoder) => Ok(Self::Encoder),
-            Constraint::Atom(ADataType::Fence) => Ok(Self::Fence),
             Constraint::Atom(ADataType::Array(data, size)) => Ok(Self::Array(
                 Box::new(match *(data.clone()) {
                     ADataType::I32 => DataType::Int(IntSize::I32),
@@ -450,7 +442,7 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                 }),
                 size,
             )),
-            _ => todo!(),
+            _ => todo!("Cannot convert {c:?} to DTypeConstraint"),
         }
     }
 }
@@ -509,9 +501,6 @@ impl From<DataType> for DTypeConstraint {
                     constraint_kind: SubtypeConstraint::Contravariant,
                 },
             },
-            _ => todo!("Cannot convert {dt:?} to DTypeConstraint"),
-            DataType::Encoder(None) => Self::Encoder,
-            DataType::Fence(None) => Self::Fence,
             DataType::Array(data, expr) => Self::Array(
                 data,
                 match *(expr.clone()) {
@@ -525,7 +514,7 @@ impl From<DataType> for DTypeConstraint {
                     _ => todo!(),
                 },
             ),
-            _ => todo!(),
+            _ => todo!("Cannot convert {dt:?} to DTypeConstraint"),
         }
     }
 }
