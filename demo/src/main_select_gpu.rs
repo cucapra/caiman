@@ -10,10 +10,6 @@ impl caiman_out::main::CpuFunctions for Callbacks {
         (x.iter().sum(),)
     }
 
-    fn negate(&self, _: &mut dyn caiman_rt::State, x: [i32; 4]) -> caiman_out::main::outputs::negate {
-        ([-x[0], -x[1], -x[2], -x[3]],)
-    }
-
     fn _lt_i32_i32(&self, _: &mut dyn caiman_rt::State, a: i32, b: i32) -> (i32,) {
         if a < b {
             (1,)

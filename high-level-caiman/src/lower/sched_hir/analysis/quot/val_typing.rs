@@ -305,6 +305,7 @@ fn hir_op_to_binop(op: &HirOp) -> Binop {
                 "ashr" => Binop::AShr,
                 "land" => Binop::Land,
                 "lor" => Binop::Lor,
+                "idx" => Binop::Index,
                 x => panic!("Unrecognized FFI binop: {x}"),
             }
         }

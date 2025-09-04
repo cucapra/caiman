@@ -1,0 +1,70 @@
+#version 0.1.0
+
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+extern(cpu) pure sum([i32; 4]) -> i32
+extern(gpu) negate(x : [i32; 4]) -> out: [i32; 4]
+{
+    path : "gpu_negate.comp",
+    entry : "main",
+    dimensions : 3,
+    resource {
+        group : 0,
+        binding : 0,
+        input : x
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : out
+    }
+}
+
+val select_negate(v1: [i32; 4], v2: [i32; 4], v3: [i32; 4]) -> out: [i32; 4] {
+    sum1 :- sum(v1)
+    neg2 :- negate'<1, 1, 1>(v2)
+    neg3 :- negate'<1, 1, 1>(v3)
+    condition :- sum1 < 0
+    result :- neg2 if condition else neg3
+    returns result
+}
+
+tmln single_sync(in: Event) -> out: Event { 
+    local, remote :- encode_event(in)
+    sub :- submit_event(remote)
+    sync :- sync_event(local, sub)
+    returns sync
+}
+
+fn select_negate_impl(
+    v1: [i32; 4] @ [node(val.v1)], 
+    v2: [i32; 4] @ [node(val.v2), node(tmln.in)], 
+    v3: [i32; 4] @ [node(val.v3), node(tmln.in)]
+) 
+-> [i32; 4] impls select_negate,single_sync,space {
+    let sum1 @ node(val.sum1) = sum(v1);
+    let condition = sum1 < 0;
+    if condition {
+        var v2 = v2;
+        let encoder = encode-begin @ node(tmln.(local, remote)) gpu;
+        encode encoder.copy[v2_gpu @ [node(val.v2), node(tmln.remote)] <- &v2];
+        encode encoder.call[v2_gpu_neg <- negate'<1, 1, 1>(v2_gpu)];
+        let fence = submit @ node(tmln.sub) encoder;
+        let result = await @ node(tmln.sync) fence;
+        let v2_neg = result.v2_gpu_neg;
+        
+        v2_neg
+    }
+    else {
+        var v3 = v3;
+        let encoder = encode-begin @ node(tmln.(local, remote)) gpu;
+        encode encoder.copy[v3_gpu @ [node(val.v3), node(tmln.remote)] <- &v3];
+        encode encoder.call[v3_gpu_neg <- negate'<1, 1, 1>(v3_gpu)];
+        let fence = submit @ node(tmln.sub) encoder;
+        let result = await @ node(tmln.sync) fence;
+        let v3_neg = result.v3_gpu_neg;
+        v3_neg
+    }
+}
+
+pipeline main { select_negate_impl }

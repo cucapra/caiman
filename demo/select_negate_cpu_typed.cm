@@ -1,0 +1,36 @@
+#version 0.1.0
+
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+tmln time(e: Event) -> Event { returns e }
+
+extern(cpu) pure sum([i32; 4]) -> i32
+extern(cpu) pure negate([i32; 4]) -> [i32; 4]
+
+val select_negate(v1: [i32; 4], v2: [i32; 4], v3: [i32; 4]) -> out: [i32; 4] {
+    sum1 :- sum(v1)
+    neg2 :- negate(v2)
+    neg3 :- negate(v3)
+    condition :- sum1 < 0
+    result :- neg2 if condition else neg3
+    returns result
+}
+
+fn select_negate_impl(
+    v1: [i32; 4] @ input(val.v1), 
+    v2: [i32; 4] @ input(val.v2), 
+    v3: [i32; 4] @ input(val.v3)
+) 
+-> [i32; 4] @ node(val.out) 
+impls select_negate,time,space {
+    let x @ node(val.neg2) = negate(v2);
+    let y @ node(val.neg3) = negate(v3);
+    let c @ node(val.condition) = sum(v1) < 0;
+    if @ node(val.result) c {
+        x
+    }
+    else {
+        y
+    }
+}
+
+pipeline main { select_negate_impl }

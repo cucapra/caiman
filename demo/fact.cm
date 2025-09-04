@@ -1,0 +1,30 @@
+#version 0.1.0
+
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+tmln time(e : Event) -> Event { returns e }
+
+
+val fact(num: i32) -> out : i32 {
+    returns res
+    rec :- fact(num - 1)
+    mult :- rec * num
+    res :- 1 if num <= 0 else mult
+}
+
+fn fact_impl2(x : i32) -> i32 impls fact,time,space {
+    if (x <= 0) {
+        1
+    } else {
+        fact_impl2(x - 1) * x
+    }
+} 
+
+fn fact_impl(x : i32) -> i32 impls fact,time,space {
+    if (x <= 0) {
+        1
+    } else {
+        fact_impl2(x - 1) * x
+    }
+} 
+
+pipeline main { fact_impl }

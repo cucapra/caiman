@@ -88,8 +88,9 @@ impl std::hash::Hash for DataType {
         match self {
             Self::Int(nt) => nt.hash(state),
             Self::Float(nt) => nt.hash(state),
-            Self::Array(..) => todo!(),
-            Self::Slice(dt) | Self::Ref(dt) => dt.hash(state),
+            Self::Array(dt, _) 
+            | Self::Slice(dt) 
+            | Self::Ref(dt) => dt.hash(state),
             Self::UserDefined(name) => name.hash(state),
             _ => {}
         }
@@ -107,7 +108,9 @@ impl Display for DataType {
             Self::Event => write!(f, "Event"),
             Self::Encoder(None) => write!(f, "Encoder"),
             Self::Fence(None) => write!(f, "Fence"),
-            Self::Array(..) => todo!(),
+            Self::Array(typ, _) => {
+                write!(f, "_idx_{typ}")
+            },
             Self::Slice(typ) => {
                 if f.alternate() {
                     write!(f, "_a_{typ}")

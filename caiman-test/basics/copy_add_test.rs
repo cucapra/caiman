@@ -4,6 +4,9 @@ impl main::CpuFunctions for Callbacks {
     fn add(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::add {
         (x + y,)
     }
+    fn add2(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::add {
+        (x + 1,)
+    }
 }
 
 #[test]

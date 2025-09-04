@@ -1,0 +1,109 @@
+#version 0.1.0
+
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+tmln time(e: Event) -> Event { returns e }
+
+extern(cpu) pure sum([i32; 4]) -> i32
+extern(cpu) pure negate([i32; 4]) -> [i32; 4]
+
+val select_negate(v1: [i32; 4], v2: [i32; 4], v3: [i32; 4]) -> out: [i32; 4] {
+    returns result
+    sum1 :- sum(v1)
+    neg2 :- negate(v2)
+    neg3 :- negate(v3)
+    condition :- sum1 < 0
+    result :- neg2 if condition else neg3
+}
+
+val select_negate_twice(c: [i32; 4], v1: [i32; 4], v2: [i32; 4]) -> out: [i32; 4] {
+    returns result
+    first :- select_negate(c, v1, v2)
+    result :- select_negate(first, v1, v2)
+}
+
+// Our usual implementation
+fn select_negate_standard(
+    v1: [i32; 4] @ input(val.v1)-usable, 
+    v2: [i32; 4] @ input(val.v2)-usable, 
+    v3: [i32; 4] @ input(val.v3)-usable
+) 
+-> [i32; 4] @ node(val.out)
+impls select_negate,time,space {
+    let x @ node(val.neg2)-usable = negate(v2);
+    let y @ node(val.neg3)-usable = negate(v3);
+    let c @ node(val.condition)-usable = sum(v1) < 0;
+    if @ node(val.result)-usable c {
+        x
+    }
+    else {
+        y
+    }
+}
+
+// Implement negate_twice in the simplest way
+fn select_negate_twice_basic(
+    c: [i32; 4]  @ node(val.c)-usable,
+    v1: [i32; 4] @ node(val.v1)-usable, 
+    v2: [i32; 4] @ node(val.v2)-usable
+)
+-> [i32; 4] @ node(val.out)-usable
+impls select_negate_twice,time,space
+{
+    var v1_copy @ node(val.v1)-usable = v1;
+    var v2_copy @ node(val.v2)-usable = v2;
+    let first = select_negate_standard(c, v1_copy, v2_copy);
+    let result = select_negate_standard(first, v1_copy, v2_copy);
+    result
+}
+
+// Partial implementation for caching
+fn select_negate_setup1(
+    v: [i32; 4] @ input(val.v2)
+) 
+-> [i32; 4] @ node(val.neg2)
+impls select_negate,time,space {
+    negate(v)
+}
+
+// Partial implementation for caching
+fn select_negate_setup2(
+    v: [i32; 4] @ input(val.v3)
+) 
+-> [i32; 4] @ node(val.neg3)
+impls select_negate,time,space {
+    negate(v)
+}
+
+// Select based on the given sum
+fn select_negate_call(
+    v1: [i32; 4] @ input(val.v1), 
+    neg2: [i32; 4] @ node(val.neg2)-saved, 
+    neg3: [i32; 4] @ node(val.neg3)-saved
+) 
+-> [i32; 4] @ node(val.out) 
+impls select_negate,time,space {
+    if sum(v1) < 0 {
+        neg2
+    }
+    else {
+        neg3
+    }
+}
+
+// Negates twice by caching the result
+fn select_negate_twice_partial(
+    c: [i32; 4]  @ node(val.c)-usable,
+    v1: [i32; 4] @ node(val.v1)-usable, 
+    v2: [i32; 4] @ node(val.v2)-usable
+)
+-> [i32; 4] @ node(val.out)
+impls select_negate_twice,time,space
+{
+    let neg1 = select_negate_setup1(v1);
+    let neg2 = select_negate_setup2(v2);
+    let first = select_negate_call(c, neg1, neg2);
+    let result = select_negate_call(first, neg1, neg2);
+    result;
+}
+
+pipeline main { select_negate_twice_partial }

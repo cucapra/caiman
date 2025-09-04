@@ -6,7 +6,7 @@ resolver = "2"
 build = "build/build.rs"
 
 [workspace]
-members = ["high-level-caiman"]
+members = ["high-level-caiman", "demo"]
 
 [dependencies]
 priority-queue = "2.0.2"

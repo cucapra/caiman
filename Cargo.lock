@@ -207,6 +207,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "caiman-demo"
+version = "0.1.0"
+dependencies = [
+ "caiman-rt",
+ "file_diff",
+ "futures",
+ "once_cell",
+]
+
+[[package]]
 name = "caiman-rt"
 version = "0.1.0"
 dependencies = [

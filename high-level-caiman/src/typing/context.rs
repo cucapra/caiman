@@ -74,7 +74,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
-            name: String::from("array_i328"),
+            name: String::from("array_i32_8"),
             data: asm::LocalTypeInfo::NativeValue {
                 storage_type: arr3.clone(),
             },
@@ -89,6 +89,30 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             name: String::from("array_i64_4"),
             data: asm::LocalTypeInfo::NativeValue {
                 storage_type: arr5.clone(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&array_i32_2"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: arr1.clone(),
+                storage_place: ir::Place::Local,
+                buffer_flags: LOCAL_TEMP_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&array_i32_4"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: arr2.clone(),
+                storage_place: ir::Place::Local,
+                buffer_flags: LOCAL_TEMP_FLAGS,
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&array_i32_8"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: arr3.clone(),
+                storage_place: ir::Place::Local,
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {

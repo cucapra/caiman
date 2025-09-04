@@ -75,6 +75,7 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                     name,
                     enum_cast!(SchedExpr::Term, lhs)
                 );
+                dbg!(&lhs);
                 assert!(names.contains_key(lhs));
             }
             SchedStmt::Encode { stmt, .. } => {

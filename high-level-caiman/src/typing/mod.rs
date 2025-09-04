@@ -854,7 +854,14 @@ fn binop_to_contraints(
             let a = a.instantiate(env);
             (a.clone(), a.clone(), a)
         }
-        Binop::Dot | Binop::Range | Binop::Index | Binop::Cons => panic!("Operator not lowered"),
+        | Binop::Index => {
+            let a = DTypeConstraint::Array(Box::new(DataType::Int(crate::parse::ast::IntSize::I32)), 4);
+            let a = a.instantiate(env);
+            let r = DTypeConstraint::Num;
+            let r = r.instantiate(env);
+            (a, r.clone(), r)
+        }
+        Binop::Dot | Binop::Range | Binop::Cons => panic!("Operator not lowered"),
     }
 }
 

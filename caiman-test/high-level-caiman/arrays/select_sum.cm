@@ -2,7 +2,7 @@
 
 sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
-extern(gpu) sum(x : i32) -> out: i32
+extern(gpu) sum(x : [i32; 4]) -> out: i32
 {
     path : "gpu_sum.comp",
     entry : "main",
@@ -24,10 +24,10 @@ extern(gpu) sum(x : i32) -> out: i32
     }
 }
 
-val select_sum(v1: i32, v2: i32, v3: i32) -> out: i32 {
-    sum1 :- sum(v1)
-    sum2 :- sum(v2)
-    sum3 :- sum(v3)
+val select_sum(v1: [i32; 4], v2: [i32; 4], v3: [i32; 4]) -> out: i32 {
+    sum1 :- sum'<1, 1, 1>(v1)
+    sum2 :- sum'<1, 1, 1>(v2)
+    sum3 :- sum'<1, 1, 1>(v3)
     condition :- sum1 < 0
     result :- sum2 if condition else sum3
     returns result
@@ -46,10 +46,10 @@ fn select_sum_impl(
     v3: i32
 ) 
 -> i32 impls select_sum,single_sync,space {
-    let sum1= sum(v1);
+    let sum1 = sum'<1, 1, 1>(v1);
     let condition= sum1 < 0;
     if condition {
-        let encoder = encode-begin @ node(tmln.(local, remote)) { v2 } gpu;
+        let encoder = encode-begin @ node(tmln.(local, remote)) gpu;
         encode encoder.copy[v2_gpu <- v2];
         encode encoder.call[v2_gpu_sum <- sum(v2_gpu)];
         let fence = submit @ node(tmln.sub) encoder;
@@ -59,7 +59,7 @@ fn select_sum_impl(
         v2_sum
     }
     else {
-        let encoder = encode-begin @ node(tmln.(local, remote)) { v3 } gpu;
+        let encoder = encode-begin @ node(tmln.(local, remote)) gpu;
         encode encoder.copy[v3_gpu <- v3];
         encode encoder.call[v3_gpu_sum <- sum(v3_gpu)];
         let fence = submit @ node(tmln.sub) encoder;

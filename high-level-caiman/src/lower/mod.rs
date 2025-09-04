@@ -268,7 +268,7 @@ const fn binop_name(op: Binop) -> &'static str {
         Binop::Shr => "shr",
         Binop::Dot => "dot",
         Binop::Cons => "cons",
-        Binop::Index => "index",
+        Binop::Index => "idx",
         Binop::Land => "land",
         Binop::Lor => "lor",
         Binop::AShr => "ashr",
